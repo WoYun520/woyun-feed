@@ -91,13 +91,12 @@ function latestNote(selection) {
 
 function renderLatest(app, state, selection) {
   const e = value => app.escapeHtml(value);
-  return `<section class="home-band" id="home-latest" aria-labelledby="home-latest-title"><header class="home-band-heading"><h2 id="home-latest-title">最新精华帖 <small>${selection.latest.length} / 18</small></h2><p class="home-rule">${e(latestNote(selection))}</p></header>${renderCards(app, state, selection.latest, 'latest')}</section>${renderMarquee(e, selection)}<section class="home-band home-underrated" id="home-underrated" aria-labelledby="home-underrated-title" data-underrated-rule="${e(selection.underratedRule)}"><header class="home-band-heading"><h2 id="home-underrated-title">昨日最被低估精华帖 <small>${selection.underrated.length}</small></h2><p class="home-rule">${e(selection.underratedNote)}</p></header>${selection.underrated.length ? renderCards(app, state, selection.underrated, 'under') : '<p class="home-empty">昨日没有可放入这一栏的公开帖。</p>'}</section>`;
+  return `<section class="home-band" id="home-latest" aria-labelledby="home-latest-title"><header class="home-band-heading"><h2 id="home-latest-title">最新精华帖 <small>${selection.latest.length} / 18</small></h2><p class="home-rule">${e(latestNote(selection))}</p></header>${renderCards(app, state, selection.latest, 'latest')}</section>${renderMarquee(e)}<section class="home-band home-underrated" id="home-underrated" aria-labelledby="home-underrated-title" data-underrated-rule="${e(selection.underratedRule)}"><header class="home-band-heading"><h2 id="home-underrated-title">昨日最被低估精华帖 <small>${selection.underrated.length}</small></h2><p class="home-rule">${e(selection.underratedNote)}</p></header>${selection.underrated.length ? renderCards(app, state, selection.underrated, 'under') : '<p class="home-empty">昨日没有可放入这一栏的公开帖。</p>'}</section>`;
 }
 
-function renderMarquee(e, selection) {
-  const titles = selection.underrated.map(entry => shorten(entry.post.item.title, 18)).filter(Boolean);
-  const text = ['卧云信息流', '公开帖', '未实测', ...titles].join('   ·   ') + '   ·   ';
-  return `<div class="home-marquee" id="home-marquee" role="separator" aria-label="幕布分隔"><div class="home-marquee-track"><span>${e(text)}</span><span aria-hidden="true">${e(text)}</span></div></div>`;
+function renderMarquee(e) {
+  const line = '继续浏览请确认你已年满 18 岁。未满请离开。   ·   本站含 18+ 内容   ·   ';
+  return `<section class="home-age shape-age" id="home-marquee" data-shape="age" aria-label="18+ 年龄确认"><p class="home-age-kicker">18+</p><div class="home-marquee"><div class="home-marquee-track"><span>${e(line)}</span><span aria-hidden="true">${e(line)}</span></div></div></section>`;
 }
 
 function renderList(app, state, entries, {id, title, note}) {
@@ -134,13 +133,13 @@ function renderPostCard(app, state, entry, group) {
   const author = postAuthorLabel(item);
   const heat = typeof item.heat_label === 'string' && item.heat_label.trim() ? item.heat_label.trim() : '';
   const when = entry.time.iso ? `<time datetime="${e(entry.time.iso)}">${e(app.formatTime ? app.formatTime(entry.time.iso) : entry.time.iso)}</time>` : '时间未提供';
-  return `<article class="cover-card" id="home-card-${e(group)}-${id}" data-home-card="${id}" data-home-group="${e(group)}">
+  return `<article class="cover-card shape-card" id="home-card-${e(group)}-${id}" data-shape="card" data-home-card="${id}" data-home-group="${e(group)}">
     ${renderCover(app, item, title, image, post.originalUrl, `${group}:${item.id}`)}
     <div class="cover-body"><p class="cover-meta"><span>${e(names)}</span>${author ? `<span>${e(author)}</span>` : ''}<span>${e(entry.time.label)} ${when}</span></p>
       <h3><a href="${e(app.safeUrl(post.originalUrl))}" target="_blank" rel="noopener noreferrer">${e(title)}</a></h3>
       <p class="cover-excerpt">${e(shorten(excerpt, 96) || '来源未提供摘录，请打开原帖。')}</p>
       <details class="cover-evidence"><summary>摘录与时间依据</summary><p>${e(excerpt || '来源未提供摘录。')}</p>${heat ? `<p>来源标注：${e(heat)}。未核对。</p>` : '<p>来源没有给出可展示的热度文字。</p>'}<p>${e(entry.time.label)}。未核对原帖，未实测。</p>${post.instruction?.eligible ? `<p>${e(post.instruction.label)}。这是摘录里的线索，不是实测。</p>` : ''}</details>
-      <div class="cover-actions"><a href="${e(app.safeUrl(post.originalUrl))}" target="_blank" rel="noopener noreferrer">打开原帖</a>${saveButton(e, collection, `home-save-${group}-${item.id}`, title)}<button type="button" class="btn-quiet" data-action="topic-save" data-item-id="${e(collection.itemId)}">放进主题</button></div>
+      <div class="cover-actions"><a class="shape-pill-solid" href="${e(app.safeUrl(post.originalUrl))}" target="_blank" rel="noopener noreferrer">打开原帖</a>${saveButton(e, collection, `home-save-${group}-${item.id}`, title)}<button type="button" class="btn-quiet shape-pill-line" data-action="topic-save" data-item-id="${e(collection.itemId)}">放进主题</button></div>
     </div></article>`;
 }
 
@@ -159,12 +158,12 @@ function renderKeptCard(app, state, item, group) {
   const saved = !archived && (group === 'kept-saved' || state.savedItemIds?.has?.(item.id));
   const collection = {saved, archived, itemId:item.id};
   const id = e(item.id);
-  return `<article class="cover-card" id="home-card-${e(group)}-${id}" data-home-card="${id}" data-home-group="${e(group)}">
+  return `<article class="cover-card shape-card" id="home-card-${e(group)}-${id}" data-shape="card" data-home-card="${id}" data-home-group="${e(group)}">
     ${renderCover(app, item, title, image, item.original_url, `${group}:${item.id}`)}
     <div class="cover-body"><p class="cover-meta"><span>${e(names.filter(Boolean).join('、') || '来源未提供')}</span><span>${e(label)}${time ? ` <time datetime="${e(time)}">${e(app.formatTime ? app.formatTime(time) : time)}</time>` : ''}</span></p>
       <h3><a href="${e(app.safeUrl(item.original_url))}" target="_blank" rel="noopener noreferrer">${e(title)}</a></h3>
       <p class="cover-excerpt">${e(shorten(excerpt, 96) || '没有摘录。')}</p>
-      <div class="cover-actions"><a href="${e(app.safeUrl(item.original_url))}" target="_blank" rel="noopener noreferrer">打开原帖</a>${saveButton(e, collection, `home-save-${group}-${item.id}`, title)}<button type="button" class="btn-quiet" data-action="topic-save" data-item-id="${id}">放进主题</button></div>
+      <div class="cover-actions"><a class="shape-pill-solid" href="${e(app.safeUrl(item.original_url))}" target="_blank" rel="noopener noreferrer">打开原帖</a>${saveButton(e, collection, `home-save-${group}-${item.id}`, title)}<button type="button" class="btn-quiet shape-pill-line" data-action="topic-save" data-item-id="${id}">放进主题</button></div>
     </div></article>`;
 }
 
@@ -178,5 +177,5 @@ function renderCover(app, item, title, image, originalUrl, key) {
 
 function saveButton(e, collection, id, title) {
   const label = collection.archived ? '恢复收藏' : collection.saved ? '取消收藏' : '收藏';
-  return `<button type="button" class="btn-quiet${collection.saved ? ' is-saved' : ''}" id="${e(id)}" data-action="${collection.archived ? 'restore-collection' : 'toggle-save'}" data-item-id="${e(collection.itemId)}" aria-pressed="${collection.saved ? 'true' : 'false'}" aria-label="${e(`${label}：${title}`)}">${label}</button>`;
+  return `<button type="button" class="btn-quiet shape-pill-line${collection.saved ? ' is-saved' : ''}" id="${e(id)}" data-action="${collection.archived ? 'restore-collection' : 'toggle-save'}" data-item-id="${e(collection.itemId)}" aria-pressed="${collection.saved ? 'true' : 'false'}" aria-label="${e(`${label}：${title}`)}">${label}</button>`;
 }

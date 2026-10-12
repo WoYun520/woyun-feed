@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { addCalendarDays, beijingDateKey, parsePublicHeat, selectHomeShowcase } from './src/homeShowcase.js';
 import { renderHomeShowcase } from './src/homeShowcaseView.js';
 import { renderWorkspaceNavigation } from './src/workspaceShell.js';
@@ -97,12 +98,15 @@ test('default homepage renders cover cards, signature, navigation labels and no 
   assert.match(html, /aria-label="Levi flow"/);
   assert.match(html, /id="home-latest"/);
   assert.match(html, /id="home-marquee"/);
+  assert.match(html, /年满 18 岁/);
+  assert.match(html, /未满请离开/);
+  assert.match(html, /class="cover-card shape-card"/);
+  assert.match(html, /class="home-age shape-age"/);
   assert.match(html, /id="home-underrated"/);
   assert.match(html, /最新精华帖/);
   assert.match(html, /昨日最被低估精华帖/);
   assert.match(html, /按现有公开指标粗排，未实测/);
   assert.match(html, /class="cover-grid"/);
-  assert.match(html, /class="cover-card"/);
   assert.match(html, /src="https:\/\/pbs\.twimg\.com\/media\/AbcdEFG\.jpg"/);
   assert.match(html, /无来源附图/);
   assert.match(html, /打开原帖/);
@@ -111,6 +115,18 @@ test('default homepage renders cover cards, signature, navigation labels and no 
   assert.doesNotMatch(html, /<script|background:\s*#(?:ff|f[0-9a-f]{2}[0-5])/i);
   assert.equal(html.match(/data-home-group="latest"/g).length, 18);
   assert.equal(html.match(/data-home-group="under"/g).length, 2);
+  const marquee = html.slice(html.indexOf('id="home-marquee"'), html.indexOf('id="home-underrated"'));
+  assert.doesNotMatch(marquee, /<button|确认进入|离开本站/);
+  assert.equal((marquee.match(/shape-pill/g) || []).length, 0);
+  const css = readFileSync(new URL('./src/homeShowcase.css', import.meta.url), 'utf8');
+  assert.match(css, /--home-bg:\s*#ffffff/);
+  assert.match(css, /--shape-card:\s*24px 24px 12px 24px/);
+  assert.match(css, /--shape-age:\s*20px/);
+  assert.match(css, /--shape-cover:\s*16\s*\/\s*9/);
+  assert.match(css, /--home-line:\s*#e8e8e4/);
+  assert.match(css, /--home-accent:\s*#c84924/);
+  assert.match(css, /--home-wash:\s*#f5f5f2/);
+  assert.doesNotMatch(css, /#fbfbf8|#f4f1ea|#8b3019/);
 });
 
 test('category views and the masthead keep the three names visible without a second local store', () => {
