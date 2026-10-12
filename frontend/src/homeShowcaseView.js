@@ -95,7 +95,7 @@ function renderLatest(app, state, selection) {
 }
 
 function renderMarquee(e) {
-  const line = '卧云信息流   ·   ';
+  const line = '你的文章，值得被看见';
   return `<div class="home-marquee" id="home-marquee" role="separator" aria-label="幕布"><div class="home-marquee-track"><span>${e(line)}</span><span aria-hidden="true">${e(line)}</span></div></div>`;
 }
 

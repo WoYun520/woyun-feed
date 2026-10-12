@@ -115,9 +115,12 @@ test('default homepage renders cover cards, signature, navigation labels and no 
   assert.equal(html.match(/data-home-group="latest"/g).length, 18);
   assert.equal(html.match(/data-home-group="under"/g).length, 2);
   const marquee = html.slice(html.indexOf('id="home-marquee"'), html.indexOf('id="home-underrated"'));
-  assert.match(marquee, /卧云信息流/);
-  assert.doesNotMatch(marquee, /<button|18\+|年满|年龄/);
+  assert.match(marquee, /你的文章，值得被看见/);
+  assert.doesNotMatch(marquee, /<button|<br|18\+|年满|年龄|留下有用的/);
   const css = readFileSync(new URL('./src/homeShowcase.css', import.meta.url), 'utf8');
+  assert.match(css, /width:\s*min\(640px,\s*100%\)/);
+  assert.match(css, /font-size:\s*clamp\(56px,\s*4\.6vw,\s*72px\)/);
+  assert.match(css, /white-space:\s*nowrap/);
   assert.match(css, /--home-bg:\s*#ffffff/);
   assert.match(css, /--shape-card:\s*24px 24px 12px 24px/);
   assert.doesNotMatch(css, /shape-age|18\+|年龄/);

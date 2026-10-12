@@ -153,14 +153,14 @@ body:has(.workspace-shell[data-workspace-tab="today"]) { background: var(--home-
 .cover-actions .is-saved { border-color: var(--home-ink, #171917); }
 
 .home-marquee {
-  overflow: hidden; margin: 34px 0 28px;
-  border-top: 1px solid var(--home-ink, #171917); border-bottom: 1px solid var(--home-ink, #171917);
-  background: #ffffff;
+  width: min(640px, 100%); margin: 36px auto 32px; overflow: hidden;
+  background: transparent; border: 0; border-radius: 0;
 }
-.home-marquee-track { display: flex; width: max-content; animation: home-marquee 50s linear infinite; }
+.home-marquee-track { display: flex; width: max-content; animation: home-marquee 28s linear infinite; }
 .home-marquee-track span {
-  padding: 8px 0; color: var(--home-ink, #171917); font-family: var(--font-serif);
-  font-size: clamp(42px, 7vw, 92px); font-weight: 700; line-height: .9; letter-spacing: -.04em; white-space: nowrap;
+  padding: 0 48px 0 0; color: #171917; font-family: var(--font-sans);
+  font-size: clamp(56px, 4.6vw, 72px); font-weight: 800; line-height: 1.05;
+  letter-spacing: -.04em; white-space: nowrap;
 }
 @keyframes home-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 
