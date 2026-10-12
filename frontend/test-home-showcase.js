@@ -98,10 +98,9 @@ test('default homepage renders cover cards, signature, navigation labels and no 
   assert.match(html, /aria-label="Levi flow"/);
   assert.match(html, /id="home-latest"/);
   assert.match(html, /id="home-marquee"/);
-  assert.match(html, /年满 18 岁/);
-  assert.match(html, /未满请离开/);
+  assert.match(html, /aria-label="幕布"/);
   assert.match(html, /class="cover-card shape-card"/);
-  assert.match(html, /class="home-age shape-age"/);
+  assert.doesNotMatch(html, /18\+|年满|未满请离开|年龄|home-age|shape-age/);
   assert.match(html, /id="home-underrated"/);
   assert.match(html, /最新精华帖/);
   assert.match(html, /昨日最被低估精华帖/);
@@ -116,12 +115,12 @@ test('default homepage renders cover cards, signature, navigation labels and no 
   assert.equal(html.match(/data-home-group="latest"/g).length, 18);
   assert.equal(html.match(/data-home-group="under"/g).length, 2);
   const marquee = html.slice(html.indexOf('id="home-marquee"'), html.indexOf('id="home-underrated"'));
-  assert.doesNotMatch(marquee, /<button|确认进入|离开本站/);
-  assert.equal((marquee.match(/shape-pill/g) || []).length, 0);
+  assert.match(marquee, /卧云信息流/);
+  assert.doesNotMatch(marquee, /<button|18\+|年满|年龄/);
   const css = readFileSync(new URL('./src/homeShowcase.css', import.meta.url), 'utf8');
   assert.match(css, /--home-bg:\s*#ffffff/);
   assert.match(css, /--shape-card:\s*24px 24px 12px 24px/);
-  assert.match(css, /--shape-age:\s*20px/);
+  assert.doesNotMatch(css, /shape-age|18\+|年龄/);
   assert.match(css, /--shape-cover:\s*16\s*\/\s*9/);
   assert.match(css, /--home-line:\s*#e8e8e4/);
   assert.match(css, /--home-accent:\s*#c84924/);

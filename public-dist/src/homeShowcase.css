@@ -12,7 +12,6 @@
   --home-wash: #f5f5f2;
   --shape-card: 24px 24px 12px 24px;
   --shape-pill: 999px;
-  --shape-age: 20px;
   --shape-cover: 16 / 9;
   background: var(--home-bg);
   color: var(--home-ink);
@@ -153,17 +152,15 @@ body:has(.workspace-shell[data-workspace-tab="today"]) { background: var(--home-
 }
 .cover-actions .is-saved { border-color: var(--home-ink, #171917); }
 
-.home-age.shape-age, .shape-age {
-  margin: 34px 0 28px; padding: 16px 18px 12px; overflow: hidden;
-  border: 1px solid var(--home-line, #e8e8e4); border-radius: var(--shape-age, 20px);
-  background: #ffffff; color: var(--home-ink, #171917);
+.home-marquee {
+  overflow: hidden; margin: 34px 0 28px;
+  border-top: 1px solid var(--home-ink, #171917); border-bottom: 1px solid var(--home-ink, #171917);
+  background: #ffffff;
 }
-.home-age-kicker { margin: 0 0 4px; color: var(--home-accent, #c84924); font-size: 13px; font-weight: 750; letter-spacing: .14em; }
-.home-marquee { overflow: hidden; }
 .home-marquee-track { display: flex; width: max-content; animation: home-marquee 50s linear infinite; }
 .home-marquee-track span {
-  padding: 6px 0; color: var(--home-ink, #171917); font-family: var(--font-serif);
-  font-size: clamp(32px, 5vw, 64px); font-weight: 700; line-height: .95; letter-spacing: -.04em; white-space: nowrap;
+  padding: 8px 0; color: var(--home-ink, #171917); font-family: var(--font-serif);
+  font-size: clamp(42px, 7vw, 92px); font-weight: 700; line-height: .9; letter-spacing: -.04em; white-space: nowrap;
 }
 @keyframes home-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 

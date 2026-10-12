@@ -95,8 +95,8 @@ function renderLatest(app, state, selection) {
 }
 
 function renderMarquee(e) {
-  const line = '继续浏览请确认你已年满 18 岁。未满请离开。   ·   本站含 18+ 内容   ·   ';
-  return `<section class="home-age shape-age" id="home-marquee" data-shape="age" aria-label="18+ 年龄确认"><p class="home-age-kicker">18+</p><div class="home-marquee"><div class="home-marquee-track"><span>${e(line)}</span><span aria-hidden="true">${e(line)}</span></div></div></section>`;
+  const line = '卧云信息流   ·   ';
+  return `<div class="home-marquee" id="home-marquee" role="separator" aria-label="幕布"><div class="home-marquee-track"><span>${e(line)}</span><span aria-hidden="true">${e(line)}</span></div></div>`;
 }
 
 function renderList(app, state, entries, {id, title, note}) {
