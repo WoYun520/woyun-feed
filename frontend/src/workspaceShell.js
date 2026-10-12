@@ -13,10 +13,16 @@ const paths={
 };
 export const workspaceIcon=name=>`<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.cloud}</svg>`;
 
-export function renderWorkspaceNavigation(tab,state) {
+export function renderWorkspaceNavigation(tab,state,options={}) {
   const nav=(id,label,count=0)=>`<button class="nav-tab ${tab===id?'active':''}" id="nav-${id}"${tab===id?' aria-current="page"':''}>${workspaceIcon(id)}<span>${label}</span>${count>0?`<span class="nav-badge">${count}</span>`:''}</button>`;
   const mode=state.publicPreview?'公开预览':state.mode==='demo'?'示例预览':'本机版';
   const publication=tab==='today';
+  if (publication) {
+    const homeView=['latest','yesterday','week','kept'].includes(options.homeView) ? options.homeView : 'latest';
+    const menuOpen=options.menuOpen===true;
+    const cat=(id,label)=>`<button type="button" class="lift-cat" data-home-view="${id}"${homeView===id?' aria-current="page"':''}>${label}</button>`;
+    return `<a class="workspace-skip" href="#workspace-main">跳到内容</a><header class="site-header lift-header workspace-publication-nav" role="banner"><div class="site-header-inner"><div class="lift-bar"><button type="button" class="lift-pill" id="home-brand" data-home-view="latest"${homeView==='latest'?' aria-current="page"':''}>卧云信息流</button><nav class="lift-cats" aria-label="精华帖分类">${cat('yesterday','昨日全部精华帖')}${cat('week','七日精选精华帖')}${cat('kept','卧云精选贴（常驻保存）')}</nav><button type="button" class="lift-menu-button" id="home-menu-button" aria-expanded="${menuOpen?'true':'false'}" aria-controls="home-menu"><span class="lift-menu-icon" aria-hidden="true"><span></span><span></span><span></span></span><span class="sr-only">${menuOpen?'关闭菜单':'菜单'}</span></button></div><div class="lift-menu" id="home-menu"${menuOpen?'':' hidden'}><nav class="main-nav" aria-label="主要导航"><div class="workspace-nav-group"><p class="workspace-nav-label">发现</p>${nav('today','今日')}${nav('tutorials','实用教程')}</div><div class="workspace-nav-group"><p class="workspace-nav-label">整理</p>${nav('candidates','待筛选',state.dotPendingCandidates?.length || 0)}${nav('saved','收藏与跟进',(state.savedItems?.length || 0)+(state.followups?.length || 0))}${nav('topics','主题工作台')}</div><div class="workspace-nav-bottom">${nav('profile','我的关注')}<button class="nav-tab" id="open-guide">${workspaceIcon('help')}<span>怎么用</span></button></div></nav><p class="workspace-brand-note">留下有用的，做出自己的。</p></div></div></header>`;
+  }
   return `<a class="workspace-skip" href="#workspace-main">跳到内容</a><header class="site-header workspace-sidebar${publication?' workspace-publication-nav':''}" role="banner"><div class="site-header-inner">
     ${publication?`<div class="publication-topline"><span>卧云 · 给创作者的信息刊物</span><span>${mode}</span></div>`:''}
     <div class="brand">${workspaceIcon('cloud')}<h1 class="brand-title">我的信息流</h1><span class="brand-badge">${mode}</span></div>

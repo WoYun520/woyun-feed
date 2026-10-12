@@ -12,6 +12,7 @@ import { WRITING_FORMATS } from './writingBrief.js';
 import { SOURCE_GROUPS, matchesSource } from './sourceGroups.js';
 import { renderTopicWorkspace, bindTopicActions, renderTopicDialog, openTopicDialog } from './topicViews.js';
 import { renderSourceBoard, bindSourceBoardActions, feedUpdateInfo, boardUpdateMessage } from './sourceBoard.js';
+import { renderHomeShowcase } from './homeShowcaseView.js';
 import { repositoryName } from './repositoryGuide.js';
 import { renderCollectionPanel, bindCollectionActions } from './collectionViews.js';
 import { needsWelcome, rememberWelcome, renderWelcome, renderGuide } from './welcome.js';
@@ -59,6 +60,9 @@ class PersonalFeedApp {
     this.refreshing = false;
     this.refreshError = "";
     this.feedView = 'sources';
+    this.homeView = 'latest';
+    this.homeMenuOpen = false;
+    this.homeSourcesOpen = false;
     this.boardGroup = 'all';
     this.sourceLimits = {};
     this.sourceFilter = 'all';
@@ -437,6 +441,7 @@ class PersonalFeedApp {
   }
 
   switchTab(tab) {
+    this.homeMenuOpen = false;
     this.currentTab = tab;
     window.scrollTo({ top: 0, behavior: 'smooth' });
     this.render();
@@ -631,7 +636,7 @@ class PersonalFeedApp {
 
     appEl.innerHTML = `
       <div class="workspace-shell" data-workspace-tab="${this.currentTab}">
-      ${renderWorkspaceNavigation(this.currentTab,state)}
+      ${renderWorkspaceNavigation(this.currentTab,state,{homeView:this.homeView,menuOpen:this.homeMenuOpen})}
       <main id="workspace-main" tabindex="-1" class="page-container ${this.currentTab === 'today' && state.mode === 'live' && this.feedView === 'sources' ? 'source-board-page' : ''}" role="main">
         ${renderWorkspaceStorageNotice(state)}
         <div id="feed-load-status" role="status" aria-live="polite">${state.loadStatus?.phase === 'ready' ? '' : renderFeedLoadStatus(this, state)}</div>
@@ -730,7 +735,7 @@ class PersonalFeedApp {
 
   // 1. 今日首页视图
   renderTodayFeedView(state) {
-    if (state.mode === 'live' && this.feedView === 'sources') return renderSourceBoard(this,state);
+    if (state.mode === 'live' && this.feedView === 'sources') return `${renderHomeShowcase(this,state)}${this.homeSourcesOpen ? `<div class="home-legacy-board">${renderSourceBoard(this,state)}</div>` : '<p class="home-legacy-entry"><button type="button" class="btn-secondary-quiet" id="home-open-sources">按来源继续浏览、搜索与更新</button></p>'}`;
     state = this.readingState(state);
     const isProfileEmpty = state.mode === 'demo' && !state.profile.interests && !state.profile.exclude;
     const totalVisible = state.dailyItems.length + state.discoverItems.length;
@@ -1405,6 +1410,25 @@ class PersonalFeedApp {
     bindPostMediaEvents(document);
     if (this.currentTab==='tutorials') bindCreatorActions(this,state);
     bindSourceBoardActions(this);
+    document.querySelectorAll('[data-home-view]').forEach(button=>button.addEventListener('click',()=>{
+      const view=button.dataset.homeView;
+      if(!['latest','yesterday','week','kept'].includes(view)) return;
+      this.homeView=view;this.homeMenuOpen=false;this.feedView='sources';this.currentTab='today';
+      this.render();window.scrollTo({top:0,behavior:'instant'});
+      document.querySelector(`[data-home-view="${view}"]`)?.focus();
+    }));
+    document.getElementById('home-menu-button')?.addEventListener('click',()=>{
+      const top=window.scrollY;this.homeMenuOpen=!this.homeMenuOpen;this.render();
+      window.scrollTo({top,behavior:'instant'});
+      document.getElementById(this.homeMenuOpen ? 'home-menu' : 'home-menu-button')?.focus();
+    });
+    document.getElementById('home-menu')?.addEventListener('keydown',event=>{
+      if(event.key!=='Escape') return;
+      event.preventDefault();this.homeMenuOpen=false;this.render();document.getElementById('home-menu-button')?.focus();
+    });
+    document.getElementById('home-open-sources')?.addEventListener('click',()=>{
+      this.homeSourcesOpen=true;this.render();document.querySelector('.home-legacy-board .page-headline')?.focus();
+    });
     bindTopicActions(this,state);
     bindCollectionActions(this);
     this.bindTopicChoices(document);
