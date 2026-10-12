@@ -1,0 +1,38 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { FeedDataAdapter } from './src/dataAdapter.js';
+
+test('live collections and followups survive rotation and reload, separate from demo', async () => {
+  const storage = new Map([['personal-feed:demo:v1', JSON.stringify({ saved_item_ids: ['demo-1'] })]]);
+  globalThis.localStorage = { getItem: key => storage.get(key) || null, setItem: (key, value) => storage.set(key, value) };
+  let data = { schema_version: '0.2', mode: 'live', profile: {}, generated_at: '2026-09-28T12:00:00Z', sources: [{ id: 'github', name: 'GitHub', home_url: 'https://github.com/' }], items: [{ id: 'github-1', title: 'Tool', summary: 'Original words', content_status: 'metadata_only', source_refs: ['github'], original_url: 'https://github.com/example/tool', unknowns: ['Not tested'] }], sections: { daily: ['github-1'], discover: [] }, refresh: { status: 'ok', message: 'updated' } };
+  globalThis.fetch = async () => ({ ok: true, json: async () => structuredClone(data) });
+  const adapter = new FeedDataAdapter();
+  data.sources.push({id:'x',name:'X / Twitter',enabled:false,status:'not_connected',home_url:'https://x.com'});
+  await adapter.loadFeed();
+  assert.equal(adapter.getState().sources.some(source=>source.id==='x'),false,'old live snapshots must not resurrect the retired panel');
+  assert.equal(adapter.getState().sourceMap.get('x').home_url,'https://x.com','historical source metadata remains available');
+  adapter.setSaved('github-1', true);
+  const task = adapter.saveFollowupDraft('github-1', '【自动检查】Only inspect');
+  data = { ...data, items: [], sections: { daily: [], discover: [] } };
+  await adapter.refreshFeed();
+  assert.equal(adapter.getState().dailyItems.length, 0);
+  assert.equal(adapter.getState().savedItems[0].title, 'Tool');
+  const reloaded = new FeedDataAdapter();
+  await reloaded.loadFeed();
+  assert.equal(reloaded.getState().savedItems.length, 1);
+  assert.equal(reloaded.getState().sources.some(source=>source.id==='x'),false);
+  assert.match(reloaded.exportFollowupText(task.id), /https:\/\/github.com\/example\/tool/);
+  assert.match(reloaded.exportFollowupText(task.id), /仅读取项目简介/);
+  assert.equal(reloaded.getState().followups[0].status, 'draft');
+  assert.deepEqual(JSON.parse(storage.get('personal-feed:demo:v1')), { saved_item_ids: ['demo-1'] });
+  globalThis.fetch = async () => { throw new Error('offline'); };
+  await assert.rejects(reloaded.refreshFeed(), /offline/);
+  assert.equal(reloaded.getState().savedItems.length, 1);
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ ...data, mode: 'demo' }) });
+  await assert.rejects(reloaded.refreshFeed(), /不完整/);
+  assert.equal(reloaded.getState().mode, 'live');
+  globalThis.localStorage.setItem = () => { throw new Error('Full'); };
+  assert.throws(() => reloaded.setSaved('github-1', false), /本地存储/);
+  assert.equal(reloaded.getState().savedItems.length, 1);
+});

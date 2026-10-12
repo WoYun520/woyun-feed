@@ -1,0 +1,21 @@
+{
+  "name": "woyun-feed-preview",
+  "main": "worker.js",
+  "account_id": "SET_YOUR_OWN_ACCOUNT_ID",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": false,
+  "assets": {
+    "directory": "./public-dist",
+    "binding": "ASSETS",
+    "run_worker_first": ["/data/public-feed.json", "/api/dot/*"],
+    "not_found_handling": "404-page",
+    "html_handling": "auto-trailing-slash"
+  },
+  "kv_namespaces": [
+    {"binding": "PUBLIC_FEED", "id": "SET_YOUR_OWN_KV_NAMESPACE_ID"},
+    {"binding": "DOT_INBOX", "id": "SET_YOUR_OWN_PRIVATE_INBOX_NAMESPACE_ID"}
+  ],
+  "triggers": {"crons": ["0 1,13 * * *"]}
+}

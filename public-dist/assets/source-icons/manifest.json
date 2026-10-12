@@ -1,0 +1,101 @@
+{
+  "verified_on": "2026-10-07",
+  "assets": [
+    {
+      "file": "github.svg",
+      "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/98820a4dc8c363ca72fa2c0d294ea4a0a9bba75d/icons/github.svg",
+      "bytes": 822,
+      "library": "Simple Icons"
+    },
+    {
+      "file": "youtube.svg",
+      "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/98820a4dc8c363ca72fa2c0d294ea4a0a9bba75d/icons/youtube.svg",
+      "bytes": 459,
+      "library": "Simple Icons"
+    },
+    {
+      "file": "producthunt.svg",
+      "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/98820a4dc8c363ca72fa2c0d294ea4a0a9bba75d/icons/producthunt.svg",
+      "bytes": 370,
+      "library": "Simple Icons"
+    },
+    {
+      "file": "v2ex.svg",
+      "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/98820a4dc8c363ca72fa2c0d294ea4a0a9bba75d/icons/v2ex.svg",
+      "bytes": 350,
+      "library": "Simple Icons"
+    },
+    {
+      "file": "juejin.svg",
+      "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/98820a4dc8c363ca72fa2c0d294ea4a0a9bba75d/icons/juejin.svg",
+      "bytes": 354,
+      "library": "Simple Icons"
+    },
+    {
+      "file": "zhihu.svg",
+      "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/98820a4dc8c363ca72fa2c0d294ea4a0a9bba75d/icons/zhihu.svg",
+      "bytes": 918,
+      "library": "Simple Icons"
+    },
+    {
+      "file": "baidu.svg",
+      "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/98820a4dc8c363ca72fa2c0d294ea4a0a9bba75d/icons/baidu.svg",
+      "bytes": 1391,
+      "library": "Simple Icons"
+    },
+    {
+      "file": "x.svg",
+      "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/98820a4dc8c363ca72fa2c0d294ea4a0a9bba75d/icons/x.svg",
+      "bytes": 299,
+      "library": "Simple Icons"
+    },
+    {
+      "file": "rss.svg",
+      "source": "https://raw.githubusercontent.com/tabler/tabler-icons/a4ce1404bc6d24d3c365afe7b258d6bf6f48d62d/icons/outline/rss.svg",
+      "bytes": 468,
+      "library": "Tabler Icons"
+    },
+    {
+      "file": "news.svg",
+      "source": "https://raw.githubusercontent.com/tabler/tabler-icons/a4ce1404bc6d24d3c365afe7b258d6bf6f48d62d/icons/outline/news.svg",
+      "bytes": 536,
+      "library": "Tabler Icons"
+    },
+    {
+      "file": "message-circle.svg",
+      "source": "https://raw.githubusercontent.com/tabler/tabler-icons/a4ce1404bc6d24d3c365afe7b258d6bf6f48d62d/icons/outline/message-circle.svg",
+      "bytes": 597,
+      "library": "Tabler Icons"
+    },
+    {
+      "file": "apps.svg",
+      "source": "https://raw.githubusercontent.com/tabler/tabler-icons/a4ce1404bc6d24d3c365afe7b258d6bf6f48d62d/icons/outline/apps.svg",
+      "bytes": 689,
+      "library": "Tabler Icons"
+    },
+    {
+      "file": "book-2.svg",
+      "source": "https://raw.githubusercontent.com/tabler/tabler-icons/a4ce1404bc6d24d3c365afe7b258d6bf6f48d62d/icons/outline/book-2.svg",
+      "bytes": 478,
+      "library": "Tabler Icons"
+    },
+    {
+      "file": "chart-line.svg",
+      "source": "https://raw.githubusercontent.com/tabler/tabler-icons/a4ce1404bc6d24d3c365afe7b258d6bf6f48d62d/icons/outline/chart-line.svg",
+      "bytes": 445,
+      "library": "Tabler Icons"
+    },
+    {
+      "file": "simple-icons-LICENSE.md",
+      "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/98820a4dc8c363ca72fa2c0d294ea4a0a9bba75d/LICENSE.md",
+      "bytes": 6569,
+      "library": "Simple Icons"
+    },
+    {
+      "file": "tabler-icons-LICENSE",
+      "source": "https://raw.githubusercontent.com/tabler/tabler-icons/a4ce1404bc6d24d3c365afe7b258d6bf6f48d62d/LICENSE",
+      "bytes": 1073,
+      "library": "Tabler Icons"
+    }
+  ]
+}

@@ -1,0 +1,70 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { CREATOR_CATALOG, CREATOR_MATERIALS } from './src/creatorCatalog.js';
+import { classifyCreatorMaterial,selectCreatorTutorials,creatorEnabled,creatorPreferenceKey,readCreatorPreferences,saveCreatorPreference } from './src/creatorTutorials.js';
+import { FeedDataAdapter } from './src/dataAdapter.js';
+const creator=CREATOR_CATALOG.find(c=>c.enabled_by_default);
+const post=(id,summary,patch={})=>({id,title:summary.split('\n')[0],summary,author_handle:creator.handle,original_url:`https://x.com/${creator.handle}/status/${id.replace(/\D/g,'')||'123456789'}`,source_refs:['sopilot-author-'+creator.handle.toLowerCase()],link_kind:'post',content_status:'excerpt_only',...patch});
+const useful='给网页截图加箭头的具体步骤\n1. 打开截图工具，选择要截的区域，保存为 PNG 图片。\n2. 点击箭头按钮并拖动，给读者标清按钮位置，最后保存到文件夹。\n完整示例和工具地址：https://example.com/screenshots 请按照步骤先在普通图片上操作，不要泄露隐私。';
+const store=()=>{const data=new Map();return {getItem:key=>data.get(key)||null,setItem:(key,v)=>data.set(key,v),data};};
+test('non-AI low-heat practical post enters, news and promotions do not',()=>{
+  assert.ok(!useful.includes('AI'));
+  assert.ok(classifyCreatorMaterial(post('100001',useful,{heat_label:'20 浏览'})));
+  const news='某大型公司正式发布新的产品，完成1亿美元融资。很多用户认为它很重要，未来可能改变行业。这里讨论的是这家公司发展方向和竞争情况，并没有实际操作步骤或可以复现的教程。';
+  assert.equal(classifyCreatorMaterial(post('100002',news)),null);
+  assert.equal(classifyCreatorMaterial(post('100003',useful+'\n报名课程，私信领取资料。')),null);
+  assert.equal(classifyCreatorMaterial(post('100004','截图教程 '+ '值得体验，效率提高很多。'.repeat(12))),null);
+  const install='如果想开发上架 Obsidian 插件，推荐安装这个Skill。\n安装指令：\nnpx skills add joeseesun/qiaomu-obsidian-dev\n基于开发插件的趟坑经验总结，开源地址见评论区。请在测试笔记库先检查兼容条件。';
+  assert.equal(classifyCreatorMaterial(post('100007',install)).kind,'method');
+});
+test('enabled author, exact account, hidden item and search conditions intersect; dedupe original posts',()=>{
+  const first=post('100005',useful),other=post('100006',useful,{author_handle:'unlisted'});
+  const items=[first,other,{...first,id:'another-id',original_url:first.original_url.replace('x.com','twitter.com')}];
+  assert.equal(selectCreatorTutorials(items).length,1);
+  assert.equal(selectCreatorTutorials(items,{preferences:{[creator.id]:{enabled:false}}}).length,0);
+  assert.equal(selectCreatorTutorials(items,{hiddenItemIds:[first.id,'another-id']}).length,0);
+  assert.equal(selectCreatorTutorials(items,{query:'截图 箭头'}).length,1);
+  assert.equal(selectCreatorTutorials(items,{query:'字幕'}).length,0);
+  assert.equal(selectCreatorTutorials(items,{author:'unknown'}).length,0);
+});
+test('evergreen verified-reading tutorials remain eligible and edited prose cannot inherit that label',()=>{
+  assert.ok(selectCreatorTutorials(CREATOR_MATERIALS).length>=3);
+  const item=CREATOR_MATERIALS[0];
+  assert.equal(classifyCreatorMaterial(item).kind,'tutorial');
+  assert.equal(classifyCreatorMaterial({...item,published_at:'2020-01-01T00:00:00Z'}),null);
+  assert.equal(classifyCreatorMaterial({...item,summary:item.summary+'我亲自测试成功'}),null);
+  assert.equal(classifyCreatorMaterial({...item,original_url:'https://elsewhere.example/tutorial'}),null);
+});
+test('preferences preserve latest other-author choice, separate preview/demo/local and rollback errors',()=>{
+  const storage=store(),key=creatorPreferenceKey('live',true),second=CREATOR_CATALOG[1];
+  saveCreatorPreference(storage,key,creator.id,{enabled:false,reason:'只看具体操作'});
+  saveCreatorPreference(storage,key,second.id,{enabled:true});
+  const settings=readCreatorPreferences(storage,key).preferences;
+  assert.equal(creatorEnabled(creator,settings),false);assert.equal(settings[creator.id].reason,'只看具体操作');
+  assert.notEqual(key,creatorPreferenceKey('live',false));assert.notEqual(key,creatorPreferenceKey('demo',true));
+  assert.throws(()=>saveCreatorPreference(storage,key,'unknown',{enabled:true}));
+  const before=storage.getItem(key);storage.setItem=()=>{throw Error('quota');};
+  assert.throws(()=>saveCreatorPreference(storage,key,creator.id,{enabled:true}),/未能保存/);assert.equal(storage.getItem(key),before);
+});
+test('invalid preferences never replace corrupted user setting; excessive reasons rejected',()=>{
+  const storage=store(),key=creatorPreferenceKey();storage.setItem(key,'broken JSON');
+  assert.equal(readCreatorPreferences(storage,key).warning,true);
+  assert.throws(()=>saveCreatorPreference(storage,key,creator.id,{enabled:false}),/未覆盖/);
+  assert.equal(storage.getItem(key),'broken JSON');
+  assert.throws(()=>saveCreatorPreference(store(),key,creator.id,{reason:'字'.repeat(501)}),/500/);
+});
+test('creator tutorial saves and survives refresh, author pause, topic export and backup without entering daily feed',async()=>{
+  globalThis.localStorage=store();
+  const upstream={schema_version:'0.3',mode:'live',profile:{},sources:[],items:[],sections:{daily:[],discover:[]},refresh:{new_item_ids:[]}};
+  globalThis.fetch=async()=>({ok:true,json:async()=>structuredClone(upstream)});
+  const adapter=new FeedDataAdapter({publicPreview:true});await adapter.loadFeed();
+  const item=CREATOR_MATERIALS[0];adapter.setDisplayedItems([item]);adapter.setSaved(item.id,true);
+  const topic=adapter.createTopic({title:'教程记录',goal:'学会制作小工具'},item.id);
+  const exported=adapter.exportTopic(topic.id);
+  assert.ok(exported.includes(item.original_url));assert.ok(exported.includes('AI 阅读作者说明并整理，未实测'));assert.ok(exported.includes('非作者原始标题'));
+  await adapter.refreshFeed();assert.equal(adapter.getState().savedItems[0].summary,item.summary);
+  saveCreatorPreference(localStorage,creatorPreferenceKey('live',true),creator.id,{enabled:false});
+  assert.equal(adapter.getState().savedItems.length,1);assert.ok(adapter.createBackup().raw.includes(item.original_url));
+  const reload=new FeedDataAdapter({publicPreview:true});await reload.loadFeed();assert.equal(reload.getState().topics[0].materials[0].item.summary,item.summary);
+  assert.equal(reload.getState().allItems.length,8);assert.equal(reload.getState().dailyItems.length,0);
+});

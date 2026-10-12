@@ -1,0 +1,589 @@
+{
+  "version": 1,
+  "entries": {
+    "saurabhav88/enviouswispr": {
+      "repository": "saurabhav88/EnviousWispr",
+      "description": "Free, sub-second on-device AI dictation for macOS. Dual engines (Whisper + Parakeet) on Apple Silicon. Optional AI polish on your Mac with EG-1 or S1-mini by Superwhisper, Apple Intelligence (macOS 26), Ollama, or your own OpenAI/Gemini/Claude key. Snippets, custom words, no account, no subscription, audio never leaves your Mac.",
+      "fingerprint": "41e110ca93fa313f880c2ace0e03c5a4a85f6591c85c5211dd920ef6f37fd2f8",
+      "summary": "在苹果芯片Mac上本地语音输入，支持自定义词和可选AI润色；无需账号或订阅，音频不离开电脑。",
+      "recorded_at": "2026-10-01T03:35:42.815Z",
+      "model": null
+    },
+    "fujacob/cotabby": {
+      "repository": "FuJacob/cotabby",
+      "description": "Cotabby is local AI autocomplete for your entire Mac. Open source. On device. Everywhere you type.",
+      "fingerprint": "461615754051eede7847e8f846bd0791c3e510cdbd0585bcf7ea5ab7753906b6",
+      "summary": "在Mac上输入文字时，用本地运行的AI自动补全内容，适用于各处输入场景。",
+      "recorded_at": "2026-10-01T03:35:42.815Z",
+      "model": null
+    },
+    "awslabs/nx-plugin-for-aws": {
+      "repository": "awslabs/nx-plugin-for-aws",
+      "description": "The @aws/nx-plugin is a collection of code generators that automate the creation and configuration of cloud-native applications using AWS, TypeScript, Python and React within the Nx development ecosystem.",
+      "fingerprint": "81d7c6171dd0b9e0c050171de97fcfae6a7401f5cfd17bf07d2bafda43a34f96",
+      "summary": "帮开发者在Nx开发环境中自动创建和配置AWS云应用，支持多种编程语言及React。",
+      "recorded_at": "2026-10-01T03:35:42.815Z",
+      "model": null
+    },
+    "zeweihan/aiworkdeck": {
+      "repository": "zeweihan/aiworkdeck",
+      "description": "Open-source workspace for professional document AI: reviewable agent edits, source-linked work, three-way document merges, and an extensible plugin runtime. Starting with legal work.",
+      "fingerprint": "1f5f8efac195b586a58425c892ca5012ab2698f4b036419040d03e3cc371f633",
+      "summary": "让 AI 协助审阅和修改文档，保留修改检查与来源线索。",
+      "recorded_at": "2026-10-01T12:28:05.589Z",
+      "model": "Codex public-preview description review"
+    },
+    "ahatem/qtranslate": {
+      "repository": "ahatem/QTranslate",
+      "description": "A fast, extensible desktop translation suite. Translate, OCR, TTS, spell check — with a plugin system.",
+      "fingerprint": "985968975fe3762acc09474909e2d1d342db25757544a675b83f1a6f92c53745",
+      "summary": "在桌面上翻译文字、识别图片文字、朗读和检查拼写，可通过插件扩展功能。",
+      "recorded_at": "2026-10-01T03:35:42.815Z",
+      "model": null
+    },
+    "kiwicanopy/kiwidesk": {
+      "repository": "KiwiCanopy/KiwiDesk",
+      "description": "Tiling that feels like it shipped with macOS. Settings instead of config files, seven layouts incl. PaperWM-style scrolling, native Desktops kept intact, Lua underneath. Accessibility only, never SIP.",
+      "fingerprint": "7db4956edd02d0a55ea98db3fcdd6ae3bfae0b1c1619498c572b0195b3ed7f58",
+      "summary": "在macOS上自动平铺窗口，提供七种布局，可通过设置调整；保留原生桌面，仅需辅助功能权限。",
+      "recorded_at": "2026-10-01T03:35:42.815Z",
+      "model": null
+    },
+    "kitionai/kition": {
+      "repository": "KitionAI/kition",
+      "description": "Kition brings Markdown, DataTable, WhiteBoard, a tool-using AI agent, browser research, and visual workflows into one desktop workspace. ",
+      "fingerprint": "6ac2a85b154ed6329e50565ceccf720efb3d6c3411a530850b20c65c8487c6e7",
+      "summary": "在一个桌面工作区里写文档、整理数据表和白板，并用AI助手、浏览器研究及可视化流程处理工作。",
+      "recorded_at": "2026-10-01T03:35:42.815Z",
+      "model": null
+    },
+    "pakerwreah/calendr": {
+      "repository": "pakerwreah/Calendr",
+      "description": "Menu bar calendar for macOS - MVVM | RxSwift | AppKit | SwiftUI",
+      "fingerprint": "8980eae8dd4b07589c803d684733f1e9a2b1b6542c9889da6b6928b2ec71f3c7",
+      "summary": "在macOS菜单栏查看日历。",
+      "recorded_at": "2026-10-01T03:35:42.815Z",
+      "model": null
+    },
+    "changan-su/forsion": {
+      "repository": "Changan-Su/Forsion",
+      "description": "Your Best Ai Seconed Brain! An evolvable, local-first AI workbench where agents, knowledge, and everyday work come together.",
+      "fingerprint": "0a8f911e6b816fe8d453cda38d3240214ce3c49f0f1f9faa54649cd249b372d4",
+      "summary": "以本地优先的AI工作台整合智能助手、知识和日常工作；简介未说明具体能力。",
+      "recorded_at": "2026-10-01T03:35:42.815Z",
+      "model": null
+    },
+    "layernorm/overlay-web": {
+      "repository": "LayerNorm/overlay-web",
+      "description": "The control plane for your AI employees",
+      "fingerprint": "f128e0f95b7a3adecee33d17d0aaa915ad3faca37e80a90d6b722473b7d3f610",
+      "summary": "定位为管理AI员工的平台，简介未说明具体能力。",
+      "recorded_at": "2026-10-01T03:35:42.815Z",
+      "model": null
+    },
+    "automagik-dev/genie": {
+      "repository": "automagik-dev/genie",
+      "description": "Wishes in, PRs out. CLI agent that interviews you, plans the work, dispatches parallel agents in isolated worktrees, and reviews code before you see it.",
+      "fingerprint": "3021f061bc8fb584b3363a746240e6d0e497434fa657c01578b86fa58cb74070",
+      "summary": "通过命令行沟通需求、规划开发，分派并行AI助手在隔离环境中写代码，审查后生成代码合并请求。",
+      "recorded_at": "2026-10-01T03:35:42.815Z",
+      "model": null
+    },
+    "mobrava/clipbara": {
+      "repository": "mobrava/Clipbara",
+      "description": "Free, open-source clipboard manager for macOS. Native card-style UI with Pinboards, Quick Look, and 100% local storage.",
+      "fingerprint": "8321cacf21363394b334e47d8ae779f9dcb75302e1ad53b57a9e4a302f4c2283",
+      "summary": "在macOS上管理剪贴板内容，用卡片、固定收藏板和快速预览整理查看，数据全部保存在本地。",
+      "recorded_at": "2026-10-01T03:35:42.815Z",
+      "model": null
+    },
+    "gnoviawan/termul": {
+      "repository": "gnoviawan/termul",
+      "description": "Termul is Terminal Ultimate Manager a cross-platform desktop terminal manager built with Tauri and React. Organize terminals by workspace with persistent sessions, multiple shell, split panes, embedded browser tabs, and a built-in code & markdown editor.",
+      "fingerprint": "d9204390aa5627ef92fc7e44c22a36d57d583b6c06839c976c8856c47d074d76",
+      "summary": "跨平台按工作区管理终端，保留会话，支持多种命令环境、分屏、内嵌浏览器及代码和文档编辑。",
+      "recorded_at": "2026-10-01T03:35:42.815Z",
+      "model": null
+    },
+    "discoverhubgroup/product-daily-rank": {
+      "repository": "discoverhubgroup/product-daily-rank",
+      "description": "discover daily product :每日top10产品,提供GitHub趋势,每天早上8点更新",
+      "fingerprint": "3800ee27f97f68858833611a1ff573754a44dce2d4d2e24906659c66cc044f2b",
+      "summary": "每天早上8点更新每日十大产品和GitHub热门趋势，帮助发现新产品与项目。",
+      "recorded_at": "2026-10-01T03:35:42.815Z",
+      "model": null
+    },
+    "ninouanis84-sudo/foxl-orchestrator": {
+      "repository": "ninouanis84-sudo/foxl-orchestrator",
+      "description": "Personal AI Agent Hub 2026 — Build Your 24/7 Autonomous Assistant",
+      "fingerprint": "b915c3e4669ddfa2083b49e7857aa90f72c401e761b24d6862eaf60ae58399ce",
+      "summary": "定位为搭建全天候自主助手的个人AI助手中心，简介未说明具体能力。",
+      "recorded_at": "2026-10-01T03:35:42.815Z",
+      "model": null
+    },
+    "basicmachines-co/basic-memory": {
+      "repository": "basicmachines-co/basic-memory",
+      "description": "AI conversations that actually remember. Never re-explain your project to your AI again. Join our Discord: https://discord.gg/tyvKNccgqN",
+      "fingerprint": "68e06469faef5dd6c385445d3cbebb8988cc28a388f2b1b5aaf526c3495b0dad",
+      "summary": "让AI对话记住项目背景，减少每次交流时重复介绍项目的需要。",
+      "recorded_at": "2026-10-01T03:35:42.815Z",
+      "model": null
+    },
+    "ldbumble/taskuary": {
+      "repository": "ldbumble/taskuary",
+      "description": "Automate your job: local-first AI task hub. Email, Teams, Slack & reports -> one timeline -> AI triage -> your coding agents (Claude Code, Codex, Gemini) do the work, you approve.",
+      "fingerprint": "c1fb5ffecaa91115855ac211d930243b18d1dcb92538d1f8a19aa2ee4f4ed679",
+      "summary": "把邮件、Teams、Slack和报告汇成时间线，由AI分流任务并交给编程助手执行，用户审批；本地优先。",
+      "recorded_at": "2026-10-01T03:35:42.815Z",
+      "model": null
+    },
+    "dongdongbh/mindwtr": {
+      "repository": "dongdongbh/Mindwtr",
+      "description": "Get tasks and ideas out of your head. A free GTD to-do app for desktop and mobile. Works offline, no account needed",
+      "fingerprint": "67cbcf6f2c7026f3844b050922d820146ea393b21c1962c6fab1914c1ff0cbc4",
+      "summary": "在电脑和手机上记录任务与想法，用GTD方法管理待办；可离线使用，无需账号。",
+      "recorded_at": "2026-10-01T03:35:42.815Z",
+      "model": null
+    },
+    "zhugecaomao/altrun": {
+      "repository": "zhugecaomao/ALTRun",
+      "description": "轻量、高效、开源的 Windows 启动器",
+      "fingerprint": "a8e5657983bcc0d040a871c9e61a4a4bf9a60124748d5e2f2ecc3128abe635b9",
+      "summary": "在Windows上快速启动应用，定位轻量高效，代码开源。",
+      "recorded_at": "2026-10-01T03:35:42.815Z",
+      "model": null
+    },
+    "altstackhq/altstack-data": {
+      "repository": "altstackHQ/altstack-data",
+      "description": "A curated list of 450+ awesome open-source alternatives to proprietary SaaS. Deployment configs, self-hosting guides, and tool directory.",
+      "fingerprint": "c137e2b430cd108f1ab00e0f5702877ed05281c9e9d50ffe73fc63ca23bf14d2",
+      "summary": "查找450多个商业在线软件的开源替代品，并获取部署配置、自行搭建指南和工具目录。",
+      "recorded_at": "2026-10-01T03:35:42.815Z",
+      "model": null
+    },
+    "ropemakerend/ds4windows-lab-2026": {
+      "repository": "RopemakerEnd/ds4windows-lab-2026",
+      "description": "Portable DS4Windows companion toolkit with setup guides, profile notes, and Windows build helpers for DualShock 4 and DualSense.",
+      "fingerprint": "c63f99893481f1178900f66d4e4a62fcef83c1d17cd47c5a776f4c61c272e503",
+      "summary": "帮助在 Windows 上配置和构建 DS4Windows，提供 PS4、PS5 手柄设置指南和配置说明。",
+      "recorded_at": "2026-10-01T03:36:32.002Z",
+      "model": null
+    },
+    "kaderkck/hewn-forge": {
+      "repository": "kaderkck/hewn-forge",
+      "description": "HEWN 2.0 2026: AI Output Router for Precision Summaries & Polished Code",
+      "fingerprint": "d9a2e1b6719c51925533a19652a26aab3f29039a13a92734c8f54f39f601344e",
+      "summary": "用于分配 AI 输出，辅助生成精准摘要和完善代码；简介未说明具体操作方式。",
+      "recorded_at": "2026-10-01T03:36:32.002Z",
+      "model": null
+    },
+    "davekilleen/dex": {
+      "repository": "davekilleen/Dex",
+      "description": "Your AI Chief of Staff — a personal operating system starter kit that adapts to your role. No coding required.",
+      "fingerprint": "2bb4325f77bf9bcce5f2a8b0a105028f989a9c0397f95f451f9dc6d25a4b02f0",
+      "summary": "提供可按个人角色调整的 AI 工作助理入门套件，无需编程；简介未说明具体能力。",
+      "recorded_at": "2026-10-01T03:36:32.002Z",
+      "model": null
+    },
+    "ljtn/epiq": {
+      "repository": "ljtn/epiq",
+      "description": "Distributed, code-native issue tracker - audit workflows via time-travel",
+      "fingerprint": "73ca9ccb56f7953fb97626f35d12a0c4f387cd45487f0f543ca9ff30140f0d4f",
+      "summary": "用分布式、代码化方式跟踪问题，并通过回看历史状态审查工作流程。",
+      "recorded_at": "2026-10-01T03:36:32.002Z",
+      "model": null
+    },
+    "qf-studio/navigator": {
+      "repository": "qf-studio/navigator",
+      "description": "Finish What You Start — Context engineering for Claude Code.         Sessions last 20+ exchanges instead of crashing at 7.",
+      "fingerprint": "ddbd65a572090d18d669f55f64755b59bdc8e547cb8bbf458e3ab0f4cbab67ca",
+      "summary": "为 Claude Code 管理上下文，旨在减少长对话中断，让任务持续推进。",
+      "recorded_at": "2026-10-01T03:36:32.002Z",
+      "model": null
+    },
+    "technomadcode/ai-product-development-toolkit": {
+      "repository": "TechNomadCode/AI-Product-Development-Toolkit",
+      "description": "Plan, build and launch products with AI: guided planning prompts, an AI App Starter for Next.js, Supabase and Vercel, and agent configurations.",
+      "fingerprint": "974a9322a288e3c51940adc55373f975cee53c41b785e5d02cdd7d4482f9e29f",
+      "summary": "用规划提示、应用模板和 AI 助手配置辅助开发上线，模板采用 Next.js、Supabase、Vercel。",
+      "recorded_at": "2026-10-01T03:36:32.002Z",
+      "model": null
+    },
+    "inlitx/streak": {
+      "repository": "InlitX/streak",
+      "description": "Minimal, private, ad-free habit tracker built with Flutter — track habits, build streaks, all offline.",
+      "fingerprint": "e5b88dae834e6a3d2af8e8fce8c1e3d3aacd4d0c343942723f65e55abd477b1b",
+      "summary": "离线记录习惯和连续坚持天数，注重隐私且无广告。",
+      "recorded_at": "2026-10-01T03:36:32.002Z",
+      "model": null
+    },
+    "mehmetgoekce/llm-wiki": {
+      "repository": "MehmetGoekce/llm-wiki",
+      "description": "Build Karpathy's LLM Wiki with Claude Code. L1/L2 cache architecture. Logseq + Obsidian support.",
+      "fingerprint": "63995bfa27de85ac7894e0106476c9e861bb35db3936ec9a0e60313e1e77bca7",
+      "summary": "用 Claude Code 搭建大语言模型知识库，采用两级缓存，支持 Logseq 和 Obsidian。",
+      "recorded_at": "2026-10-01T03:36:32.002Z",
+      "model": null
+    },
+    "linwooddev/butterfly": {
+      "repository": "LinwoodDev/Butterfly",
+      "description": "🎨 Powerful, minimalistic, cross-platform, opensource note-taking app",
+      "fingerprint": "2835075afbc8aad9466fd7d063ca7c425042a8f38b403d15be30e190e6018048",
+      "summary": "提供简洁的跨平台开源笔记应用，帮助记录笔记。",
+      "recorded_at": "2026-10-01T03:36:32.002Z",
+      "model": null
+    },
+    "iazarny/gitember": {
+      "repository": "iazarny/gitember",
+      "description": "Gitember not just another git GUI client",
+      "fingerprint": "012eec16fe40f101ceb4816bf1db5a306f7b4717816f4069ce37e40e3f504841",
+      "summary": "提供 Git 图形界面客户端；简介未说明具体能力。",
+      "recorded_at": "2026-10-01T03:36:32.002Z",
+      "model": null
+    },
+    "debpalash/voicestudio": {
+      "repository": "debpalash/VoiceStudio",
+      "description": "VoiceStudio is the open-source, fully-local ElevenLabs alternative — voice cloning, voice design, video dubbing, dictation, transcription & audiobook creation in 646 languages.",
+      "fingerprint": "f5cb1ec90245f9d7d088726c0d4ffb162bb496f01e9736324d21fe83f8ab779b",
+      "summary": "在本地克隆和设计声音、为视频配音、语音输入、转写及制作有声书，简介称支持646种语言。",
+      "recorded_at": "2026-10-01T03:36:32.002Z",
+      "model": null
+    },
+    "paperclipai/paperclip": {
+      "repository": "paperclipai/paperclip",
+      "description": "The open-source app everyone uses to manage agents at work",
+      "fingerprint": "e091e6c4017040c77f0750a8fc438dc17cea943150406b70c5e89376b17edfb3",
+      "summary": "提供开源应用，帮助管理工作中的 AI 助手；简介未说明具体管理功能。",
+      "recorded_at": "2026-10-01T03:36:32.002Z",
+      "model": null
+    },
+    "vectorize-io/hindsight": {
+      "repository": "vectorize-io/hindsight",
+      "description": "Hindsight: Agent Memory That Learns",
+      "fingerprint": "e6d843d8ba3c5b8f7e33542970d358267f1eff197e03172d3c9444d01767ab5a",
+      "summary": "为 AI 助手提供可学习的记忆；简介未说明具体能力。",
+      "recorded_at": "2026-10-01T03:36:32.002Z",
+      "model": null
+    },
+    "nawfalmotii79/plfm_radar": {
+      "repository": "NawfalMotii79/PLFM_RADAR",
+      "description": "Open-source, low-cost 10.5 GHz PLFM phased array RADAR system",
+      "fingerprint": "20f14ed51f7e986c0a98edfe1c5eb69fb3cf32612785cb115390cffdc7694b19",
+      "summary": "提供开源、低成本的10.5 GHz相控阵雷达系统；简介未说明具体探测能力。",
+      "recorded_at": "2026-10-01T03:36:32.002Z",
+      "model": null
+    },
+    "cs341-illinois/coursebook": {
+      "repository": "cs341-illinois/coursebook",
+      "description": "Open Source Introductory Systems Programming Textbook for the University of Illinois",
+      "fingerprint": "68419bbbffc492d11a263e53866afba44c605469dd7198be1b5831d0ddce11b1",
+      "summary": "提供伊利诺伊大学的开源系统编程入门教材，帮助学习系统编程。",
+      "recorded_at": "2026-10-01T03:36:32.002Z",
+      "model": null
+    },
+    "byoungd/up": {
+      "repository": "byoungd/up",
+      "description": "An advanced guide which might benefit you a lot 🎉 . 韩先凯的人生进阶指南 人生进阶指南 离谱的人生 人生进阶 AI学习 AI指南 韩先凯的AI学习指南 英语学习指南/英语学习教程/英语学习/学英语",
+      "fingerprint": "839d817d16275dc081992bb05bb8aa9dfacc0cd052093b22586c40d867dc2491",
+      "summary": "提供人生进阶、AI 学习和英语学习指南；简介未说明具体内容与方法。",
+      "recorded_at": "2026-10-01T03:36:32.002Z",
+      "model": null
+    },
+    "mvschwarz/openrig": {
+      "repository": "mvschwarz/openrig",
+      "description": "Build your own network of agents from Claude Code, Codex and Pi: persistent teams with roles, shared context and owned work.",
+      "fingerprint": "30f7b25efffde6b8a78d1e92ab2be26ca628335ab07b20689bb5f8f442a41554",
+      "summary": "把 Claude Code、Codex 和 Pi 组织成有角色分工、共享上下文的 AI 团队。",
+      "recorded_at": "2026-10-01T12:28:05.589Z",
+      "model": "Codex public-preview description review"
+    },
+    "dream-num/univer": {
+      "repository": "dream-num/univer",
+      "description": "The Office Harness for AI Agents — Spreadsheets, Docs, Slides, Canvas, Relational Tables, and PDF in one runtime.",
+      "fingerprint": "006e51894015325a0bedf32d7a68ccfa3e1fa0c497a16e5013deb0ea12ba9b7e",
+      "summary": "让 AI 助手在同一运行环境中处理电子表格、文档、幻灯片、画布、关系表和 PDF。",
+      "recorded_at": "2026-10-01T03:36:32.002Z",
+      "model": null
+    },
+    "newdee/magpie": {
+      "repository": "newdee/magpie",
+      "description": "Spotlight-style local search for everything you saved and forgot: GitHub stars, local files, images, and bookmarks. Privacy-first, no full-disk scanning, fully on-device.",
+      "fingerprint": "3f7a3d91f1ae3b7b0c82ec1901b5b3b62fd078820e94e5db5b5e38a3caa7b58f",
+      "summary": "在本机查找 GitHub 收藏、文件、图片和书签。",
+      "recorded_at": "2026-10-01T12:28:05.589Z",
+      "model": "Codex public-preview description review"
+    },
+    "lanxiuyun/catrace": {
+      "repository": "lanxiuyun/Catrace",
+      "description": "Catrace: Every notify is a Plugin! Catrace 是一个桌面小窗系统，由插件决定小窗的展示方式与交互形式。 VSCode 提供代码视窗，插件提供能力；Catrace 提供小窗视窗，插件提供内容。久坐提醒是 Catrace 的首个插件，未来还将有更多能力以插件的形式接入。",
+      "fingerprint": "0ebd91866ac3063e76f067ea261ec931d40415001b2bc0d5ae932fb1b06f98c6",
+      "summary": "用插件提供桌面小窗，首个插件用于久坐提醒。",
+      "recorded_at": "2026-10-01T12:28:05.589Z",
+      "model": "Codex public-preview description review"
+    },
+    "volmarg/personal-management-system": {
+      "repository": "Volmarg/personal-management-system",
+      "description": "Your web application for managing personal data.",
+      "fingerprint": "37e377ee5a9ba9cbb11532441fb78be15bcc6c71915ac616da3b80e760766991",
+      "summary": "在网页里管理自己的个人资料。",
+      "recorded_at": "2026-10-01T12:28:05.589Z",
+      "model": "Codex public-preview description review"
+    },
+    "rush86999/atom": {
+      "repository": "rush86999/atom",
+      "description": "Atom Agent, Open-Source Governed AI Agent Platform for Self-Hosted Automation",
+      "fingerprint": "5768d9d2a29501e552deacca7923b0a7e9c735cf7ec6aee5c4661bca7c5e61e3",
+      "summary": "可自行部署的 AI 自动化平台，提供管理与约束机制。",
+      "recorded_at": "2026-10-01T12:28:05.589Z",
+      "model": "Codex public-preview description review"
+    },
+    "scalacenter/bloop": {
+      "repository": "scalacenter/bloop",
+      "description": "Bloop is a build server and CLI tool to compile, test and run Scala fast from any editor or build tool.",
+      "fingerprint": "63268672bee12b63b073e2924937733410142fd6747b678fdee646cfd956986e",
+      "summary": "帮助开发者更快编译、测试和运行 Scala 程序。",
+      "recorded_at": "2026-10-01T12:28:05.589Z",
+      "model": "Codex public-preview description review"
+    },
+    "tach-org/tach": {
+      "repository": "tach-org/tach",
+      "description": "A Python tool to visualize + enforce dependencies, using modular architecture 🌎 Open source 🐍 Installable via pip 🔧 Able to be adopted incrementally - ⚡ Implemented with no runtime impact ♾️ Interoperable with your existing systems 🦀 Written in rust",
+      "fingerprint": "2b280d5402a8a7c8ffda4aa477b1f11fccee7eedf7e4a37004107f3e492c4511",
+      "summary": "画出并约束 Python 项目里各模块的依赖关系。",
+      "recorded_at": "2026-10-01T12:28:05.589Z",
+      "model": "Codex public-preview description review"
+    },
+    "eval-exec/neomacs": {
+      "repository": "eval-exec/neomacs",
+      "description": "NEO Emacs (WIP): GPU powered Emacs written in Rust with a modern display engine. Aiming for modern design & multi-threaded Elisp, 10x performance, zero-pause concurrent GC and 100% Emacs compatibility.",
+      "fingerprint": "cc6b818c46d42c8149d53d37b41f870c4562fe4983e1200a15b37a4fc1b1ef19",
+      "summary": "正在开发的 Emacs 编辑器改造版，目标是改善显示与性能。",
+      "recorded_at": "2026-10-01T12:28:05.589Z",
+      "model": "Codex public-preview description review"
+    },
+    "nazzarenogiannelli/tuiboard": {
+      "repository": "NazzarenoGiannelli/tuiboard",
+      "description": "Terminal kanban on plain markdown, with optional Today/Tomorrow planner, 24h agenda + calendar, and a live view of your coding agents (Claude Code, Codex, OpenCode, Pi) with herdr integration.",
+      "fingerprint": "80c15a74dac953af899a7b1528134adece6a7ad001116890bfd61a0f4b366ec8",
+      "summary": "在终端里用 Markdown 管理任务看板、日程和编程 AI 状态。",
+      "recorded_at": "2026-10-01T12:28:05.589Z",
+      "model": "Codex public-preview description review"
+    },
+    "amintacccp/githubstarsmanager": {
+      "repository": "AmintaCCCP/GithubStarsManager",
+      "description": "AI-powered GitHub stars manager with semantic search, auto-categorization, and release tracking",
+      "fingerprint": "b5b88d5be491d1518ef0c194ba9a3d8769e9b5b9d49af3dffaa369d99f6770f1",
+      "summary": "用 AI 搜索、分类 GitHub 收藏，并跟踪项目新版本。",
+      "recorded_at": "2026-10-01T12:28:05.589Z",
+      "model": "Codex public-preview description review"
+    },
+    "futuregene/future-os": {
+      "repository": "futuregene/future-os",
+      "description": "One AI agent, everywhere you work — terminal, desktop, mobile, and your chat apps. Rust core.",
+      "fingerprint": "1d6f4e6b4e094f46451ef298a2db365cb489da788d4fc4c09231bcb23a964c12",
+      "summary": "让同一个 AI 助手用于终端、桌面、手机和聊天应用。",
+      "recorded_at": "2026-10-01T12:28:05.589Z",
+      "model": "Codex public-preview description review"
+    },
+    "gioxx/marvelloussuspender": {
+      "repository": "gioxx/MarvellousSuspender",
+      "description": "A free, open-source Chrome extension - no ads, no tracking. Based on The Great Suspender, cleaned up and actively maintained.",
+      "fingerprint": "4204dc8772ef5de12b4597a77d2aba1c9beaee14395d7a3a8305900831fe23c3",
+      "summary": "基于 The Great Suspender 改造的 Chrome 扩展，作者称无广告与追踪。",
+      "recorded_at": "2026-10-01T12:28:05.589Z",
+      "model": "Codex public-preview description review"
+    },
+    "pm-shawn/abu-cowork": {
+      "repository": "PM-Shawn/Abu-Cowork",
+      "description": "Open-source alternative to Claude Cowork — a local-first AI agent desktop app · multi-model · self-evolving skills · privacy-first · multi-Harness roadmap · DeepSeek Harness integration in progress",
+      "fingerprint": "8ab1315529bc2fb5d266964b735ce6a86d0808e3af837097bbdb3cb8308aad92",
+      "summary": "可选多个模型的本地 AI 桌面助手，作者将其定位为 Claude Cowork 替代品。",
+      "recorded_at": "2026-10-01T12:28:05.589Z",
+      "model": "Codex public-preview description review"
+    },
+    "meridiona/meridian": {
+      "repository": "Meridiona/meridian",
+      "description": "Stop letting your work go unnoticed. Meridian keeps an automatic work journal of what you worked on and what you finished, summarised daily, and automatically drafts your project tickets for you.",
+      "fingerprint": "871f2fd899e077fbd0040bcd8c183f2bd880222bded8358478ec2fc1f5ac0e63",
+      "summary": "自动记下工作过程和完成事项，整理每日摘要与项目任务草稿。",
+      "recorded_at": "2026-10-01T12:28:05.589Z",
+      "model": "Codex public-preview description review"
+    },
+    "aayushch/laya": {
+      "repository": "aayushch/laya",
+      "description": "Laya is an open-source, local-first AI notification command center that aggregates Slack, Gmail, GitHub, Jira, Notion, Outlook,  Calendar (and more) notifications using local LLMs via Ollama and LM Studio. Supports cloud models via BYOK.",
+      "fingerprint": "ad53ebd8807d88e1a2f39c4cf253c73ca2e165b3664d3867b0f1b2b42a94f39a",
+      "summary": "把邮件、聊天和项目工具的通知汇到一起，用 AI 协助整理。",
+      "recorded_at": "2026-10-01T12:28:05.589Z",
+      "model": "Codex public-preview description review"
+    },
+    "hoothin/searchjumper": {
+      "repository": "hoothin/SearchJumper",
+      "description": "Yet another awesome browser extension for switching search engines, search everything (selection text / image / link / find in page) on any engine with a simple right click or a variety of menus and shortcuts. Build with React & Material-UI. (WIP).",
+      "fingerprint": "97ef489d5cf4474c7fd41641a1d46841f5b37888f655d1c4557c24ce703451a6",
+      "summary": "把选中文字、图片或链接交给不同搜索引擎查找。",
+      "recorded_at": "2026-10-01T12:28:05.589Z",
+      "model": "Codex public-preview description review"
+    },
+    "pcx-wave/vibe-skill": {
+      "repository": "pcx-wave/vibe-skill",
+      "description": "Claude Code skill — delegate coding tasks to Mistral Vibe, supervise via git diff & save 50-90% Claude token usage",
+      "fingerprint": "0e766e4e0dea1cf8c89bae3ac8147f1c9a15252dad65ad7423056aeb4d29459b",
+      "summary": "让 Claude Code 把编程任务交给 Mistral Vibe，再检查代码改动。",
+      "recorded_at": "2026-10-01T12:28:05.589Z",
+      "model": "Codex public-preview description review"
+    },
+    "sutera-diffusus/dsh-whale-musume": {
+      "repository": "Sutera-Diffusus/dsh-whale-musume",
+      "description": "DeepSeek Harness 桌宠插件：元气鲸鱼娘陪你写代码 🐋（桌面端 0.2.0-rc.2 与旧版 Web 双端支持）",
+      "fingerprint": "ed488f7fa8537ef0b574afe42cb22dfbd268e31cd97dcca9850e171052efae3e",
+      "summary": "给 DeepSeek Harness 加一个陪伴编程的鲸鱼娘桌宠。",
+      "recorded_at": "2026-10-01T12:28:05.589Z",
+      "model": "Codex public-preview description review"
+    },
+    "ttlapp/time-to-leave": {
+      "repository": "TTLApp/time-to-leave",
+      "description": "Log work hours and get notified when it's time to leave the office and start to live.",
+      "fingerprint": "80ed48a41810bfa82ad3820fc0e5123b3b800d00d940919845ff191fd1be8f7b",
+      "summary": "记录工作时长，到下班时间提醒你离开办公室。",
+      "recorded_at": "2026-10-01T12:28:05.589Z",
+      "model": "Codex public-preview description review"
+    },
+    "3xpyth0n/ideon": {
+      "repository": "3xpyth0n/ideon",
+      "description": "Your project is scattered across too many tools. Map the chaos on an infinite canvas where notes, files, TO-DOs (and more!) finally live together.",
+      "fingerprint": "479f1bd26b52f5153e0497feb3dac22fd863c99ff3def38d2ca1eae9e735bbab",
+      "summary": "把项目笔记、文件和待办放在同一张无限画布里。",
+      "recorded_at": "2026-10-01T12:28:05.589Z",
+      "model": "Codex public-preview description review"
+    },
+    "pchuri/confluence-cli": {
+      "repository": "pchuri/confluence-cli",
+      "description": "A powerful command-line interface for Atlassian Confluence",
+      "fingerprint": "bb6b0ba36012fc8bc685284e2fab887e1cb1e2512664fe8940a546c447c8753e",
+      "summary": "在终端里操作 Confluence 文档工具。",
+      "recorded_at": "2026-10-01T12:28:05.589Z",
+      "model": "Codex public-preview description review"
+    },
+    "nostacks/ekphos": {
+      "repository": "nostacks/ekphos",
+      "description": "A lightweight, fast, terminal-based markdown research tool inspired by Obsidian",
+      "fingerprint": "b1edf70c5bbb3413cd4bcf887e431b7a7f484d0b0a88c13f8c3072adfa5e5028",
+      "summary": "在终端里用 Markdown 整理研究材料与笔记。",
+      "recorded_at": "2026-10-01T12:28:05.589Z",
+      "model": "Codex public-preview description review"
+    },
+    "dietrichgebert/ponytail": {
+      "repository": "DietrichGebert/ponytail",
+      "description": "Makes your AI agent think like the laziest senior dev in the room. The best code is the code you never wrote.",
+      "fingerprint": "b4c66a09f2c118ca2fed4364f32b6ddb2e2328fc047dd08686cff77d62d9e1ef",
+      "summary": "帮助 AI 编程助手思考怎样少写不必要的代码，具体方法需读说明。",
+      "recorded_at": "2026-10-01T12:28:05.589Z",
+      "model": "Codex public-preview description review"
+    },
+    "mattpocock/skills": {
+      "repository": "mattpocock/skills",
+      "description": "Skills for Real Engineers. Straight from my .agents directory.",
+      "fingerprint": "a69c085fab3eb5868841687f09f26030aee6d2b3769d3d330e81f89be9a4806d",
+      "summary": "一套面向工程开发的 AI 技能文件。",
+      "recorded_at": "2026-10-01T12:28:05.589Z",
+      "model": "Codex public-preview description review"
+    },
+    "nvidia/openshell": {
+      "repository": "NVIDIA/OpenShell",
+      "description": "OpenShell is the safe, private runtime for autonomous AI agents.",
+      "fingerprint": "4d6819b952c85016ef43192fd20e27bfdc9b1740353bb0d6f826a1bc334ba9c5",
+      "summary": "供自主 AI 助手运行的环境，作者强调安全与隐私。",
+      "recorded_at": "2026-10-01T12:28:05.589Z",
+      "model": "Codex public-preview description review"
+    },
+    "firebase/firebase-ios-sdk": {
+      "repository": "firebase/firebase-ios-sdk",
+      "description": "Firebase SDK for Apple App Development",
+      "fingerprint": "f7c43c85d79a96938dd8e7644d8feb5710ae415c635857ddbe35a55f0bb6a9bc",
+      "summary": "给苹果应用接入 Firebase 功能的开发工具包。",
+      "recorded_at": "2026-10-01T12:28:05.589Z",
+      "model": "Codex public-preview description review"
+    },
+    "cursor/plugins": {
+      "repository": "cursor/plugins",
+      "description": "Cursor plugin specification and official plugins",
+      "fingerprint": "123e541a1b6d4c06144e9e03384162a2c0cff80eb2877982c3131f4a59d5b58b",
+      "summary": "Cursor 的插件规范与官方插件集合。",
+      "recorded_at": "2026-10-01T12:28:05.589Z",
+      "model": "Codex public-preview description review"
+    },
+    "obra/superpowers": {
+      "repository": "obra/superpowers",
+      "description": "An agentic skills framework & software development methodology that works.",
+      "fingerprint": "92f209e7344165c360d1025c9525accffea5726558abcc94d051ad7e8e55ac49",
+      "summary": "给编程 AI 增加技能与开发流程的一套方法。",
+      "recorded_at": "2026-10-01T12:28:05.589Z",
+      "model": "Codex public-preview description review"
+    },
+    "mksglu/context-mode": {
+      "repository": "mksglu/context-mode",
+      "description": "Context window optimization for AI coding agents. Sandboxes tool output (98% reduction), persists session memory, and enforces routing across 17 platforms via MCP + hooks.",
+      "fingerprint": "5c4969aa4f3452d68faf5e4a7ed5d3323a0717f17782be323caf02f7952f7751",
+      "summary": "整理编程 AI 的工具输出，并保存会话记忆，帮助管理上下文。",
+      "recorded_at": "2026-10-01T12:28:05.589Z",
+      "model": "Codex public-preview description review"
+    },
+    "heygen-com/hyperframes": {
+      "repository": "heygen-com/hyperframes",
+      "description": "Write HTML. Render video. Built for agents.",
+      "fingerprint": "c2acab8414e0cd4d310185bc491d2d9a4728df72d9fba80bff586d4de508f97c",
+      "summary": "用 HTML 编写画面并生成视频，支持交给 AI 制作。",
+      "recorded_at": "2026-10-01T12:28:05.589Z",
+      "model": "Codex public-preview description review"
+    },
+    "earendil-works/pi": {
+      "repository": "earendil-works/pi",
+      "description": "AI agent toolkit: unified LLM API, agent loop, TUI, coding agent CLI",
+      "fingerprint": "26afd3ad0de656d052b53d7a56c16e96317113c77ea8f8e9a86d7ce1e8da3fdf",
+      "summary": "开发和运行 AI 助手的工具集，包含终端编程助手。",
+      "recorded_at": "2026-10-01T12:28:05.589Z",
+      "model": "Codex public-preview description review"
+    },
+    "tile-ai/tilelang": {
+      "repository": "tile-ai/tilelang",
+      "description": "Domain-specific language designed to streamline the development of high-performance GPU/CPU/Accelerators kernels",
+      "fingerprint": "5d693080d7678bc74479feb14a995a7d9cf478904292dff907cd6a58a248645a",
+      "summary": "帮助开发者编写高性能 GPU、CPU 等计算程序。",
+      "recorded_at": "2026-10-01T12:28:05.589Z",
+      "model": "Codex public-preview description review"
+    },
+    "pablostanley/yoinks": {
+      "repository": "pablostanley/yoinks",
+      "description": "yoink any video from your terminal. no shady ads.",
+      "fingerprint": "0c4870846c5ed48928200406012c45ae331749be68331bfabcedfaea8b2954f1",
+      "summary": "在终端里下载视频，支持范围需查看项目说明。",
+      "recorded_at": "2026-10-01T12:28:05.589Z",
+      "model": "Codex public-preview description review"
+    },
+    "hunxbyts/ghosttrack": {
+      "repository": "HunxByts/GhostTrack",
+      "description": "Useful tool to track location or mobile number",
+      "fingerprint": "774902e5ac60b959ceb69bb90237669ddf9be894cfafe056bd3dc4c148e3f5c7",
+      "summary": "查询位置或手机号相关信息的工具，具体能力与使用范围需读说明。",
+      "recorded_at": "2026-10-01T12:28:05.589Z",
+      "model": "Codex public-preview description review"
+    },
+    "pbakaus/impeccable": {
+      "repository": "pbakaus/impeccable",
+      "description": "The design language that makes your AI harness better at design.",
+      "fingerprint": "c317897df7c271bb9c3cd21bd65abd40885185ad53555fe612f687b783a84bdf",
+      "summary": "帮助编程 AI 改善界面设计的一套设计方法。",
+      "recorded_at": "2026-10-01T12:28:05.589Z",
+      "model": "Codex public-preview description review"
+    },
+    "friedrich-m/unimate": {
+      "repository": "Friedrich-M/UniMate",
+      "description": "[SIGGRAPH Asia 2026] UniMate: One Unified Model to Animate Diverse Skeletons",
+      "fingerprint": "79632fc845df40c2a8f8a3b30001b4a742af036ae687891620147550384ae725",
+      "summary": "用一个模型为不同骨架结构生成动画。",
+      "recorded_at": "2026-10-01T12:28:05.589Z",
+      "model": "Codex public-preview description review"
+    }
+  }
+}

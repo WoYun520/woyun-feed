@@ -1,0 +1,90 @@
+[
+  {
+    "id": "news-13176883bff4d50563ee3832",
+    "title": "「豆包工作」现教现学：从一份日文 PDF 到官网、视频、PPT 全搞定，打通飞书后太爽了！",
+    "summary": "上月底，豆包与飞书合并。 上周，豆包推出了工作模式。 昨天，字节跳动正式发布了「豆包工作」。 字节这一系列动作快得不行，目标清晰：做一个面向生产力场景的独立 Agent 产品。 豆包给人的印象是适合聊天，但新出的「豆包工作」在办公场景到底能不能打？直接上案例。 「豆包工作」现教现学 先说说背景，昨天一个大学同学找我，想",
+    "original_url": "https://blog.qiaomu.ai/japanese-pdf-ai-workflow",
+    "author_handle": "vista8",
+    "source_refs": [
+      "creator-blog-vista8"
+    ],
+    "link_kind": "article",
+    "content_status": "excerpt_only",
+    "read_scope": "author-blog-feed",
+    "blog_method_hint": "steps-and-example",
+    "excerpt_truncated": false
+  },
+  {
+    "id": "news-84cadc26250e34fe526a230b",
+    "title": "扣子终于有桌面端了：云盘双向同步，AI办公终于打通“最后一公里”",
+    "summary": "字节最近频频发力，扣子最近出了客户端，从官网看，主打也是办公场景！ 前几天测了豆包工作模式，扣子之前擅长做工作流，现在感觉彻底Agent。 https://www.coze.cn/",
+    "original_url": "https://blog.qiaomu.ai/coze-desktop-cloud-sync",
+    "author_handle": "vista8",
+    "source_refs": [
+      "creator-blog-vista8"
+    ],
+    "link_kind": "article",
+    "content_status": "excerpt_only",
+    "read_scope": "author-blog-feed",
+    "blog_method_hint": "steps-and-example",
+    "excerpt_truncated": false
+  },
+  {
+    "id": "news-9cd21abee5efc0e7b0831743",
+    "title": "豆包更新了工作模式，正面硬刚 Workbuddy",
+    "summary": "AI 办公场景现在成了兵家必争之地。 字节终于出手，豆包客户端最近更新，增加了全新的工作任务模式，体验跟 Codex 非常接近。 能用浏览器、能调 Skill，内置 Office 和飞书办公套件，同时支持本地和云端电脑，合上笔记本也能继续工作。 测试了 7-8 个任务，竟然有点超预期，宇宙厂终于在办公 Agent 场景",
+    "original_url": "https://blog.qiaomu.ai/doubao-work-mode",
+    "author_handle": "vista8",
+    "source_refs": [
+      "creator-blog-vista8"
+    ],
+    "link_kind": "article",
+    "content_status": "excerpt_only",
+    "read_scope": "author-blog-feed",
+    "blog_method_hint": "steps-and-example",
+    "excerpt_truncated": false
+  },
+  {
+    "id": "news-71d5ac7f03bba9fe41cff50b",
+    "title": "可以关注一下最近出的一个 测试框架 e2e",
+    "summary": "可以关注一下最近出的一个 测试框架 e2e \nhttps://t.co/ynmpxplOqW 你没看错，名字就是叫 e2e （这名字真的不是碰瓷吗？），很火，而且它最有趣的是创新是：测试用例里面是自然语言驱动 + 传统断言混写\n\n自然语言就是表示它是面向LLM 的测试框架 Agent 步骤可缓存回放 被后续断言验证过的 agent.act 会记下操作 下次直接重放 不再调模型 \n\n还有就是 Web 和移动同一套 API Web 引擎走 Playwright，移动引擎通过 agent-device 驱动 iOS 模拟器和 Android 模拟器 还可以托管别的模拟器\n\n大家可以看一下测试用例，很有趣 agent.act('upgrade the workspace to the Pro plan') 这个就是自然语言的方式，第一次会让 agent 自己去探索去缓存，假如有变化再次更新。",
+    "original_url": "https://x.com/vikingmute/status/2106028732884656198",
+    "author_handle": "vikingmute",
+    "source_refs": [
+      "sopilot-author-vikingmute",
+      "sopilot-ai"
+    ],
+    "link_kind": "post",
+    "content_status": "excerpt_only",
+    "read_scope": "author-7d-top10",
+    "excerpt_truncated": false
+  },
+  {
+    "id": "news-7ae81b8e40adc641e33c27e6",
+    "title": "为 DeepSeek Harness 生态添砖加瓦。",
+    "summary": "为 DeepSeek Harness 生态添砖加瓦。\n\n自己的第一款 DSH 插件上线了：Qiaomu AI RSS。\n\nAI Coding 累了，可以看看海外 AI 资讯、播客和新 AI 工具产品介绍，同时提供英文和中文改写。\n\n安装只需跟 DSH 说：\n\n帮我安装插件：https://t.co/9gh9fmON6a\n\n节后做一个视频演示教程。",
+    "original_url": "https://x.com/vista8/status/2105323962674856009",
+    "author_handle": "vista8",
+    "source_refs": [
+      "sopilot-author-vista8"
+    ],
+    "link_kind": "post",
+    "content_status": "excerpt_only",
+    "read_scope": "author-7d-top10",
+    "excerpt_truncated": false
+  },
+  {
+    "id": "news-803ef974cda715f9084efa05",
+    "title": "如果想开发上架 Obsidian 插件，推荐安装这个Skill。",
+    "summary": "如果想开发上架 Obsidian 插件，推荐安装这个Skill。\n\n安装指令：\n\nnpx skills add joeseesun/qiaomu-obsidian-dev\n\n基于最近自己开发 Obsidian 插件趟坑经验总结而成。\n\n开源地址见评论区",
+    "original_url": "https://x.com/vista8/status/2104939501508591710",
+    "author_handle": "vista8",
+    "source_refs": [
+      "sopilot-author-vista8"
+    ],
+    "link_kind": "post",
+    "content_status": "excerpt_only",
+    "read_scope": "author-7d-top10",
+    "excerpt_truncated": false
+  }
+]

@@ -1,0 +1,60 @@
+{
+  "schema_version": "0.1",
+  "mode": "demo",
+  "generated_at": null,
+  "profile": {
+    "interests": "普通人能用的 AI 工具、自动化方法、可以亲自验证的教程选题",
+    "exclude": "融资新闻、模型跑分、没有证据的收入故事",
+    "language": "zh-CN"
+  },
+  "sources": [
+    {"id":"newsnow","name":"NewsNow","home_url":"https://newsnow.busiyi.world/","kind":"aggregator","status":"not_connected","last_success_at":null,"message":"来源候选，尚未连接"},
+    {"id":"sopilot","name":"SoPilot","home_url":"https://sopilot.net/zh/rank/tweets","kind":"aggregator","status":"not_connected","last_success_at":null,"message":"来源候选，尚未连接"},
+    {"id":"github","name":"GitHub","home_url":"https://github.com/trending","kind":"repository","status":"not_connected","last_success_at":null,"message":"来源候选，尚未连接"},
+    {"id":"hn","name":"Hacker News","home_url":"https://news.ycombinator.com/","kind":"community","status":"not_connected","last_success_at":null,"message":"来源候选，尚未连接"}
+  ],
+  "items": [
+    {
+      "id":"demo-collect",
+      "title":"把散落在各处的收藏，整理成每天看得完的简报",
+      "summary":"一个用来演示阅读体验的选题：把收藏链接集中整理，留下值得继续看的几条。具体工具和效果尚未核对。",
+      "recommendation_reason":"与你想减少刷信息时间的目标有关，可以先用自己的十条收藏做小实验。",
+      "source_refs":["newsnow"],"original_url":null,"published_at":null,"captured_at":null,
+      "content_status":"demo","verification_status":"not_tested",
+      "unknowns":["这是界面示例，不对应已采集的真实文章","尚未确认可用工具及使用成本"],
+      "suggested_question":"找一个能整理收藏链接的工具，核对成本，并给我一个用十条收藏就能完成的小实验。"
+    },
+    {
+      "id":"demo-video",
+      "title":"看长视频前，先拿到一份能跳回原片的文字笔记",
+      "summary":"示例选题：整理字幕和时间点，方便判断视频是否值得完整观看。不会把视频标题当成已经读过的内容。",
+      "recommendation_reason":"适合做前后对照的实际教程，展示输入、结果和遗漏。",
+      "source_refs":["github"],"original_url":null,"published_at":null,"captured_at":null,
+      "content_status":"demo","verification_status":"not_tested",
+      "unknowns":["这是示例选题，不是某个仓库的新发布消息","字幕获取和中文准确率仍待实测"],
+      "suggested_question":"找一个公开视频字幕整理工具，查清使用条件、费用和时间点功能，给出最小实测步骤。"
+    },
+    {
+      "id":"demo-post",
+      "title":"一个帖子为什么值得学：先看它解决了什么问题",
+      "summary":"示例选题：从热门帖中提取具体痛点和讲述方式，保留原帖，另想能亲自验证的切口。",
+      "recommendation_reason":"与你的内容创作相关；先考虑适不适合自己的经验，再看热度。",
+      "source_refs":["sopilot"],"original_url":null,"published_at":null,"captured_at":null,
+      "content_status":"demo","verification_status":"not_tested",
+      "unknowns":["没有提供实际原帖与热度数据","不能据此预测发布后的流量"],
+      "suggested_question":"为我选中的实际原帖拆解问题、证据和表达方式，再提出一个需要我实测的原创切口。"
+    },
+    {
+      "id":"demo-discover",
+      "title":"一个关注度不高的小工具，能不能替我省掉重复操作？",
+      "summary":"示例选题：从新项目中挑一个用途明确的工具，优先检查能否安装、有没有可运行的例子。",
+      "recommendation_reason":"适合发现较少人介绍的具体用法；需要先看运行结果，不能只凭介绍推荐。",
+      "source_refs":["github","hn"],"original_url":null,"published_at":null,"captured_at":null,
+      "content_status":"demo","verification_status":"not_tested",
+      "unknowns":["尚未选定具体项目，未编造 star 或增长数据","安装条件、维护情况和许可证待核对"],
+      "suggested_question":"挑一个能减少重复操作的小项目，检查安装要求和示例，再推荐一个可以截图展示的小任务。"
+    }
+  ],
+  "sections":{"daily":["demo-collect","demo-video","demo-post"],"discover":["demo-discover"]},
+  "followups":[]
+}

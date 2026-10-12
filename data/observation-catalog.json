@@ -1,0 +1,245 @@
+{
+  "version": 1,
+  "imported_at": "2026-10-01T03:44:29.595Z",
+  "origin": "观察仓库公开项目目录",
+  "entries": [
+    {
+      "repository": "langchain-ai/langgraph",
+      "summary": "让 AI 按多个步骤办事，中途暂停后可以接着做。",
+      "example": "例如：先查资料，再写初稿，等你检查后继续。",
+      "audience": "想做 AI 助手的人",
+      "source_url": "https://github.com/langchain-ai/langgraph"
+    },
+    {
+      "repository": "crewAIInc/crewAI",
+      "summary": "让几个 AI 分工合作，完成一项任务。",
+      "example": "例如：一个找资料，一个写文章，一个检查遗漏。",
+      "audience": "需要多人分工式工作的人",
+      "source_url": "https://github.com/crewAIInc/crewAI"
+    },
+    {
+      "repository": "OpenHands/OpenHands",
+      "summary": "让 AI 帮你修改代码、修复程序问题。",
+      "example": "例如：把网站报错交给它，尝试查原因并修改。",
+      "audience": "做网站或软件的人",
+      "source_url": "https://github.com/OpenHands/OpenHands"
+    },
+    {
+      "repository": "cline/cline",
+      "summary": "在写代码的软件里，让 AI 帮你制作和修改功能。",
+      "example": "例如：给网页增加一个按钮，再检查是否能用。",
+      "audience": "用 AI 做小工具的人",
+      "source_url": "https://github.com/cline/cline"
+    },
+    {
+      "repository": "Comfy-Org/ComfyUI",
+      "summary": "把文字或图片做成图片、视频，并重复使用同一套制作步骤。",
+      "example": "例如：按同一种风格制作一组封面。",
+      "audience": "做封面、图片和短片的人",
+      "source_url": "https://github.com/Comfy-Org/ComfyUI"
+    },
+    {
+      "repository": "remotion-dev/remotion",
+      "summary": "用固定模板批量制作视频。",
+      "example": "例如：替换标题和图片，做成一系列讲解视频。",
+      "audience": "需要批量出视频的人",
+      "source_url": "https://github.com/remotion-dev/remotion"
+    },
+    {
+      "repository": "OpenCut-app/OpenCut",
+      "summary": "剪辑和编辑视频。",
+      "example": "例如：把录好的素材剪成一段演示短片。",
+      "audience": "做视频的创作者",
+      "source_url": "https://github.com/OpenCut-app/OpenCut"
+    },
+    {
+      "repository": "CapSoftware/Cap",
+      "summary": "录制电脑屏幕，并分享录屏。",
+      "example": "例如：录一段操作过程，发给别人照着做。",
+      "audience": "做教程或产品演示的人",
+      "source_url": "https://github.com/CapSoftware/Cap"
+    },
+    {
+      "repository": "gitroomhq/postiz-app",
+      "summary": "把内容安排到多个社交平台发布。",
+      "example": "例如：提前排好几天的内容，到时间发布。",
+      "audience": "管理多个内容账号的人",
+      "source_url": "https://github.com/gitroomhq/postiz-app"
+    },
+    {
+      "repository": "n8n-io/n8n",
+      "summary": "把不同工具串起来，自动处理重复工作。",
+      "example": "例如：收到表单后，整理信息并发送提醒。",
+      "audience": "总在复制粘贴和搬运信息的人",
+      "source_url": "https://github.com/n8n-io/n8n"
+    },
+    {
+      "repository": "langgenius/dify",
+      "summary": "用已有 AI 模型搭建问答助手和办事流程。",
+      "example": "例如：放入产品资料，制作一个回答常见问题的助手。",
+      "audience": "想做自己的 AI 助手的人",
+      "source_url": "https://github.com/langgenius/dify"
+    },
+    {
+      "repository": "ollama/ollama",
+      "summary": "在自己的电脑上运行 AI 模型。",
+      "example": "例如：下载合适的模型后，在本机处理文字。",
+      "audience": "希望自己管理 AI 的人",
+      "source_url": "https://github.com/ollama/ollama"
+    },
+    {
+      "repository": "open-webui/open-webui",
+      "summary": "给自己的 AI 模型配一个聊天页面。",
+      "example": "例如：在浏览器里选择模型、提问并查看对话。",
+      "audience": "使用本地或自建 AI 的人",
+      "source_url": "https://github.com/open-webui/open-webui"
+    },
+    {
+      "repository": "firecrawl/firecrawl",
+      "summary": "把网页内容提取成方便阅读和交给 AI 的资料。",
+      "example": "例如：整理几个产品介绍网页，交给 AI 做比较。",
+      "audience": "经常上网查资料的人",
+      "source_url": "https://github.com/firecrawl/firecrawl"
+    },
+    {
+      "repository": "microsoft/agent-framework",
+      "summary": "把多个 AI 助手和工具组织成一套工作流程。",
+      "example": "例如：做一个先查内部资料、再回答问题的助手。",
+      "audience": "开发 AI 应用的团队",
+      "source_url": "https://github.com/microsoft/agent-framework"
+    },
+    {
+      "repository": "Aider-AI/aider",
+      "summary": "通过文字对话，让 AI 帮你修改项目代码。",
+      "example": "例如：描述一个小功能，让它修改对应文件。",
+      "audience": "习惯在终端里做软件的人",
+      "source_url": "https://github.com/Aider-AI/aider"
+    },
+    {
+      "repository": "Wan-Video/Wan2.2",
+      "summary": "根据文字或图片生成视频。",
+      "example": "例如：让一张静态图片变成一段短片。",
+      "audience": "制作视频素材的人",
+      "source_url": "https://github.com/Wan-Video/Wan2.2"
+    },
+    {
+      "repository": "chidiwilliams/buzz",
+      "summary": "把录音或视频里的语音转成文字和字幕。",
+      "example": "例如：把采访录音整理成文字，或给视频配字幕。",
+      "audience": "做采访、课程和视频的人",
+      "source_url": "https://github.com/chidiwilliams/buzz"
+    },
+    {
+      "repository": "activepieces/activepieces",
+      "summary": "连接常用工具，自动完成重复操作。",
+      "example": "例如：收到新内容后，整理到表格并提醒你。",
+      "audience": "想减少手动操作的人",
+      "source_url": "https://github.com/activepieces/activepieces"
+    },
+    {
+      "repository": "twentyhq/twenty",
+      "summary": "集中记录客户、联系情况和后续跟进。",
+      "example": "例如：记下谁咨询过服务、下次什么时候联系。",
+      "audience": "接单或维护客户的人",
+      "source_url": "https://github.com/twentyhq/twenty"
+    },
+    {
+      "repository": "vllm-project/vllm",
+      "summary": "让服务器上的 AI 模型处理多人同时发来的请求。",
+      "example": "例如：为多人使用的 AI 聊天服务提供运行支持。",
+      "audience": "搭建 AI 服务的开发者",
+      "source_url": "https://github.com/vllm-project/vllm"
+    },
+    {
+      "repository": "BerriAI/litellm",
+      "summary": "把多个 AI 服务放在同一个入口管理，并查看用量和花费。",
+      "example": "例如：给团队设置不同的使用额度。",
+      "audience": "使用多家 AI 服务的团队",
+      "source_url": "https://github.com/BerriAI/litellm"
+    },
+    {
+      "repository": "unclecode/crawl4ai",
+      "summary": "收集网页里的正文，整理成 AI 能继续使用的资料。",
+      "example": "例如：提取一组文章，作为研究材料。",
+      "audience": "批量整理网上资料的人",
+      "source_url": "https://github.com/unclecode/crawl4ai"
+    },
+    {
+      "repository": "microsoft/autogen",
+      "summary": "让不同 AI 助手通过分工和对话协作。",
+      "example": "例如：一个提出方案，另一个检查方案。",
+      "audience": "研究 AI 协作的开发者",
+      "source_url": "https://github.com/microsoft/autogen"
+    },
+    {
+      "repository": "continuedev/continue",
+      "summary": "把 AI 编程助手接入日常写代码的工具。",
+      "example": "例如：让 AI 解释一段代码，再帮你修改。",
+      "audience": "想配置编程助手的人",
+      "source_url": "https://github.com/continuedev/continue"
+    },
+    {
+      "repository": "RooCodeInc/Roo-Code",
+      "summary": "让 AI 在代码编辑器里协助写功能、查问题。",
+      "example": "例如：描述网页需求，让它协助修改项目。",
+      "audience": "用 AI 辅助开发的人",
+      "source_url": "https://github.com/RooCodeInc/Roo-Code"
+    },
+    {
+      "repository": "Lightricks/LTX-Video",
+      "summary": "用文字或图片生成视频素材。",
+      "example": "例如：把一个画面想法做成短片片段。",
+      "audience": "尝试 AI 视频创作的人",
+      "source_url": "https://github.com/Lightricks/LTX-Video"
+    },
+    {
+      "repository": "FlowiseAI/Flowise",
+      "summary": "通过连接步骤，搭建 AI 问答和办事流程。",
+      "example": "例如：做一个先查资料、再组织答案的助手。",
+      "audience": "想尝试搭建 AI 工具的人",
+      "source_url": "https://github.com/FlowiseAI/Flowise"
+    },
+    {
+      "repository": "realskyrin/capcap",
+      "summary": "给截图加箭头、序号和遮挡，做操作教程配图。",
+      "example": "例如：截一张操作页面，把要点击的三个位置标出来。",
+      "audience": "写教程、做产品说明的人",
+      "source_url": "https://github.com/realskyrin/capcap"
+    },
+    {
+      "repository": "chubbyguan/chubbyskills",
+      "summary": "把文章、视频字幕和本地文档整理成可搜索的素材库。",
+      "example": "例如：写新文章前，找回收藏内容中的一段原话及出处。",
+      "audience": "收藏很多资料却找不回来的人",
+      "source_url": "https://github.com/chubbyguan/chubbyskills"
+    },
+    {
+      "repository": "JimmySadek/youtube-fetcher-to-markdown",
+      "summary": "把公开视频已有的字幕保存成带时间链接的文字笔记。",
+      "example": "例如：读教程文字时，点时间位置回到视频核对。",
+      "audience": "学习外语视频、整理教程的人",
+      "source_url": "https://github.com/JimmySadek/youtube-fetcher-to-markdown"
+    },
+    {
+      "repository": "hajisensai/Fushi",
+      "summary": "看外语书和视频时查词，并把生词整理成复习卡片。",
+      "example": "例如：看一小段外语视频，把字幕中不认识的词留下来复习。",
+      "audience": "用原版书、影视材料学外语的人",
+      "source_url": "https://github.com/hajisensai/Fushi"
+    },
+    {
+      "repository": "zhitongblog/solomd",
+      "summary": "在本地笔记里阅读、编辑，并接入 AI 整理内容。",
+      "example": "例如：把这一周的几篇笔记整理成一份周总结。",
+      "audience": "想让 AI 帮忙整理本地笔记的人",
+      "source_url": "https://github.com/zhitongblog/solomd"
+    },
+    {
+      "repository": "AIEraDev/Clypra",
+      "summary": "把视频素材剪成短片，添加文字和音轨后导出。",
+      "example": "例如：把两段录屏剪成一段教程演示。",
+      "audience": "做录屏教程、短视频的人",
+      "source_url": "https://github.com/AIEraDev/Clypra"
+    }
+  ]
+}

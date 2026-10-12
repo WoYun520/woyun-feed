@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FFmpeg 最小试跑：截取视频 1 秒处</title>
+  <style>
+    :root{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;color:#18231e;background:#f3f5f2;line-height:1.65;font-synthesis:none}
+    *{box-sizing:border-box}body{margin:0}main{max-width:1080px;margin:auto;padding:42px 30px 52px}
+    .eyebrow{font-size:13px;color:#657367;letter-spacing:.08em;margin:0 0 10px}h1{font-size:clamp(26px,4vw,38px);line-height:1.25;letter-spacing:-.04em;margin:0 0 14px;font-weight:650}
+    p{margin:0 0 12px}.intro{max-width:760px;color:#4e5d52}.status{display:inline-flex;align-items:center;gap:8px;padding:7px 12px;border:1px solid #bdd5c2;border-radius:5px;background:#e8f3e9;color:#285c38;font-size:13px;margin:10px 0 25px}.dot{width:7px;height:7px;border-radius:50%;background:#3b8b50}
+    .media{display:grid;grid-template-columns:1fr 1fr;gap:20px}figure{margin:0;background:#fff;border:1px solid #dbe1d9;border-radius:8px;overflow:hidden}figcaption{padding:15px 18px 14px;font-size:14px;font-weight:600}figcaption span{display:block;font-weight:400;color:#718073;font-size:12px;margin-top:3px}video,img{display:block;width:100%;height:auto;aspect-ratio:16/9;background:#18231e;object-fit:contain}
+    .facts{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:18px 0 27px}.fact{border-bottom:1px solid #d6dfd4;padding:0 0 11px}.fact strong{font-size:21px;font-weight:620;display:block}.fact span{font-size:12px;color:#6a796d}
+    .detail{display:grid;grid-template-columns:1.2fr 1fr;gap:28px}h2{font-size:17px;margin:0 0 12px;font-weight:620}ol{padding-left:20px;margin:0}li{padding-left:3px;margin-bottom:10px;font-size:14px}.note{font-size:14px;color:#4c5b50}pre{white-space:pre-wrap;overflow-wrap:anywhere;margin:12px 0 18px;padding:15px 18px;border:1px solid #d4ddd1;border-radius:5px;background:#eaf0e7;color:#203928;font-size:13px;line-height:1.7}code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.93em}
+    .check{padding:17px 19px;border-left:3px solid #9bbb9a;background:#edf2e9;margin-bottom:17px;font-size:14px}.check p:last-child{margin-bottom:0}.warning{font-size:13px;color:#765633;background:#f6f0e6;padding:13px 16px;border-radius:5px}.limitations{font-size:13px;color:#687669;margin-top:16px}footer{border-top:1px solid #d6dfd4;margin-top:27px;padding-top:18px;color:#6a786b;font-size:12px}a{color:#305d41;text-underline-offset:3px}a:hover{color:#172e20}
+    @media(max-width:720px){main{padding:27px 18px 35px}.media,.detail{grid-template-columns:1fr;gap:18px}.facts{gap:10px}.fact strong{font-size:18px}.status{margin-bottom:20px}footer{margin-top:20px}}
+  </style>
+</head>
+<body>
+<main>
+  <p class="eyebrow"><a href="/">← 返回信息流</a> · 教程最小试跑 · 2026-10-03</p>
+  <h1>从视频 1 秒处截一张图片</h1>
+  <p class="intro">按阮一峰《FFmpeg 视频处理入门教程》“4.8 截图”实际执行一次。本次由本站 AI 在本机执行和核对。输入是自行生成的合成样本，画面有时间与帧号；没有使用用户视频或真实录屏。</p>
+  <div class="status"><span class="dot" aria-hidden="true"></span>本例命令与文件检查通过</div>
+  <section class="media" aria-label="实际输入与输出">
+    <figure>
+      <video controls preload="metadata" playsinline aria-label="3 秒合成输入视频">
+        <source src="input.mp4" type="video/mp4">
+        当前浏览器无法播放视频，可<a href="input.mp4">打开合成输入文件</a>。
+      </video>
+      <figcaption>输入：3 秒合成视频<span>每秒切换底色 · 30 帧/秒 · H.264 · 无音轨</span></figcaption>
+    </figure>
+    <figure>
+      <a href="frame.jpg" aria-label="打开实际输出的截图"><img src="frame.jpg" alt="实际截出的图片：绿色背景，时间 00:00:01.000，帧号 030" width="960" height="540"></a>
+      <figcaption>输出：实际截取的 frame.jpg<span>画面显示 00:00:01.000 与 FRAME 030</span></figcaption>
+    </figure>
+  </section>
+  <div class="facts" aria-label="本例结果">
+    <div class="fact"><strong>1.000 秒</strong><span>独立参考帧的实际时间戳</span></div>
+    <div class="fact"><strong>960 × 540</strong><span>输入与输出的真实尺寸</span></div>
+    <div class="fact"><strong>0</strong><span>截帧命令退出码</span></div>
+  </div>
+  <section class="detail">
+    <div>
+      <h2>怎么跑</h2>
+      <ol>
+        <li>准备合成的 <code>input.mp4</code>。本例全长 3 秒，共 90 帧。</li>
+        <li>把教程中的时间改成 <code>00:00:01</code>，指定输出文件名。</li>
+        <li>执行命令，打开生成的 <code>frame.jpg</code>。</li>
+      </ol>
+      <pre><code>ffmpeg -ss 00:00:01 -i input.mp4 -vframes 1 -q:v 2 frame.jpg</code></pre>
+      <h2>预期与实际</h2>
+      <p class="note">预期得到一张 1 秒处的 JPG。实际文件为 44,543 字节；FFprobe 探测尺寸为 960 × 540，FFmpeg 成功解码，画面上的时间和帧号也与 1 秒一致。</p>
+    </div>
+    <div>
+      <h2>如何核对定位</h2>
+      <div class="check">
+        <p>额外按帧号解码第 30 帧，FFprobe 确认其时间戳为 1.000 秒，再比较截图与参考画面。</p>
+        <p>平均 RGB 通道差：对 1 秒帧为 <strong>0.879 / 255</strong>；对 0 秒帧为 <strong>67.109 / 255</strong>。JPG 有损压缩会产生小差异，本例截图明显更接近 1 秒帧。</p>
+      </div>
+      <p class="warning">实际问题：FFmpeg 提示 <code>frame.jpg</code> 未包含图片序列文件名模式。该提示未阻止输出；本次退出码为 0，生成了单张 JPG。</p>
+      <p class="limitations">范围：本机已装 FFmpeg 8.1.1、一个合成 H.264 样本、一次指定时刻截图。本例不覆盖安装、教程其他命令、其他格式或平台，也不代表用户验收。</p>
+    </div>
+  </section>
+  <footer>
+    <p>执行时间：2026-10-03 20:24:25–20:24:26（北京时间）。输入由本地脚本生成；本次未联网、未安装软件。</p>
+    <p>原文：<a href="https://www.ruanyifeng.com/blog/2020/01/ffmpeg.html" target="_blank" rel="noopener noreferrer">阮一峰《FFmpeg 视频处理入门教程》§4.8 截图</a>。原命令：<code>ffmpeg -ss 01:23:45 -i input -vframes 1 -q:v 2 output.jpg</code>。</p>
+  </footer>
+</main>
+</body>
+</html>

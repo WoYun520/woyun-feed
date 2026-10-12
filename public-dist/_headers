@@ -1,0 +1,8 @@
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: DENY
+  Cache-Control: no-cache
+/data/public-feed.json
+  ! Cache-Control
+  Cache-Control: no-store

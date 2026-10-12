@@ -1,0 +1,53 @@
+/* A small action-first entry above the existing source grid. */
+.action-highlights { margin: 20px 0 28px; }
+.action-highlights .daily-highlights-header { align-items: end; gap: 24px; margin-bottom: 14px; }
+.action-highlights .action-highlights-eyebrow { margin: 0 0 5px; color: var(--highlight-deep); font-size: 11px; font-weight: 600; letter-spacing: .04em; }
+.action-highlights .daily-highlights-header h3 { font-size: 23px; line-height: 1.4; letter-spacing: -.035em; }
+.action-highlights .daily-highlights-header h3 small { font-size: 11px; }
+.action-highlights-note { max-width: 320px; color: var(--text-light); font-size: 11px; line-height: 1.75; }
+.action-highlights .daily-highlights-list { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.action-highlights .daily-highlight { padding: 18px; border-radius: 10px; border-color: #00304924; box-shadow: none; }
+.action-highlight-labels { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 8px; margin-bottom: 12px; min-height: 20px; }
+.action-highlight-reading { color: var(--text-light); font-size: 10px; }
+.action-highlight-fixed { color: var(--highlight-deep); background: #bb0d1810; border-radius: 4px; padding: 2px 5px; font-size: 10px; }
+.action-highlights .daily-highlight-title { margin: 0 0 12px; }
+.action-highlights .post-media-highlight { margin-bottom: 14px; }
+.action-highlights .daily-highlight-title h4 { font-size: 15px; line-height: 1.6; letter-spacing: -.01em; }
+.action-highlights .daily-highlight-title h4 a { text-decoration: none; }
+.action-highlights .daily-highlight-title h4 a:hover { text-decoration: underline; text-underline-offset: 3px; }
+.action-highlights .daily-highlight-reason { margin: 0 0 14px; padding: 10px 12px; border-left: 2px solid var(--accent); background: #669bbc10; font-size: 12px; line-height: 1.7; }
+.action-highlights .daily-highlight-purpose-label { margin-bottom: 3px; color: var(--text-light); font-size: 10px; }
+.action-highlights .daily-highlight-facts { margin: 0 0 14px; }
+.action-highlights .daily-highlight-facts > div { align-items: start; gap: 8px; margin: 6px 0; }
+.action-highlights .daily-highlight-facts dt { min-width: 36px; font-size: 11px; line-height: 1.8; }
+.action-highlights .daily-highlight-facts dd { font-size: 12px; line-height: 1.7; }
+.action-highlight-evidence { padding-top: 8px; border-top: 1px solid var(--border-light); color: var(--text-muted); font-size: 11px; line-height: 1.75; }
+.action-highlight-evidence > summary { display: list-item; cursor: pointer; min-height: 32px; padding: 3px 0; color: var(--text-light); font-size: 11px; }
+.action-highlight-evidence > p { margin-top: 8px; }
+.action-highlight-original-title { color: var(--text-main); font-weight: 600; }
+.action-highlight-audience-note { color: var(--text-light); }
+.action-highlights .daily-highlight-origin { margin-top: 8px; padding-top: 0; }
+.action-highlights .daily-highlight-actions { margin-top: auto; padding-top: 12px; gap: 6px; }
+.action-highlights .daily-highlight-actions button { min-height: 40px; padding: 8px 10px; border-radius: 6px; font-size: 12px; }
+.action-highlights .daily-highlight-actions .action-highlight-try { display: inline-flex; justify-content: space-between; gap: 14px; }
+.action-highlights .daily-highlight-in-topic { margin-top: 7px; }
+.action-source-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 0 0 12px; padding-top: 5px; }
+.action-source-heading h3 { font-size: 14px; font-weight: 600; }
+.action-source-heading p { color: var(--text-light); font-size: 11px; }
+.action-source-browser { margin-top: 24px; padding-top: 14px; border-top: 1px solid var(--border-light); }
+.action-source-browser > summary { cursor: pointer; min-height: 44px; padding: 10px 0; font-size: 14px; font-weight: 600; }
+.action-source-browser > summary > span { color: var(--text-light); font-size: 11px; font-weight: 400; }
+.action-source-browser-note { margin: 0 0 16px; color: var(--text-muted); font-size: 12px; }
+@media (max-width: 1050px) {
+  .action-highlights .daily-highlights-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .action-highlights .daily-highlights-header h3 { font-size: 21px; }
+}
+@media (max-width: 640px) {
+  .action-highlights { margin: 16px 0 24px; }
+  .action-highlights .daily-highlights-header { align-items: stretch; flex-direction: column; gap: 8px; }
+  .action-highlights-note { max-width: none; }
+  .action-highlights .daily-highlights-list { grid-template-columns: minmax(0, 1fr); }
+  .action-highlights .daily-highlight { padding: 16px; }
+  .action-highlights .daily-highlight-actions button { min-height: 44px; }
+  .action-source-heading { align-items: start; flex-direction: column; gap: 3px; }
+}

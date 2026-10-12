@@ -1,0 +1,25 @@
+{
+  "name": "personal-feed-frontend",
+  "version": "0.43.0",
+  "description": "我的信息流 · 本机多来源阅读与收藏",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node serve.js",
+    "dev": "node serve.js",
+    "test": "node test-adapter.js && node --test test-feed-service.js test-multi-feed.js test-public-sources.js test-hackernews-source.js test-sopilot-source.js test-sopilot-author.js test-creator-catalog.js test-creator-identity.js test-creator-candidates.js test-creator-candidates-view.js test-creator-tutorials.js test-creator-guides.js test-creator-views.js test-creator-integration.js test-creator-blog-source.js test-creator-blog-view.js test-source-retry.js test-sopilot-expansion.js test-topics.js test-material-start.js test-material-start-adapter.js test-topic-sync.js test-topic-sync-adapter.js test-material-review.js test-source-board.js test-post-quality.js test-post-stream.js test-post-stream-view.js test-post-media-pipeline.js test-post-media-view.js test-source-health.js test-post-board-integration.js test-source-preferences.js test-daily-highlights.js test-daily-highlights-view.js test-feed-search.js test-feed-search-view.js test-feed-search-background.js test-practical-materials.js test-practical-adapter.js test-feed-loading.js test-feed-loading-view.js test-repository-guides.js test-live-adapter.js test-selection.js test-serve.js test-research.js test-research-adapter.js test-trial-plan.js test-backup.js test-writing-brief.js test-collection.js test-excerpts.js test-manual-material.js test-launch.js test-welcome.js test-dot-candidates.js test-dot-candidates-adapter.js test-dot-candidates-view.js test-dot-candidate-filters.js test-workspace-shell.js test-editorial-home.js test-dot-reader-workbench.js test-dot-integration.js test-dot-inbox-service.js test-dot-inbox-client.js test-public-build.js test-cloud-feed.js && node check-static.js",
+    "open": "node launch.mjs",
+    "test:adapter": "node test-adapter.js",
+    "test:posts": "node --test test-sopilot-source.js test-sopilot-expansion.js test-cloud-feed.js test-public-sources.js test-source-board.js",
+    "test:serve": "node test-serve.js",
+    "check:static": "node check-static.js",
+    "build:public": "node public-build.mjs"
+  },
+  "keywords": [
+    "feed",
+    "mockup",
+    "reader"
+  ],
+  "author": "Antigravity",
+  "license": "UNLICENSED"
+}

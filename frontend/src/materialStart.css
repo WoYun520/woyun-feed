@@ -1,0 +1,16 @@
+.material-start-intro { color: var(--text-secondary); line-height: 1.75; margin: 0 0 16px; }
+.material-start-optional, .material-start-readiness { margin: 14px 0; border-top: 1px solid var(--border-light); padding-top: 12px; }
+.material-start-optional > summary, .material-start-readiness > summary { cursor: pointer; color: var(--text-secondary); font-size: 13px; line-height: 1.6; }
+.material-start-optional[open] > summary, .material-start-readiness[open] > summary { margin-bottom: 14px; }
+.material-start-readiness dl { font-size: 13px; line-height: 1.75; }
+.material-start-readiness dt { font-weight: 600; margin-top: 12px; }
+.material-start-readiness dd { margin: 3px 0 10px; overflow-wrap: anywhere; }
+.material-start-checklist { border: 1px solid #689cbb66; background: #689cbb0e; border-radius: 10px; padding: 18px; margin-bottom: 24px; }
+.material-start-kicker { margin: 0 0 12px; color: var(--text-main); font-size: 15px; font-weight: 650; }
+.material-start-checklist ol { margin: 0 0 14px; padding-left: 22px; }
+.material-start-checklist li { font-size: 13px; line-height: 1.75; padding: 0 0 10px 5px; }
+.material-start-checklist .btn-secondary-quiet { margin-top: 10px; }
+@media (max-width: 600px) {
+  .material-start-checklist { padding: 16px; }
+  #material-start-save { min-height: 44px; }
+}
