@@ -1,0 +1,30 @@
+{
+  // Preview Worker for account hhzovo66. Do not deploy this file onto the existing "woyun" script.
+  // Dot inbox hashes are Worker secrets, not config: DOT_DELIVERY_TOKEN_HASH, DOT_REVIEW_TOKEN_HASH.
+  "name": "woyun-feed-preview",
+  "main": "worker.js",
+  "account_id": "2406ce3e27726cda95852f23951dfc93",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": false,
+  "observability": {
+    "enabled": true,
+    "traces": {
+      "enabled": true
+    }
+  },
+  "assets": {
+    "directory": "./public-dist",
+    "binding": "ASSETS",
+    "run_worker_first": ["/data/public-feed.json", "/api/dot/*"],
+    "not_found_handling": "404-page",
+    "html_handling": "auto-trailing-slash"
+  },
+  "kv_namespaces": [
+    {"binding": "PUBLIC_FEED", "id": "a17c761fdabd46ef88b78965c73375a7"},
+    {"binding": "DOT_INBOX", "id": "fd0d1eeaf2ed401cb04bb4089b55847c"}
+  ],
+  // 01:00 and 13:00 UTC = 09:00 and 21:00 Asia/Shanghai.
+  "triggers": {"crons": ["0 1,13 * * *"]}
+}

@@ -19,12 +19,23 @@ export const PUBLIC_FILES = ['assets/woyun-guides.png', ...PUBLIC_TRIAL_FILES, .
 function auditText(content) { if (PRIVATE_CONTENT.test(content)) throw Error('发布文件出现私人路径或疑似凭据，未生成发布目录；请在本机检查。'); }
 const page = (title,body) => `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title} · 我的信息流</title><link rel="stylesheet" href="/src/styles.css"></head><body><main class="page-container" style="max-width:740px;padding-top:48px"><h1>${title}</h1>${body}<p><a href="/">← 回到信息流</a></p></main></body></html>`;
 
+async function readLiveFeed(projectRoot) {
+  try {
+    return {feed:JSON.parse(await fs.readFile(path.join(projectRoot,'data','live-feed.json'),'utf8')),seeded:false};
+  } catch (error) {
+    if (error.code!=='ENOENT') throw error;
+    // Sanitized checkouts omit the local crawl. Republish the last public snapshot.
+    return {feed:JSON.parse(await fs.readFile(path.join(projectRoot,'public-dist','data','public-feed.json'),'utf8')),seeded:true};
+  }
+}
+
 export async function buildPublic({ projectRoot = root, publishedAt } = {}) {
   const readJson = async file => JSON.parse(await fs.readFile(path.join(projectRoot,'data',file),'utf8'));
-  const [feed,cache,catalog] = await Promise.all([readJson('live-feed.json'),readJson('repository-guides.json').catch(()=>({})),readJson('observation-catalog.json').catch(()=>({}))]);
+  const [{feed,seeded},cache,catalog] = await Promise.all([readLiveFeed(projectRoot),readJson('repository-guides.json').catch(()=>({})),readJson('observation-catalog.json').catch(()=>({}))]);
+  if (publishedAt===undefined && seeded && feed.publication?.published_at) publishedAt=feed.publication.published_at;
   // New configured channels are visible even before their first successful read.
   for(const definition of FEED_CHANNELS) if(!feed.sources.some(source=>source.id===definition.id)) feed.sources.push({...definition,status:'not_connected',last_success_at:null});
-  const publicFeed = makePublicFeed(feed,{cache,catalog,publishedAt});
+  const publicFeed = makePublicFeed(feed,{cache,catalog,publishedAt,automaticUpdate:seeded && feed.publication?.automatic_update===true});
   // Publishing a browseable item is not enough: every item must support collection/theme/backup too.
   for (const item of publicFeed.items) makeBackup({saved_item_ids:[item.id],hidden_item_ids:[],followups:[],profile_override:null,item_snapshots:{[item.id]:item}},publicFeed,'live');
   const generated = {
