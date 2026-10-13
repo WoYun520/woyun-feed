@@ -13,8 +13,13 @@ const paths={
 };
 export const workspaceIcon=name=>`<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.cloud}</svg>`;
 
-function renderPublicKosxStrip() {
-  return `<div class="kosx-strip" aria-label="KOSX 助力计划"><p class="kosx-name">KOSX 助力计划</p><p class="kosx-hint">上传你的精华帖链接</p><button type="button" class="kosx-cta" id="kosx-open" aria-expanded="false" aria-controls="kosx-panel">贴链接</button></div><form class="kosx-panel" id="kosx-panel" hidden><label for="kosx-link">粘贴 X 精华帖链接</label><input id="kosx-link" name="url" type="url" inputmode="url" autocomplete="off" spellcheck="false" maxlength="2000" placeholder="粘贴 X 精华帖链接" required><button type="submit" class="kosx-submit">提交</button><p class="kosx-status" id="kosx-status" role="status"></p></form>`;
+function renderPublicKosxStrip(options={}) {
+  const open=options.kosxOpen===true;
+  const draft=typeof options.kosxDraft==='string' ? options.kosxDraft : '';
+  const message=typeof options.kosxMessage==='string' ? options.kosxMessage : '';
+  const error=typeof options.kosxError==='string' ? options.kosxError : '';
+  const status=message || error;
+  return `<div class="kosx-strip" aria-label="KOSX 助力计划"><p class="kosx-name">KOSX 助力计划</p><p class="kosx-hint">上传你的精华帖链接</p><button type="button" class="kosx-cta" id="kosx-open" aria-expanded="${open?'true':'false'}" aria-controls="kosx-panel">贴链接</button></div><form class="kosx-panel" id="kosx-panel"${open?'':' hidden'}><label for="kosx-link">粘贴 X 精华帖链接</label><input id="kosx-link" name="url" type="url" inputmode="url" autocomplete="off" spellcheck="false" maxlength="2000" placeholder="粘贴 X 精华帖链接" value="${e(draft)}" required><button type="submit" class="kosx-submit">提交</button><p class="kosx-status" id="kosx-status" role="${error?'alert':'status'}" tabindex="-1">${e(status)}</p></form>`;
 }
 
 export function renderWorkspaceNavigation(tab,state,options={}) {
@@ -23,9 +28,8 @@ export function renderWorkspaceNavigation(tab,state,options={}) {
   const publication=tab==='today';
   if (publication) {
     const homeView=['latest','yesterday','week','kept'].includes(options.homeView) ? options.homeView : 'latest';
-    const menuOpen=options.menuOpen===true;
     const cat=(id,label)=>`<button type="button" class="lift-cat" data-home-view="${id}"${homeView===id?' aria-current="page"':''}>${label}</button>`;
-    return `<a class="workspace-skip" href="#workspace-main">跳到内容</a><header class="site-header lift-header workspace-publication-nav" role="banner"><div class="site-header-inner"><div class="lift-bar"><button type="button" class="lift-pill shape-pill" id="home-brand" data-shape="pill" data-home-view="latest"${homeView==='latest'?' aria-current="page"':''}>卧云信息流</button><nav class="lift-cats" aria-label="精华帖分类">${cat('yesterday','昨日全部精华帖')}${cat('week','七日精选精华帖')}${cat('kept','卧云精选贴（常驻保存）')}</nav><button type="button" class="lift-menu-button" id="home-menu-button" aria-expanded="${menuOpen?'true':'false'}" aria-controls="home-menu"><span class="lift-menu-icon" aria-hidden="true"><span></span><span></span><span></span></span><span class="sr-only">${menuOpen?'关闭菜单':'菜单'}</span></button></div>${renderPublicKosxStrip()}<div class="lift-menu" id="home-menu"${menuOpen?'':' hidden'}><nav class="main-nav" aria-label="主要导航"><div class="workspace-nav-group"><p class="workspace-nav-label">发现</p>${nav('today','今日')}</div><div class="workspace-nav-group"><p class="workspace-nav-label">整理</p>${nav('candidates','待筛选',state.dotPendingCandidates?.length || 0)}</div></nav><p class="workspace-brand-note">留下有用的，做出自己的。</p></div></div></header>`;
+    return `<a class="workspace-skip" href="#workspace-main">跳到内容</a><header class="site-header lift-header workspace-publication-nav" role="banner"><div class="site-header-inner"><div class="lift-bar"><button type="button" class="lift-pill shape-pill" id="home-brand" data-shape="pill" data-home-view="latest"${homeView==='latest'?' aria-current="page"':''}>卧云信息流</button><nav class="lift-cats" aria-label="精华帖分类">${cat('yesterday','昨日全部精华帖')}${cat('week','七日精选精华帖')}${cat('kept','卧云精选贴（常驻保存）')}</nav></div>${renderPublicKosxStrip(options)}</div></header>`;
   }
   return `<a class="workspace-skip" href="#workspace-main">跳到内容</a><header class="site-header workspace-sidebar${publication?' workspace-publication-nav':''}" role="banner"><div class="site-header-inner">
     ${publication?`<div class="publication-topline"><span>卧云 · 给创作者的信息刊物</span><span>${mode}</span></div>`:''}
@@ -47,7 +51,8 @@ export function renderWorkspaceResume(state,formatTime) {
   return `<section class="workspace-resume" aria-label="接着上次做"><div><p>接着上次做 <span>${e(TOPIC_STATUS[topic.status] || '收集材料')}</span></p><h3>${e(topic.title)}</h3><p class="workspace-resume-next">${e(topic.next_step?`下一步：${topic.next_step}`:topic.goal || '打开主题，补上自己的想法和下一步。')}</p><small>主题更新于 ${e(formatTime(topic.updated_at))}</small></div><button class="btn-primary-action" data-topic-open="${e(topic.id)}">继续整理</button></section>`;
 }
 
-export function renderWorkspaceStorageNotice(state) {
+export function renderWorkspaceStorageNotice(state, options={}) {
   if(!state.publicPreview)return '';
+  if(options.audience==='visitor') return `<p class="home-local-note">收藏和手动精选只留在这个浏览器，不会自动出现在公开首页。换设备前请自行备份。</p>`;
   return `<details class="workspace-storage-note"><summary>本浏览器保存 · 重要材料请备份</summary><aside class="public-preview-note" aria-label="公开预览说明"><span>收藏、主题和筛选结果只存在当前浏览器。Dot、feedgrab 可投递到私人云端接收箱；精选仍由你选，不会自动公开。清理浏览器或换设备前，请到主题工作台备份。</span><a href="/about.html" target="_blank" rel="noopener">关于这个预览</a></aside></details>`;
 }

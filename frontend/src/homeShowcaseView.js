@@ -122,7 +122,7 @@ function renderKept(app, state, selection) {
   const e = value => app.escapeHtml(value);
   const featured = selection.kept.featured, saved = selection.kept.saved;
   const note = '卧云精选贴读取这个浏览器里已经保存的手动精选和收藏，不另建本地库。手动选入或收藏不等于已实测。换浏览器或清空站点数据后这里会空。';
-  return `<section class="home-band" id="home-kept" aria-labelledby="home-kept-title"><header class="home-band-heading"><h2 id="home-kept-title">卧云精选贴（常驻保存） <small>${featured.length + saved.length}</small></h2><p class="home-rule">${e(note)}</p></header><h3 class="home-subhead">我选入的精选 <small>${featured.length}</small></h3>${featured.length ? renderItemCards(app, state, featured, 'kept-featured') : '<p class="home-empty">这个浏览器还没有选入精选。可在待筛选里手动选入，结果仍写进原来的精选记录。</p><p><button type="button" class="btn-secondary-quiet" data-dot-open-featured>打开待筛选里的精选</button></p>'}<h3 class="home-subhead">已收藏 <small>${saved.length}</small></h3>${saved.length ? renderItemCards(app, state, saved, 'kept-saved') : '<p class="home-empty">还没有收藏。点卡片上的收藏，会写入现有的收藏记录。</p>'}${selection.kept.archivedCount ? `<p class="home-rule">另有归档材料留在收藏页，不重复列在这里。</p>` : ''}</section>`;
+  return `<section class="home-band" id="home-kept" aria-labelledby="home-kept-title"><header class="home-band-heading"><h2 id="home-kept-title">卧云精选贴（常驻保存） <small>${featured.length + saved.length}</small></h2><p class="home-rule">${e(note)}</p></header><h3 class="home-subhead">我选入的精选 <small>${featured.length}</small></h3>${featured.length ? renderItemCards(app, state, featured, 'kept-featured') : '<p class="home-empty">这个浏览器还没有选入精选。选入仍由人工决定，不会自动出现在首页。</p>'}<h3 class="home-subhead">已收藏 <small>${saved.length}</small></h3>${saved.length ? renderItemCards(app, state, saved, 'kept-saved') : '<p class="home-empty">还没有收藏。点卡片上的收藏，会写在这个浏览器里。</p>'}${selection.kept.archivedCount ? `<p class="home-rule">另有归档材料留在这个浏览器，不重复列在这里。</p>` : ''}</section>`;
 }
 
 function renderCards(app, state, entries, group) {
@@ -146,7 +146,7 @@ function renderPostCard(app, state, entry, group) {
       <h3><a href="${e(app.safeUrl(post.originalUrl))}" target="_blank" rel="noopener noreferrer">${e(title)}</a></h3>
       <p class="cover-excerpt">${e(shorten(excerpt, 96) || '来源未提供摘录，请打开原帖。')}</p>
       <details class="cover-evidence"><summary>摘录与时间依据</summary><p>${e(excerpt || '来源未提供摘录。')}</p>${heat ? `<p>来源标注：${e(heat)}。未核对。</p>` : '<p>来源没有给出可展示的热度文字。</p>'}<p>${e(entry.time.label)}。未核对原帖，未实测。</p>${post.instruction?.eligible ? `<p>${e(post.instruction.label)}。这是摘录里的线索，不是实测。</p>` : ''}</details>
-      <div class="cover-actions"><a class="shape-pill-solid" href="${e(app.safeUrl(post.originalUrl))}" target="_blank" rel="noopener noreferrer">打开原帖</a>${saveButton(e, collection, `home-save-${group}-${item.id}`, title)}<button type="button" class="btn-quiet shape-pill-line" data-action="topic-save" data-item-id="${e(collection.itemId)}">放进主题</button></div>
+      <div class="cover-actions"><a class="shape-pill-solid" href="${e(app.safeUrl(post.originalUrl))}" target="_blank" rel="noopener noreferrer">打开原帖</a>${saveButton(e, collection, `home-save-${group}-${item.id}`, title)}</div>
     </div></article>`;
 }
 
@@ -170,7 +170,7 @@ function renderKeptCard(app, state, item, group) {
     <div class="cover-body"><p class="cover-meta"><span>${e(names.filter(Boolean).join('、') || '来源未提供')}</span><span>${e(label)}${time ? ` <time datetime="${e(time)}">${e(app.formatTime ? app.formatTime(time) : time)}</time>` : ''}</span></p>
       <h3><a href="${e(app.safeUrl(item.original_url))}" target="_blank" rel="noopener noreferrer">${e(title)}</a></h3>
       <p class="cover-excerpt">${e(shorten(excerpt, 96) || '没有摘录。')}</p>
-      <div class="cover-actions"><a class="shape-pill-solid" href="${e(app.safeUrl(item.original_url))}" target="_blank" rel="noopener noreferrer">打开原帖</a>${saveButton(e, collection, `home-save-${group}-${item.id}`, title)}<button type="button" class="btn-quiet shape-pill-line" data-action="topic-save" data-item-id="${id}">放进主题</button></div>
+      <div class="cover-actions"><a class="shape-pill-solid" href="${e(app.safeUrl(item.original_url))}" target="_blank" rel="noopener noreferrer">打开原帖</a>${saveButton(e, collection, `home-save-${group}-${item.id}`, title)}</div>
     </div></article>`;
 }
 

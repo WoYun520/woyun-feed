@@ -111,6 +111,7 @@ test('default homepage renders cover cards, signature, navigation labels and no 
   assert.match(html, /无来源附图/);
   assert.match(html, /打开原帖/);
   assert.match(html, /data-action="toggle-save"/);
+  assert.doesNotMatch(html, /放进主题|data-action="topic-save"|实用教程|收藏与跟进|主题工作台|我的关注|怎么用|待筛选|KOSX 助力计划/);
   assert.match(html, /&lt;script&gt;/);
   assert.doesNotMatch(html, /<script|background:\s*#(?:ff|f[0-9a-f]{2}[0-5])/i);
   assert.equal(html.match(/data-home-group="latest"/g).length, 18);
@@ -149,22 +150,20 @@ test('category views and the masthead keep the three names visible without a sec
   assert.match(kept, /卧云精选贴（常驻保存）/);
   assert.match(kept, /精选原帖/);
   assert.match(kept, /不另建本地库/);
+  assert.doesNotMatch(kept, /data-dot-open-featured|待筛选|收藏页|放进主题/);
   const mast = renderWorkspaceNavigation('today', input, {homeView:'week', menuOpen:false});
   assert.match(mast, /卧云信息流/);
   assert.match(mast, /昨日全部精华帖/);
   assert.match(mast, /七日精选精华帖/);
   assert.match(mast, /卧云精选贴（常驻保存）/);
   assert.match(mast, /data-home-view="week" aria-current="page"/);
-  assert.match(mast, /id="home-menu"/);
   assert.match(mast, /KOSX 助力计划/);
   assert.match(mast, /上传你的精华帖链接/);
   assert.match(mast, />贴链接</);
   assert.match(mast, /placeholder="粘贴 X 精华帖链接"/);
   assert.match(mast, /class="kosx-cta"/);
   assert.match(mast, /id="kosx-panel" hidden/);
-  for (const key of ['today','candidates']) assert.equal((mast.match(new RegExp(`id="nav-${key}"`, 'g')) || []).length, 1);
-  for (const key of ['tutorials','saved','topics','profile']) assert.equal((mast.match(new RegExp(`id="nav-${key}"`, 'g')) || []).length, 0);
-  for (const label of ['实用教程','收藏与跟进','主题工作台','我的关注','怎么用']) assert.equal(mast.includes(label), false);
+  assert.doesNotMatch(mast, /id="home-menu"|id="home-menu-button"|实用教程|收藏与跟进|主题工作台|我的关注|怎么用|待筛选|id="nav-/);
 });
 
 test('opening an X cover counts once per visitor and post in local storage only', () => {

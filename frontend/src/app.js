@@ -63,6 +63,10 @@ class PersonalFeedApp {
     this.feedView = 'sources';
     this.homeView = 'latest';
     this.homeMenuOpen = false;
+    this.kosxOpen = false;
+    this.kosxDraft = '';
+    this.kosxMessage = '';
+    this.kosxError = '';
     this.homeSourcesOpen = false;
     this.boardGroup = 'all';
     this.sourceLimits = {};
@@ -441,6 +445,10 @@ class PersonalFeedApp {
     });
   }
 
+  isPublicHome(state = feedAdapter.getState()) {
+    return this.currentTab === 'today' && state?.mode === 'live' && this.feedView === 'sources';
+  }
+
   switchTab(tab) {
     this.homeMenuOpen = false;
     this.currentTab = tab;
@@ -634,15 +642,17 @@ class PersonalFeedApp {
     }
     this.pendingRender = false;
     this.renderedGeneratedAt = state.generated_at;
+    const publicHome = this.isPublicHome(state);
 
     appEl.innerHTML = `
       <div class="workspace-shell" data-workspace-tab="${this.currentTab}">
-      ${renderWorkspaceNavigation(this.currentTab,state,{homeView:this.homeView,menuOpen:this.homeMenuOpen})}
-      <main id="workspace-main" tabindex="-1" class="page-container ${this.currentTab === 'today' && state.mode === 'live' && this.feedView === 'sources' ? 'source-board-page' : ''}" role="main">
-        ${renderWorkspaceStorageNotice(state)}
+      ${renderWorkspaceNavigation(this.currentTab,state,{homeView:this.homeView,menuOpen:this.homeMenuOpen,kosxOpen:this.kosxOpen,kosxDraft:this.kosxDraft,kosxMessage:this.kosxMessage,kosxError:this.kosxError})}
+      <main id="workspace-main" tabindex="-1" class="page-container ${publicHome ? 'source-board-page' : ''}" role="main">
+        ${publicHome ? '' : renderWorkspaceStorageNotice(state)}
         <div id="feed-load-status" role="status" aria-live="polite">${state.loadStatus?.phase === 'ready' ? '' : renderFeedLoadStatus(this, state)}</div>
-        ${this.currentTab === 'today' && this.welcomeVisible ? renderWelcome() : ''}
+        ${!publicHome && this.currentTab === 'today' && this.welcomeVisible ? renderWelcome() : ''}
         ${this.renderMainContent(state)}
+        ${publicHome ? renderWorkspaceStorageNotice(state, {audience:'visitor'}) : ''}
       </main></div>
       <div id="modal-root"></div>
       <div id="toast-container" class="toast-container" aria-live="polite"></div>
@@ -736,7 +746,7 @@ class PersonalFeedApp {
 
   // 1. 今日首页视图
   renderTodayFeedView(state) {
-    if (state.mode === 'live' && this.feedView === 'sources') return `${renderHomeShowcase(this,state)}${this.homeSourcesOpen ? `<div class="home-legacy-board">${renderSourceBoard(this,state)}</div>` : '<p class="home-legacy-entry"><button type="button" class="btn-secondary-quiet" id="home-open-sources">按来源继续浏览、搜索与更新</button></p>'}`;
+    if (state.mode === 'live' && this.feedView === 'sources') return renderHomeShowcase(this, state);
     state = this.readingState(state);
     const isProfileEmpty = state.mode === 'demo' && !state.profile.interests && !state.profile.exclude;
     const totalVisible = state.dailyItems.length + state.discoverItems.length;
@@ -1368,7 +1378,11 @@ class PersonalFeedApp {
       feedAdapter.setSaved(itemId,!saved);
       window.scrollTo({top:y,left:x,behavior:'instant'});
       if(button.id) (document.getElementById(button.id) || document.querySelector('.page-headline'))?.focus({preventScroll:true});
-      if(!saved) this.showToast('已收藏，继续浏览就好。','查看收藏',()=>{this.savedSubTab='items';this.switchTab('saved');},7000);
+      if(!saved) {
+        if (this.isPublicHome()) this.showToast('已收藏，只留在这个浏览器。');
+        else this.showToast('已收藏，继续浏览就好。','查看收藏',()=>{this.savedSubTab='items';this.switchTab('saved');},7000);
+      }
+      else if (this.isPublicHome()) this.showToast('已取消收藏。');
       else this.showToast('已取消收藏，主题里的材料保留。','撤销',()=>{
         try {feedAdapter.restoreSaved(itemId,{archived});this.showToast(archived ? '已恢复到归档。' : '已恢复收藏。');}
         catch(error){this.showToast(error.message);}
@@ -1428,37 +1442,30 @@ class PersonalFeedApp {
       event.preventDefault();this.homeMenuOpen=false;this.render();document.getElementById('home-menu-button')?.focus();
     });
     document.getElementById('kosx-open')?.addEventListener('click',()=>{
-      const panel=document.getElementById('kosx-panel');
-      const button=document.getElementById('kosx-open');
-      if(!panel || !button) return;
-      const open=panel.hasAttribute('hidden');
-      panel.toggleAttribute('hidden', !open);
-      button.setAttribute('aria-expanded', open ? 'true' : 'false');
-      if(open) document.getElementById('kosx-link')?.focus();
+      const top=window.scrollY;
+      this.kosxOpen=!this.kosxOpen;
+      if(!this.kosxOpen){this.kosxMessage='';this.kosxError='';}
+      this.render();
+      window.scrollTo({top,behavior:'instant'});
+      document.getElementById(this.kosxOpen ? 'kosx-link' : 'kosx-open')?.focus();
     });
     document.getElementById('kosx-panel')?.addEventListener('submit',event=>{
       event.preventDefault();
-      const input=document.getElementById('kosx-link');
-      const status=document.getElementById('kosx-status');
+      const draft=document.getElementById('kosx-link')?.value || '';
+      const top=window.scrollY;
       try {
-        const result=feedAdapter.submitKosxLink(input?.value || '');
-        if(input && (result.added || result.restored)) input.value='';
-        const message=result.added ? '已放入待筛选。这次提交不会自动出现在首页。'
+        const result=feedAdapter.submitKosxLink(draft);
+        this.kosxOpen=true;this.kosxDraft='';this.kosxError='';
+        this.kosxMessage=result.added ? '已放入待筛选。这次提交不会自动出现在首页。'
           : result.restored ? '已放回待筛选。这次提交不会自动出现在首页。'
           : '这条链接已经收过，没有重复加入。这次提交不会自动出现在首页。';
-        if(status) status.textContent=message;
-        const count=feedAdapter.getState()?.dotPendingCandidates?.length || 0;
-        const tab=document.getElementById('nav-candidates');
-        if(tab) {
-          let badge=tab.querySelector('.nav-badge');
-          if(count>0) {
-            if(!badge) { badge=document.createElement('span'); badge.className='nav-badge'; tab.appendChild(badge); }
-            badge.textContent=String(count);
-          } else badge?.remove();
-        }
       } catch(error) {
-        if(status) status.textContent=error.message || '没有放入待筛选。';
+        this.kosxOpen=true;this.kosxDraft=draft;this.kosxMessage='';
+        this.kosxError=error.message || '没有放入待筛选。';
       }
+      this.render();
+      window.scrollTo({top,behavior:'instant'});
+      document.getElementById('kosx-status')?.focus();
     });
     document.querySelectorAll('.cover-card a[href]').forEach(link=>link.addEventListener('click',()=>{
       const result=recordKosxBoost(localStorage, link.getAttribute('href') || '');
