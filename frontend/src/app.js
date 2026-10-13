@@ -11,7 +11,7 @@ import { BACKUP_LIMIT } from './backup.js';
 import { WRITING_FORMATS } from './writingBrief.js';
 import { SOURCE_GROUPS, matchesSource } from './sourceGroups.js';
 import { renderTopicWorkspace, bindTopicActions, renderTopicDialog, openTopicDialog } from './topicViews.js';
-import { renderSourceBoard, bindSourceBoardActions, feedUpdateInfo, boardUpdateMessage } from './sourceBoard.js';
+import { bindSourceBoardActions, feedUpdateInfo, boardUpdateMessage } from './sourceBoard.js';
 import { renderHomeShowcase } from './homeShowcaseView.js';
 import { boostVisitorId, readBoostTotal, recordKosxBoost, writeBoostTotal } from './homeShowcase.js';
 import { repositoryName } from './repositoryGuide.js';
@@ -69,7 +69,6 @@ class PersonalFeedApp {
     this.kosxMessage = '';
     this.kosxError = '';
     this.homeBoostCount = readBoostTotal(this.boostStore());
-    this.homeSourcesOpen = false;
     this.boardGroup = 'all';
     this.sourceLimits = {};
     this.sourceFilter = 'all';
@@ -1516,9 +1515,6 @@ class PersonalFeedApp {
     document.querySelectorAll('.cover-card a[href]').forEach(link=>link.addEventListener('click',()=>{
       this.noteHomeBoost(link.getAttribute('href') || '');
     }));
-    document.getElementById('home-open-sources')?.addEventListener('click',()=>{
-      this.homeSourcesOpen=true;this.render();document.querySelector('.home-legacy-board .page-headline')?.focus();
-    });
     bindTopicActions(this,state);
     bindCollectionActions(this);
     this.bindTopicChoices(document);

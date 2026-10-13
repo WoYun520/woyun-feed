@@ -5,10 +5,12 @@ import {renderWorkspaceNavigation,renderWorkspaceResume,recentWorkspaceTopic,ren
 test('navigation preserves existing actions with one explicit current page and real counters',()=>{
   const state={publicPreview:true,mode:'live',savedItems:[{}],followups:[{}],dotPendingCandidates:[{},{}]};
   const html=renderWorkspaceNavigation('candidates',state);
-  for(const key of ['today','tutorials','candidates','saved','topics','profile'])assert.equal((html.match(new RegExp(`id="nav-${key}"`,'g')) || []).length,1);
+  for(const key of ['today','candidates','saved','topics','profile'])assert.equal((html.match(new RegExp(`id="nav-${key}"`,'g')) || []).length,1);
+  assert.equal((html.match(/id="nav-tutorials"/g)||[]).length,0);
   assert.equal((html.match(/aria-current="page"/g)||[]).length,1);
   assert.match(html,/id="nav-candidates" aria-current="page"/);
-  assert.match(html,/发现/);assert.match(html,/整理/);assert.match(html,/id="open-guide"/);
+  assert.match(html,/发现/);assert.match(html,/整理/);
+  assert.equal(html.includes('实用教程'),false);assert.equal(html.includes('怎么用'),false);assert.equal(html.includes('id="open-guide"'),false);
   assert.match(html,/assets\/woyun-guides.png/);assert.ok(!html.includes('登录'));
 });
 

@@ -46,9 +46,17 @@ function collectionFor(state, post) {
   return {saved:!!savedId, archived:!!archivedId, itemId:archivedId || savedId || post.item.id};
 }
 
+function homepageSourceLabel(name) {
+  const text = typeof name === 'string' ? name.replace(/\s+/g, ' ').trim() : '';
+  if (!text || /^sopilot$/i.test(text)) return '';
+  return text.replace(/^SoPilot\s*[·•.\-]\s*/u, '').trim();
+}
+
 function sourceNames(entry, state) {
-  if (entry.post?.sourceNames?.length) return entry.post.sourceNames;
-  const names = (entry.item?.source_refs || []).map(id => state.sources?.find(source => source.id === id)?.name || id);
+  const raw = entry.post?.sourceNames?.length
+    ? entry.post.sourceNames
+    : (entry.item?.source_refs || []).map(id => state.sources?.find(source => source.id === id)?.name || id);
+  const names = raw.map(homepageSourceLabel).filter(Boolean);
   return names.length ? names : ['来源未提供'];
 }
 
@@ -171,7 +179,7 @@ function renderKeptCard(app, state, item, group) {
   const image = itemCover(item);
   const time = [item.published_at, item.source_item_time, item.captured_at].find(value => typeof value === 'string' && Number.isFinite(Date.parse(value)));
   const label = item.published_at === time ? '原帖发布时间' : item.source_item_time === time ? '榜单条目时间' : time ? '采集或阅读时间' : '时间未提供';
-  const names = (item.source_refs || []).map(id => state.sources?.find(source => source.id === id)?.name || (item.origin === 'dot_import' ? '手动精选' : id));
+  const names = (item.source_refs || []).map(id => homepageSourceLabel(state.sources?.find(source => source.id === id)?.name) || (item.origin === 'dot_import' ? '手动精选' : homepageSourceLabel(id)));
   const archived = state.archivedItemIds?.has?.(item.id);
   const saved = !archived && (group === 'kept-saved' || state.savedItemIds?.has?.(item.id));
   const collection = {saved, archived, itemId:item.id};

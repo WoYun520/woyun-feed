@@ -146,9 +146,6 @@ body:has(.workspace-shell[data-workspace-tab="today"]) { background: var(--home-
 .home-band-heading h2 small, .home-subhead small { margin-left: 8px; color: var(--home-muted, #62675d); font-family: var(--font-sans); font-size: 13px; font-weight: 500; letter-spacing: 0; }
 .home-subhead { margin: 22px 0 8px; font-size: 22px; }
 .home-rule, .home-empty { margin: 8px 0 0; color: var(--home-muted, #62675d); font-size: 13px; line-height: 1.7; }
-.home-legacy-entry { margin: 8px 0 28px; }
-.home-legacy-board { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--home-ink, #171917); }
-
 .cover-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px; margin-top: 18px; }
 .shape-card, .cover-card {
   display: flex; flex-direction: column; min-width: 0; overflow: hidden;

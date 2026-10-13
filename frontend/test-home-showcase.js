@@ -107,6 +107,8 @@ test('default homepage renders cover cards, signature, navigation labels and no 
   assert.match(html, /昨日最被低估精华帖/);
   assert.match(html, /按现有公开指标粗排，未实测/);
   assert.match(html, /class="cover-grid"/);
+  assert.match(html, /综合推文榜/);
+  assert.doesNotMatch(html, /SoPilot|本浏览器保存|第一次来|展开说明|实用教程|怎么用/);
   assert.match(html, /src="https:\/\/pbs\.twimg\.com\/media\/AbcdEFG\.jpg"/);
   assert.match(html, /无来源附图/);
   assert.match(html, /打开原帖/);
@@ -190,6 +192,15 @@ test('category views and the masthead keep the three names visible without a sec
   const openCats = renderWorkspaceNavigation('today', input, {homeView:'week', catsOpen:true});
   assert.match(openCats, /id="home-cats" class="lift-cats is-open"|class="lift-cats is-open" id="home-cats"/);
   assert.doesNotMatch(openCats, /实用教程|收藏与跟进|主题工作台|我的关注|怎么用|待筛选|id="nav-/);
+  const removed = ['本浏览器保存 · 重要材料请备份', '第一次来？挑材料 → 补想法 → 带给 AI', '展开说明', 'SoPilot · 财经推文榜'];
+  for (const label of removed) assert.equal(`${mast}\n${openCats}`.includes(label), false);
+  const appSource = readFileSync(new URL('./src/app.js', import.meta.url), 'utf8');
+  const start = appSource.indexOf('renderTodayFeedView(state) {');
+  const home = appSource.slice(start, start + 280);
+  assert.match(home, /return renderHomeShowcase\(this, state\)/);
+  assert.doesNotMatch(home, /renderSourceBoard|home-open-sources|renderWelcome|SoPilot/);
+  assert.match(appSource, /publicHome \? '' : renderWorkspaceStorageNotice/);
+  assert.match(appSource, /!publicHome && this\.currentTab === 'today' && this\.welcomeVisible \? renderWelcome\(\)/);
 });
 
 test('opening an X cover counts once per visitor and post in local storage only', () => {
