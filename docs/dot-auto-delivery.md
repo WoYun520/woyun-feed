@@ -37,6 +37,8 @@
 
 读取接口使用独立接收码，Dot 的投递密钥不具有读取权限。接口没有精选、删除、公开发布或账号管理操作。
 
+单条 X 精华帖不走这个收件箱。Overheard 用同一把投递密钥调用 `POST /api/dot/pending`，只把链接放进待筛选。调用方式见 [待筛选进料](pending-intake.md)。那个入口不会把帖子放上公开首页。
+
 ## 维护者配置
 
 `DOT_INBOX` 是与 `PUBLIC_FEED` 分开的私有存储。Worker 仅保存两把不同随机密钥的 SHA-256 值：`DOT_DELIVERY_TOKEN_HASH`、`DOT_REVIEW_TOKEN_HASH`；缺配置时拒绝访问，不退回公开文件。配置路径 `/api/dot/*` 优先经过 Worker，不能被静态资源接管。

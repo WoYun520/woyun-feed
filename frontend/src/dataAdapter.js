@@ -488,20 +488,39 @@ export class FeedDataAdapter {
     });
   }
 
-  submitKosxLink(raw) {
+  async submitKosxLink(raw) {
     const parsed=kosxLink(raw);
     if (!parsed) throw Error('请粘贴有效的 X 链接');
+    let response;
+    try {
+      response=await fetch('/api/dot/pending', {
+        method:'POST',
+        headers:{'Content-Type':'application/json','Accept':'application/json'},
+        body:JSON.stringify({url:parsed.url}),
+      });
+    } catch {
+      throw Error('没有放入待筛选。');
+    }
+    let body={};
+    try { body=await response.json(); } catch { body={}; }
+    if (!response.ok || !body || body.status!=='pending') throw Error(typeof body?.message==='string' && body.message ? body.message : '没有放入待筛选。');
+    const restored=(this.localState.kosx_pending || []).some(row=>row.key===parsed.key && row.status==='dismissed');
+    try { this.rememberKosxPending(parsed, body); } catch { /* 服务端已收下；本机列表写失败时仍按待筛选成功返回。 */ }
+    return {added:body.existing!==true && !restored, restored, duplicate:body.existing===true && !restored, id:typeof body.id==='string' && body.id ? body.id : parsed.id};
+  }
+
+  rememberKosxPending(parsed, body) {
+    const submitted_at=typeof body?.submitted_at==='string' && body.submitted_at.length<=64 && Number.isFinite(Date.parse(body.submitted_at)) ? body.submitted_at : new Date().toISOString();
     return this.topicTransaction(state=>{
       state.kosx_pending ||= [];
       const existing=state.kosx_pending.find(row=>row.key===parsed.key);
       if (existing) {
-        if (existing.status==='dismissed') { existing.status='pending'; return {added:false, restored:true, duplicate:false, id:existing.id}; }
-        return {added:false, restored:false, duplicate:true, id:existing.id};
+        if (existing.status==='dismissed') existing.status='pending';
+        return {mirrored:true};
       }
-      if ((state.dot_candidates || []).some(row=>row.key===parsed.key)) return {added:false, restored:false, duplicate:true, id:parsed.id};
       if (state.kosx_pending.length>=300) throw Error('待筛选已满，请先处理已有链接。');
-      state.kosx_pending.push({...parsed, status:'pending', submitted_at:new Date().toISOString()});
-      return {added:true, restored:false, duplicate:false, id:parsed.id};
+      state.kosx_pending.push({...parsed, status:'pending', submitted_at});
+      return {mirrored:true};
     });
   }
 

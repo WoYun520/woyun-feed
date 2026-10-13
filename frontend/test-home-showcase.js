@@ -229,16 +229,34 @@ test('opening an X cover counts once per visitor and post in local storage only'
   assert.equal(bag.size, 1);
 });
 
-test('a pasted X link stays in pending review and is not added to the homepage', () => {
+test('a pasted X link stays in pending review and is not added to the homepage', async () => {
   const previous = globalThis.localStorage;
+  const previousFetch = globalThis.fetch;
   const bag = new Map();
+  const calls = [];
   globalThis.localStorage = {getItem:key => bag.get(key) ?? null, setItem:(key, value) => bag.set(key, value), removeItem:key => bag.delete(key), key:index => [...bag.keys()][index] ?? null, get length() { return bag.size; }};
+  const pendingBody = (existing) => JSON.stringify({
+    id:'kosx-2108148604447883999', key:'x:2108148604447883999',
+    url:'https://x.com/example/status/2108148604447883999', author_handle:'example',
+    status:'pending', submitted_at:'2026-10-13T00:00:00.000Z', existing,
+  });
+  globalThis.fetch = async (url, init) => {
+    calls.push({url, init});
+    const posted = JSON.parse(init.body);
+    const seen = calls.filter(call => JSON.parse(call.init.body).url === posted.url).length;
+    return new Response(pendingBody(seen > 1), {status: seen > 1 ? 200 : 201, headers:{'Content-Type':'application/json'}});
+  };
   try {
     const adapter = new FeedDataAdapter();
     adapter.feedData = {mode:'live', schema_version:'0.3', profile:{}, items:[], sources:[], sections:{daily:[], discover:[]}, generated_at:'2026-10-10T13:01:27.954Z'};
     const before = adapter.getState().allItems.length;
     const url = 'https://x.com/example/status/2108148604447883999';
-    const result = adapter.submitKosxLink(url);
+    const result = await adapter.submitKosxLink(url);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, '/api/dot/pending');
+    assert.equal(calls[0].init.method, 'POST');
+    assert.equal(calls[0].init.headers.Authorization, undefined);
+    assert.deepEqual(JSON.parse(calls[0].init.body), {url});
     const state = adapter.getState();
     assert.equal(result.added, true);
     assert.equal(state.dotPendingCandidates.length, 1);
@@ -246,9 +264,18 @@ test('a pasted X link stays in pending review and is not added to the homepage',
     assert.equal(state.dotFeaturedItems.length, 0);
     assert.equal(state.allItems.length, before);
     assert.equal(adapter.localState.dot_candidates.length, 0);
-    assert.equal(adapter.submitKosxLink(`https://twitter.com/example/status/2108148604447883999`).duplicate, true);
-    assert.throws(() => adapter.submitKosxLink(''), /请粘贴有效的 X 链接/);
-    assert.throws(() => adapter.submitKosxLink('https://example.com/not-a-post'), /请粘贴有效的 X 链接/);
+    assert.equal((await adapter.submitKosxLink(`https://twitter.com/example/status/2108148604447883999`)).duplicate, true);
+    assert.deepEqual(JSON.parse(calls[1].init.body), {url});
+    const attempted = calls.length;
+    await assert.rejects(() => adapter.submitKosxLink(''), /请粘贴有效的 X 链接/);
+    await assert.rejects(() => adapter.submitKosxLink('https://example.com/not-a-post'), /请粘贴有效的 X 链接/);
+    assert.equal(calls.length, attempted);
+    globalThis.fetch = async () => { throw new Error('offline'); };
+    await assert.rejects(() => adapter.submitKosxLink('https://x.com/other/status/2108148604447884000'), /没有放入待筛选/);
+    assert.equal(adapter.localState.kosx_pending.length, 1);
+    globalThis.fetch = async () => new Response(JSON.stringify({error:'queue_full', message:'待筛选已满，请先处理已有链接。'}), {status:409, headers:{'Content-Type':'application/json'}});
+    await assert.rejects(() => adapter.submitKosxLink('https://x.com/other/status/2108148604447884001'), /待筛选已满/);
+    assert.equal(adapter.localState.kosx_pending.some(row => String(row.url).includes('2108148604447884001')), false);
     assert.throws(() => adapter.setDotCandidateStatus([result.id], 'featured'), /不会自动出现在首页/);
     assert.equal(adapter.getState().dotFeaturedItems.length, 0);
     assert.equal(adapter.getState().dotPendingCandidates.length, 1);
@@ -260,6 +287,8 @@ test('a pasted X link stays in pending review and is not added to the homepage',
     assert.equal(reload.getState().dotPendingCandidates.length, 1);
     assert.equal(reload.localState.dot_candidates.length, 0);
   } finally {
+    if (previousFetch === undefined) delete globalThis.fetch;
+    else globalThis.fetch = previousFetch;
     if (previous === undefined) delete globalThis.localStorage;
     else globalThis.localStorage = previous;
   }
