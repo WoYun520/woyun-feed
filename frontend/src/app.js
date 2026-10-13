@@ -160,7 +160,8 @@ class PersonalFeedApp {
     if (!state) return;
     const container = document.getElementById('feed-load-status');
     if (container) {
-      container.innerHTML = state.loadStatus?.phase==='ready' && !this.pendingRender ? '' : renderFeedLoadStatus(this, state, { deferred: !!this.pendingRender });
+      const quietHome = this.isPublicHome(state) && document.querySelector('[data-public-home="true"]');
+      container.innerHTML = quietHome || (state.loadStatus?.phase==='ready' && !this.pendingRender) ? '' : renderFeedLoadStatus(this, state, { deferred: !!this.pendingRender });
       document.getElementById('btn-retry-feed')?.addEventListener('click', () => this.retryFeedRead());
     }
     const button = document.getElementById('btn-check-update');
@@ -194,7 +195,7 @@ class PersonalFeedApp {
     const existing = feedAdapter.getState();
     this.setupFeedSubscription();
     if (existing) { this.ensureWelcome(existing); this.render(); }
-    else {
+    else if (!feedAdapter.publicPreview) {
       if (appEl) appEl.innerHTML = renderInitialFeedLoad(this);
       this.initialLoadTimer = setTimeout(() => {
         if (this.loadingInitial && !feedAdapter.getState() && appEl) appEl.innerHTML = renderInitialFeedLoad(this, null, { slow: true });
@@ -213,6 +214,8 @@ class PersonalFeedApp {
       if (feedAdapter.getState()) {
         if (this.shouldDeferBackgroundRender()) { this.pendingRender = true; this.updateFeedStatus(); }
         else this.render();
+      } else if (appEl && feedAdapter.publicPreview) {
+        appEl.innerHTML = '<main class="page-container"><p class="home-empty">暂时没有可显示的内容。</p></main>';
       } else if (appEl) {
         appEl.innerHTML = renderInitialFeedLoad(this, error);
         document.getElementById('btn-retry-load')?.addEventListener('click', () => this.retryFeedRead());
@@ -692,11 +695,11 @@ class PersonalFeedApp {
     const publicHome = this.isPublicHome(state);
 
     appEl.innerHTML = `
-      <div class="workspace-shell" data-workspace-tab="${this.currentTab}">
+      <div class="workspace-shell" data-workspace-tab="${this.currentTab}"${publicHome ? ' data-public-home="true"' : ''}>
       ${renderWorkspaceNavigation(this.currentTab,state,{homeView:this.homeView,catsOpen:this.catsOpen})}
       <main id="workspace-main" tabindex="-1" class="page-container ${publicHome ? 'source-board-page' : ''}" role="main">
         ${publicHome ? '' : renderWorkspaceStorageNotice(state)}
-        <div id="feed-load-status" role="status" aria-live="polite">${state.loadStatus?.phase === 'ready' ? '' : renderFeedLoadStatus(this, state)}</div>
+        <div id="feed-load-status" role="status" aria-live="polite">${publicHome || state.loadStatus?.phase === 'ready' ? '' : renderFeedLoadStatus(this, state)}</div>
         ${!publicHome && this.currentTab === 'today' && this.welcomeVisible ? renderWelcome() : ''}
         ${this.renderMainContent(state)}
         ${publicHome ? renderWorkspaceStorageNotice(state, {audience:'visitor'}) : ''}

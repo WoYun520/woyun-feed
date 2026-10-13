@@ -71,7 +71,7 @@ export function renderHomeShowcase(app, state, {now} = {}) {
     : view === 'week' ? renderWeek(app, state, selection)
     : view === 'kept' ? renderKept(app, state, selection)
     : renderLatest(app, state, selection);
-  return `<div class="home-showcase">${renderKosxStrip(app)}<div class="home-hero">${signature}${renderBoostWatermark(app)}</div>${renderMarquee(e)}${body}${strap}</div>`;
+  return `<div class="home-showcase">${renderKosxStrip(app)}<div class="home-hero">${signature}${renderBoostWatermark(app)}</div>${body}${strap}</div>`;
 }
 
 function renderKosxStrip(app) {
@@ -117,12 +117,11 @@ function latestNote(selection) {
 
 function renderLatest(app, state, selection) {
   const e = value => app.escapeHtml(value);
-  return `<section class="home-band" id="home-latest" aria-labelledby="home-latest-title"><header class="home-band-heading"><h2 id="home-latest-title">最新精华帖 <small>${selection.latest.length} / 18</small></h2></header>${renderCards(app, state, selection.latest, 'latest')}<p class="home-rule">${e(latestNote(selection))}</p></section><section class="home-band home-underrated" id="home-underrated" aria-labelledby="home-underrated-title" data-underrated-rule="${e(selection.underratedRule)}"><header class="home-band-heading"><h2 id="home-underrated-title">昨日最被低估精华帖 <small>${selection.underrated.length}</small></h2><p class="home-rule">${e(selection.underratedNote)}</p></header>${selection.underrated.length ? renderCards(app, state, selection.underrated, 'under') : '<p class="home-empty">昨日没有可放入这一栏的公开帖。</p>'}</section>`;
+  return `<section class="home-band" id="home-latest" aria-labelledby="home-latest-title"><header class="home-band-heading"><h2 id="home-latest-title">最新精华帖 <small>${selection.latest.length} / 18</small></h2></header>${renderCards(app, state, selection.latest, 'latest')}<p class="home-rule">${e(latestNote(selection))}</p></section>${renderSlogan(e)}<section class="home-band home-underrated" id="home-underrated" aria-labelledby="home-underrated-title" data-underrated-rule="${e(selection.underratedRule)}"><header class="home-band-heading"><h2 id="home-underrated-title">昨日最被低估精华帖 <small>${selection.underrated.length}</small></h2><p class="home-rule">${e(selection.underratedNote)}</p></header>${selection.underrated.length ? renderCards(app, state, selection.underrated, 'under') : '<p class="home-empty">昨日没有可放入这一栏的公开帖。</p>'}</section>`;
 }
 
-function renderMarquee(e) {
-  const line = '你的文章，值得被看见';
-  return `<div class="home-marquee" id="home-marquee" role="separator" aria-label="幕布"><div class="home-marquee-track"><span>${e(line)}</span><span aria-hidden="true">${e(line)}</span></div></div>`;
+function renderSlogan(e) {
+  return `<p class="home-slogan" id="home-marquee" aria-label="幕布"><span class="home-slogan-line">${e('你的文章，值得被看见')}</span></p>`;
 }
 
 function renderList(app, state, entries, {id, title, note}) {

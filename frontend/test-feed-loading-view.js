@@ -61,7 +61,7 @@ test('load warnings and initial errors are escaped without inventing saved conte
   assert.doesNotMatch(pending,/已显示.*保存|读取成功/);
 });
 
-function withApp(run,{cached=true,editor=null,realAdapter=null}={}) {
+function withApp(run,{cached=true,editor=null,realAdapter=null,publicPreview=true}={}) {
   const source=readFileSync(new URL('./src/app.js',import.meta.url),'utf8');
   const bootstrap='// 页面加载完成后启动应用';
   assert.ok(source.includes(bootstrap));
@@ -81,7 +81,7 @@ function withApp(run,{cached=true,editor=null,realAdapter=null}={}) {
   let state=null;
   let resolveRead,rejectRead;
   let read=new Promise((resolve,reject)=>{resolveRead=resolve;rejectRead=reject;});
-  const adapter=realAdapter || {publicPreview:true,mode:'live',loadStatus:{phase:'idle'},
+  const adapter=realAdapter || {publicPreview,mode:'live',loadStatus:{phase:'idle'},
     getState:()=>state,
     subscribe(handler){calls.subscribe++;listeners.add(handler);return ()=>listeners.delete(handler);},
     restoreCachedFeed(){calls.restore++;if(!state && cachedState) {state=cachedState;this.loadStatus=state.loadStatus;for(const handler of listeners) handler(state);}return state;},
@@ -185,7 +185,19 @@ test('an uncached initial read has a bounded slow placeholder, failure and a wor
     newRead();const retry=app.retryFeedRead();const duplicate=app.retryFeedRead();
     assert.equal(calls.subscribe,1);assert.equal(calls.load,2,'both retry calls share one additional read');
     complete();await Promise.all([retry,duplicate]);assert.equal(app.loadingInitial,false);assert.ok(calls.render>0);
-  },{cached:false});
+  },{cached:false,publicPreview:false});
+});
+
+test('a public homepage with no cached feed stays quiet instead of announcing a read timeout',async()=>{
+  await withApp(async({app,nodes,timers,fail})=>{
+    const first=app.loadAndRender();
+    assert.equal([...timers.values()].some(timer=>timer.delay===3000),false,'the public homepage does not schedule the slow-read banner');
+    fail(new Error('读取超时，请稍后重试；已保留当前内容。'));
+    await first;
+    const html=nodes.get('app').innerHTML;
+    assert.match(html,/暂时没有可显示的内容/);
+    assert.doesNotMatch(html,/读取等待超时|读取超时|读取比平时慢|超时后会停止等待/);
+  },{cached:false,publicPreview:true});
 });
 
 test('retrying a cached failure starts a read without replacing the current editor or subscribing again',async()=>{
@@ -252,13 +264,13 @@ test('real bookmark clicks update the original icon and saved count while a back
     let html=nodes.get('app').innerHTML;
     assert.equal(adapter.getState().savedItems.length,1);assert.equal(calls.render,firstRender+1);
     assert.match(html,/id="collect-news-news-aaaaaaaaaaaaaaaaaaaaaaaa"[^>]*aria-pressed="true"/);
-    assert.match(html.match(/id="nav-saved"([\s\S]*?)<\/button>/)?.[1] || '',/nav-badge">1<\/span>/);
+    assert.doesNotMatch(html,/id="nav-saved"/,'the public homepage keeps the publication nav and does not show the workspace saved badge');
     assert.equal(adapter.loadStatus.phase,'loading');assert.equal(nodes.get('btn-check-update').disabled,true);
     app.toggleSaved('news-aaaaaaaaaaaaaaaaaaaaaaaa',button);
     html=nodes.get('app').innerHTML;
     assert.equal(adapter.getState().savedItems.length,0);assert.equal(calls.render,firstRender+2);
     assert.match(html,/id="collect-news-news-aaaaaaaaaaaaaaaaaaaaaaaa"[^>]*aria-pressed="false"/);
-    assert.doesNotMatch(html.match(/id="nav-saved"([\s\S]*?)<\/button>/)?.[1] || '',/nav-badge/);
+    assert.doesNotMatch(html,/id="nav-saved"/);
     assert.equal(adapter.loadStatus.phase,'loading');
   });
 });
