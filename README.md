@@ -43,7 +43,7 @@ npx wrangler deploy
 
 ## 密钥
 
-首页不依赖收件箱密钥。未设置时 `/api/dot/inbox` 返回不可用，不回退到公开文件。两把密钥必须是不同的 SHA-256 十六进制值，只用 Wrangler secret 写入：
+浏览器不发送收件箱密钥。首页「贴链接」会请求 `/api/dot/pending`，只提交一条 X 链接。未设置下面两把哈希时，`/api/dot/inbox` 和 `/api/dot/pending` 都返回不可用，不回退到公开文件，贴链接也不会写入待筛选。两把密钥必须是不同的 SHA-256 十六进制值，只用 Wrangler secret 写入：
 
 ```sh
 npx wrangler secret put DOT_DELIVERY_TOKEN_HASH
@@ -51,6 +51,8 @@ npx wrangler secret put DOT_REVIEW_TOKEN_HASH
 ```
 
 原始投递密钥、接收码和 `CLOUDFLARE_API_TOKEN` 只留在本机。`.gitignore` 已忽略 `.env`、`.env.*`、`.dev.vars` 和 `.wrangler/`。不要把它们提交进仓库。
+
+Overheard 用同一把投递密钥把 X 链接送进待筛选，见 [docs/pending-intake.md](docs/pending-intake.md)。这个入口只记 pending，不会把帖子放上公开首页。
 
 更细的预览步骤见 [docs/preview-deploy.md](docs/preview-deploy.md)。
 
@@ -92,7 +94,7 @@ This repo has no second production config. To publish your own copy, start from 
 
 ## Secrets
 
-The homepage does not need inbox secrets. Without them, `/api/dot/inbox` stays unavailable and does not fall back to the public file. Store two different SHA-256 hex hashes as Worker secrets:
+The browser does not send inbox secrets. Homepage paste calls `/api/dot/pending` with one X URL. Without the two hashes below, both `/api/dot/inbox` and `/api/dot/pending` stay unavailable and do not fall back to the public file, so paste does not enter the queue. Store two different SHA-256 hex hashes as Worker secrets:
 
 ```sh
 npx wrangler secret put DOT_DELIVERY_TOKEN_HASH
@@ -100,5 +102,7 @@ npx wrangler secret put DOT_REVIEW_TOKEN_HASH
 ```
 
 Keep the raw delivery token, review code, and `CLOUDFLARE_API_TOKEN` on your machine. `.gitignore` already ignores `.env`, `.env.*`, `.dev.vars`, and `.wrangler/`.
+
+Overheard posts X links into the pending queue with that same delivery token. See [docs/pending-intake.md](docs/pending-intake.md). The route only stores `pending` and does not publish to the public homepage.
 
 Preview details: [docs/preview-deploy.md](docs/preview-deploy.md).

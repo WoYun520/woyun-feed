@@ -1,10 +1,12 @@
 import { PUBLIC_FEED_KEY, runScheduledUpdate } from './frontend/cloud-feed-service.js';
 import { handleDotInboxRequest, isDotInboxRoute } from './dot-inbox-service.js';
+import { handleDotPendingRequest, isDotPendingRoute } from './dot-pending-service.js';
 import { handleHomeBoostRequest, isHomeBoostRoute } from './frontend/home-boost-service.js';
 
 export default {
   async fetch(request,env) {
     const url=new URL(request.url);
+    if(isDotPendingRoute(url.pathname)) return handleDotPendingRequest(request,env);
     if(isDotInboxRoute(url.pathname)) return handleDotInboxRequest(request,env);
     if(isHomeBoostRoute(url.pathname)) return handleHomeBoostRequest(request,env);
     if(url.pathname==='/data/public-feed.json') {

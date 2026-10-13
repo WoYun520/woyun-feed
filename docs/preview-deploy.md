@@ -28,7 +28,7 @@ npx wrangler deploy
 
 ## 收件箱密钥
 
-首页不依赖收件箱密钥。未设置时 `/api/dot/inbox` 返回不可用，不回退到公开文件。两把密钥必须是不同的 SHA-256 十六进制值，用 Wrangler secret 写入，名称是：
+浏览器不发送收件箱密钥。首页「贴链接」请求 `/api/dot/pending`，只提交一条 X 链接。未设置下面两把哈希时，`/api/dot/inbox` 和 `/api/dot/pending` 都返回不可用，不回退到公开文件，贴链接也不会写入待筛选。两把密钥必须是不同的 SHA-256 十六进制值，用 Wrangler secret 写入，名称是：
 
 - `DOT_DELIVERY_TOKEN_HASH`
 - `DOT_REVIEW_TOKEN_HASH`
@@ -38,4 +38,4 @@ npx wrangler secret put DOT_DELIVERY_TOKEN_HASH
 npx wrangler secret put DOT_REVIEW_TOKEN_HASH
 ```
 
-原始投递密钥和接收码只留在维护者本机，不进入公开构建、备份或文档。
+原始投递密钥和接收码只留在维护者本机，不进入公开构建、备份或文档。Overheard 用同一把投递密钥调用待筛选进料口，见 [待筛选进料](pending-intake.md)。上面的部署命令只发布 `woyun-feed-preview`，不要部署名为 `woyun` 的 Worker。把进料代码推进仓库不会自动部署。
