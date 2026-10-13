@@ -13,23 +13,15 @@ const paths={
 };
 export const workspaceIcon=name=>`<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.cloud}</svg>`;
 
-function renderPublicKosxStrip(options={}) {
-  const open=options.kosxOpen===true;
-  const draft=typeof options.kosxDraft==='string' ? options.kosxDraft : '';
-  const message=typeof options.kosxMessage==='string' ? options.kosxMessage : '';
-  const error=typeof options.kosxError==='string' ? options.kosxError : '';
-  const status=message || error;
-  return `<div class="kosx-strip" aria-label="KOSX 助力计划"><p class="kosx-name">KOSX 助力计划</p><p class="kosx-hint">上传你的精华帖链接</p><button type="button" class="kosx-cta" id="kosx-open" aria-expanded="${open?'true':'false'}" aria-controls="kosx-panel">贴链接</button></div><form class="kosx-panel" id="kosx-panel"${open?'':' hidden'}><label for="kosx-link">粘贴 X 精华帖链接</label><input id="kosx-link" name="url" type="url" inputmode="url" autocomplete="off" spellcheck="false" maxlength="2000" placeholder="粘贴 X 精华帖链接" value="${e(draft)}" required><button type="submit" class="kosx-submit">提交</button><p class="kosx-status" id="kosx-status" role="${error?'alert':'status'}" tabindex="-1">${e(status)}</p></form>`;
-}
-
 export function renderWorkspaceNavigation(tab,state,options={}) {
   const nav=(id,label,count=0)=>`<button class="nav-tab ${tab===id?'active':''}" id="nav-${id}"${tab===id?' aria-current="page"':''}>${workspaceIcon(id)}<span>${label}</span>${count>0?`<span class="nav-badge">${count}</span>`:''}</button>`;
   const mode=state.publicPreview?'公开预览':state.mode==='demo'?'示例预览':'本机版';
   const publication=tab==='today';
   if (publication) {
     const homeView=['latest','yesterday','week','kept'].includes(options.homeView) ? options.homeView : 'latest';
+    const catsOpen=options.catsOpen===true;
     const cat=(id,label)=>`<button type="button" class="lift-cat" data-home-view="${id}"${homeView===id?' aria-current="page"':''}>${label}</button>`;
-    return `<a class="workspace-skip" href="#workspace-main">跳到内容</a><header class="site-header lift-header workspace-publication-nav" role="banner"><div class="site-header-inner"><div class="lift-bar"><button type="button" class="lift-pill shape-pill" id="home-brand" data-shape="pill" data-home-view="latest"${homeView==='latest'?' aria-current="page"':''}>卧云信息流</button><nav class="lift-cats" aria-label="精华帖分类">${cat('yesterday','昨日全部精华帖')}${cat('week','七日精选精华帖')}${cat('kept','卧云精选贴（常驻保存）')}</nav></div>${renderPublicKosxStrip(options)}</div></header>`;
+    return `<a class="workspace-skip" href="#workspace-main">跳到内容</a><header class="site-header lift-header workspace-publication-nav" role="banner"><div class="site-header-inner"><div class="lift-bar"><button type="button" class="lift-pill shape-pill" id="home-brand" data-shape="pill" data-home-view="latest"${homeView==='latest'?' aria-current="page"':''}>卧云信息流</button><button type="button" class="lift-cats-button" id="home-cats-button" aria-expanded="${catsOpen?'true':'false'}" aria-controls="home-cats" aria-label="精华帖分类"><span class="lift-menu-icon" aria-hidden="true"><span></span><span></span><span></span></span></button><nav class="lift-cats${catsOpen?' is-open':''}" id="home-cats" aria-label="精华帖分类">${cat('yesterday','昨日全部精华帖')}${cat('week','七日精选精华帖')}${cat('kept','卧云精选贴（常驻保存）')}</nav></div></div></header>`;
   }
   return `<a class="workspace-skip" href="#workspace-main">跳到内容</a><header class="site-header workspace-sidebar${publication?' workspace-publication-nav':''}" role="banner"><div class="site-header-inner">
     ${publication?`<div class="publication-topline"><span>卧云 · 给创作者的信息刊物</span><span>${mode}</span></div>`:''}

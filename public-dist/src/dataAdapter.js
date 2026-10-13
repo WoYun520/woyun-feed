@@ -490,7 +490,7 @@ export class FeedDataAdapter {
 
   submitKosxLink(raw) {
     const parsed=kosxLink(raw);
-    if (!parsed) throw Error('请粘贴一条公开的 X 精华帖链接。');
+    if (!parsed) throw Error('请粘贴有效的 X 链接');
     return this.topicTransaction(state=>{
       state.kosx_pending ||= [];
       const existing=state.kosx_pending.find(row=>row.key===parsed.key);

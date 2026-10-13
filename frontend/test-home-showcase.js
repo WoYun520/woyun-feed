@@ -111,7 +111,13 @@ test('default homepage renders cover cards, signature, navigation labels and no 
   assert.match(html, /无来源附图/);
   assert.match(html, /打开原帖/);
   assert.match(html, /data-action="toggle-save"/);
-  assert.doesNotMatch(html, /放进主题|data-action="topic-save"|实用教程|收藏与跟进|主题工作台|我的关注|怎么用|待筛选|KOSX 助力计划/);
+  assert.doesNotMatch(html, /放进主题|data-action="topic-save"|实用教程|收藏与跟进|主题工作台|我的关注|怎么用|待筛选/);
+  assert.match(html, /KOSX 助力计划/);
+  assert.match(html, /上传你的精华帖链接/);
+  assert.match(html, />贴链接</);
+  assert.match(html, /placeholder="粘贴 X 精华帖链接"/);
+  assert.match(html, /id="kosx-panel" hidden/);
+  assert.ok(html.indexOf('kosx-strip') < html.indexOf('levi-signature'));
   assert.match(html, /&lt;script&gt;/);
   assert.doesNotMatch(html, /<script|background:\s*#(?:ff|f[0-9a-f]{2}[0-5])/i);
   assert.equal(html.match(/data-home-group="latest"/g).length, 18);
@@ -137,8 +143,21 @@ test('default homepage renders cover cards, signature, navigation labels and no 
   assert.ok(html.indexOf('boost-watermark-label') < html.indexOf('boost-watermark-count'));
   assert.match(css, /\.boost-watermark\s*\{[^}]*pointer-events:\s*none/);
   assert.match(css, /\.boost-watermark-count\s*\{[^}]*color:\s*#e8e8e4/);
+  assert.match(css, /\.boost-watermark-count\s*\{[^}]*font-weight:\s*800/);
+  assert.match(css, /\.boost-watermark-count\s*\{[^}]*clamp\(96px,\s*7\.5vw,\s*120px\)/);
+  assert.match(css, /\.boost-watermark-label\s*\{[^}]*font-size:\s*11px/);
+  assert.match(css, /\.boost-watermark-label\s*\{[^}]*color:\s*#62675d/);
+  assert.match(css, /\.kosx-name\s*\{[^}]*font-size:\s*11px/);
+  assert.match(css, /\.kosx-name\s*\{[^}]*color:\s*#62675d/);
+  assert.match(css, /\.kosx-hint\s*\{[^}]*font-size:\s*15px/);
   assert.match(css, /\.kosx-panel\s*\{[^}]*border-radius:\s*16px/);
+  assert.match(css, /\.kosx-panel input\s*\{[^}]*border-radius:\s*8px/);
   assert.match(css, /\.kosx-cta,\s*\.kosx-submit\s*\{[^}]*border:\s*0;[^}]*background:\s*#171917/);
+  assert.match(css, /\.cover-grid\s*\{[^}]*gap:\s*32px/);
+  const appSource = readFileSync(new URL('./src/app.js', import.meta.url), 'utf8');
+  assert.match(appSource, /已进入待筛选/);
+  assert.match(appSource, /这条已在待筛选里/);
+  assert.doesNotMatch(appSource, /已放入待筛选|已放回待筛选|这条链接已经收过/);
 });
 
 test('category views and the masthead keep the three names visible without a second local store', () => {
@@ -159,13 +178,12 @@ test('category views and the masthead keep the three names visible without a sec
   assert.match(mast, /七日精选精华帖/);
   assert.match(mast, /卧云精选贴（常驻保存）/);
   assert.match(mast, /data-home-view="week" aria-current="page"/);
-  assert.match(mast, /KOSX 助力计划/);
-  assert.match(mast, /上传你的精华帖链接/);
-  assert.match(mast, />贴链接</);
-  assert.match(mast, /placeholder="粘贴 X 精华帖链接"/);
-  assert.match(mast, /class="kosx-cta"/);
-  assert.match(mast, /id="kosx-panel" hidden/);
-  assert.doesNotMatch(mast, /id="home-menu"|id="home-menu-button"|实用教程|收藏与跟进|主题工作台|我的关注|怎么用|待筛选|id="nav-/);
+  assert.match(mast, /id="home-cats-button"/);
+  assert.match(mast, /id="home-cats"/);
+  assert.doesNotMatch(mast, /is-open|KOSX|贴链接|id="home-menu"|id="home-menu-button"|实用教程|收藏与跟进|主题工作台|我的关注|怎么用|待筛选|id="nav-/);
+  const openCats = renderWorkspaceNavigation('today', input, {homeView:'week', catsOpen:true});
+  assert.match(openCats, /id="home-cats" class="lift-cats is-open"|class="lift-cats is-open" id="home-cats"/);
+  assert.doesNotMatch(openCats, /实用教程|收藏与跟进|主题工作台|我的关注|怎么用|待筛选|id="nav-/);
 });
 
 test('opening an X cover counts once per visitor and post in local storage only', () => {
@@ -200,6 +218,8 @@ test('a pasted X link stays in pending review and is not added to the homepage',
     assert.equal(state.allItems.length, before);
     assert.equal(adapter.localState.dot_candidates.length, 0);
     assert.equal(adapter.submitKosxLink(`https://twitter.com/example/status/2108148604447883999`).duplicate, true);
+    assert.throws(() => adapter.submitKosxLink(''), /请粘贴有效的 X 链接/);
+    assert.throws(() => adapter.submitKosxLink('https://example.com/not-a-post'), /请粘贴有效的 X 链接/);
     assert.throws(() => adapter.setDotCandidateStatus([result.id], 'featured'), /不会自动出现在首页/);
     assert.equal(adapter.getState().dotFeaturedItems.length, 0);
     assert.equal(adapter.getState().dotPendingCandidates.length, 1);

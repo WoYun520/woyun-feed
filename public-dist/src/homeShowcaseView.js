@@ -63,7 +63,17 @@ export function renderHomeShowcase(app, state, {now} = {}) {
     : view === 'week' ? renderWeek(app, state, selection)
     : view === 'kept' ? renderKept(app, state, selection)
     : renderLatest(app, state, selection);
-  return `<div class="home-showcase"><div class="home-hero">${signature}${renderBoostWatermark(app)}</div>${strap}${body}</div>`;
+  return `<div class="home-showcase">${renderKosxStrip(app)}<div class="home-hero">${signature}${renderBoostWatermark(app)}</div>${strap}${body}</div>`;
+}
+
+function renderKosxStrip(app) {
+  const open = app?.kosxOpen === true;
+  const draft = typeof app?.kosxDraft === 'string' ? app.kosxDraft : '';
+  const message = typeof app?.kosxMessage === 'string' ? app.kosxMessage : '';
+  const error = typeof app?.kosxError === 'string' ? app.kosxError : '';
+  const status = message || error;
+  const e = value => app.escapeHtml(value);
+  return `<section class="kosx-band" aria-label="KOSX 助力计划"><div class="kosx-strip"><p class="kosx-name">KOSX 助力计划</p><p class="kosx-hint">上传你的精华帖链接</p><button type="button" class="kosx-cta" id="kosx-open" aria-expanded="${open ? 'true' : 'false'}" aria-controls="kosx-panel">贴链接</button></div><form class="kosx-panel" id="kosx-panel"${open ? '' : ' hidden'}><label for="kosx-link">粘贴 X 精华帖链接</label><input id="kosx-link" name="url" type="url" inputmode="url" autocomplete="off" spellcheck="false" maxlength="2000" placeholder="粘贴 X 精华帖链接" value="${e(draft)}"><button type="submit" class="kosx-submit">提交</button><p class="kosx-status" id="kosx-status" role="${error ? 'alert' : 'status'}" tabindex="-1">${e(status)}</p></form></section>`;
 }
 
 function renderBoostWatermark(app) {

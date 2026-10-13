@@ -63,6 +63,7 @@ class PersonalFeedApp {
     this.feedView = 'sources';
     this.homeView = 'latest';
     this.homeMenuOpen = false;
+    this.catsOpen = false;
     this.kosxOpen = false;
     this.kosxDraft = '';
     this.kosxMessage = '';
@@ -693,7 +694,7 @@ class PersonalFeedApp {
 
     appEl.innerHTML = `
       <div class="workspace-shell" data-workspace-tab="${this.currentTab}">
-      ${renderWorkspaceNavigation(this.currentTab,state,{homeView:this.homeView,menuOpen:this.homeMenuOpen,kosxOpen:this.kosxOpen,kosxDraft:this.kosxDraft,kosxMessage:this.kosxMessage,kosxError:this.kosxError})}
+      ${renderWorkspaceNavigation(this.currentTab,state,{homeView:this.homeView,catsOpen:this.catsOpen})}
       <main id="workspace-main" tabindex="-1" class="page-container ${publicHome ? 'source-board-page' : ''}" role="main">
         ${publicHome ? '' : renderWorkspaceStorageNotice(state)}
         <div id="feed-load-status" role="status" aria-live="polite">${state.loadStatus?.phase === 'ready' ? '' : renderFeedLoadStatus(this, state)}</div>
@@ -1475,18 +1476,18 @@ class PersonalFeedApp {
     document.querySelectorAll('[data-home-view]').forEach(button=>button.addEventListener('click',()=>{
       const view=button.dataset.homeView;
       if(!['latest','yesterday','week','kept'].includes(view)) return;
-      this.homeView=view;this.homeMenuOpen=false;this.feedView='sources';this.currentTab='today';
+      this.homeView=view;this.homeMenuOpen=false;this.catsOpen=false;this.feedView='sources';this.currentTab='today';
       this.render();window.scrollTo({top:0,behavior:'instant'});
       document.querySelector(`[data-home-view="${view}"]`)?.focus();
     }));
-    document.getElementById('home-menu-button')?.addEventListener('click',()=>{
-      const top=window.scrollY;this.homeMenuOpen=!this.homeMenuOpen;this.render();
+    document.getElementById('home-cats-button')?.addEventListener('click',()=>{
+      const top=window.scrollY;this.catsOpen=!this.catsOpen;this.render();
       window.scrollTo({top,behavior:'instant'});
-      document.getElementById(this.homeMenuOpen ? 'home-menu' : 'home-menu-button')?.focus();
+      document.getElementById(this.catsOpen ? 'home-cats' : 'home-cats-button')?.focus();
     });
-    document.getElementById('home-menu')?.addEventListener('keydown',event=>{
+    document.getElementById('home-cats')?.addEventListener('keydown',event=>{
       if(event.key!=='Escape') return;
-      event.preventDefault();this.homeMenuOpen=false;this.render();document.getElementById('home-menu-button')?.focus();
+      event.preventDefault();this.catsOpen=false;this.render();document.getElementById('home-cats-button')?.focus();
     });
     document.getElementById('kosx-open')?.addEventListener('click',()=>{
       const top=window.scrollY;
@@ -1503,9 +1504,7 @@ class PersonalFeedApp {
       try {
         const result=feedAdapter.submitKosxLink(draft);
         this.kosxOpen=true;this.kosxDraft='';this.kosxError='';
-        this.kosxMessage=result.added ? '已放入待筛选。这次提交不会自动出现在首页。'
-          : result.restored ? '已放回待筛选。这次提交不会自动出现在首页。'
-          : '这条链接已经收过，没有重复加入。这次提交不会自动出现在首页。';
+        this.kosxMessage=result.duplicate ? '这条已在待筛选里' : '已进入待筛选';
       } catch(error) {
         this.kosxOpen=true;this.kosxDraft=draft;this.kosxMessage='';
         this.kosxError=error.message || '没有放入待筛选。';
