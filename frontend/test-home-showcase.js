@@ -118,11 +118,14 @@ test('default homepage renders cover cards, signature, navigation labels and no 
   assert.match(html, /placeholder="粘贴 X 精华帖链接"/);
   assert.match(html, /id="kosx-panel" hidden/);
   assert.ok(html.indexOf('kosx-strip') < html.indexOf('levi-signature'));
+  assert.ok(html.indexOf('levi-signature') < html.indexOf('id="home-marquee"'));
+  assert.ok(html.indexOf('id="home-marquee"') < html.indexOf('id="home-latest"'));
+  assert.match(html, /boost-watermark-wash" aria-hidden="true"><\/span>/);
   assert.match(html, /&lt;script&gt;/);
   assert.doesNotMatch(html, /<script|background:\s*#(?:ff|f[0-9a-f]{2}[0-5])/i);
   assert.equal(html.match(/data-home-group="latest"/g).length, 18);
   assert.equal(html.match(/data-home-group="under"/g).length, 2);
-  const marquee = html.slice(html.indexOf('id="home-marquee"'), html.indexOf('id="home-underrated"'));
+  const marquee = html.match(/<div class="home-marquee"[\s\S]*?<\/div><\/div>/)[0];
   assert.match(marquee, /你的文章，值得被看见/);
   assert.doesNotMatch(marquee, /<button|<br|18\+|年满|年龄|留下有用的/);
   const css = readFileSync(new URL('./src/homeShowcase.css', import.meta.url), 'utf8');
@@ -147,6 +150,8 @@ test('default homepage renders cover cards, signature, navigation labels and no 
   assert.match(css, /\.boost-watermark-count\s*\{[^}]*clamp\(96px,\s*7\.5vw,\s*120px\)/);
   assert.match(css, /\.boost-watermark-label\s*\{[^}]*font-size:\s*11px/);
   assert.match(css, /\.boost-watermark-label\s*\{[^}]*color:\s*#62675d/);
+  assert.match(css, /\.boost-watermark-wash\s*\{[^}]*radial-gradient/);
+  assert.doesNotMatch(css, /\.boost-watermark-wash\s*\{[^}]*display:\s*none/);
   assert.match(css, /\.kosx-name\s*\{[^}]*font-size:\s*11px/);
   assert.match(css, /\.kosx-name\s*\{[^}]*color:\s*#62675d/);
   assert.match(css, /\.kosx-hint\s*\{[^}]*font-size:\s*15px/);
@@ -174,9 +179,10 @@ test('category views and the masthead keep the three names visible without a sec
   assert.doesNotMatch(kept, /data-dot-open-featured|待筛选|收藏页|放进主题/);
   const mast = renderWorkspaceNavigation('today', input, {homeView:'week', menuOpen:false});
   assert.match(mast, /卧云信息流/);
-  assert.match(mast, /昨日全部精华帖/);
-  assert.match(mast, /七日精选精华帖/);
-  assert.match(mast, /卧云精选贴（常驻保存）/);
+  assert.match(mast, />昨日全部</);
+  assert.match(mast, />七日精选</);
+  assert.match(mast, />卧云精选</);
+  assert.doesNotMatch(mast, /昨日全部精华帖|七日精选精华帖|卧云精选贴（常驻保存）/);
   assert.match(mast, /data-home-view="week" aria-current="page"/);
   assert.match(mast, /id="home-cats-button"/);
   assert.match(mast, /id="home-cats"/);

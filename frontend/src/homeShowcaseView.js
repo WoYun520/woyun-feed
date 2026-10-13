@@ -63,7 +63,7 @@ export function renderHomeShowcase(app, state, {now} = {}) {
     : view === 'week' ? renderWeek(app, state, selection)
     : view === 'kept' ? renderKept(app, state, selection)
     : renderLatest(app, state, selection);
-  return `<div class="home-showcase">${renderKosxStrip(app)}<div class="home-hero">${signature}${renderBoostWatermark(app)}</div>${strap}${body}</div>`;
+  return `<div class="home-showcase">${renderKosxStrip(app)}<div class="home-hero">${signature}${renderBoostWatermark(app)}</div>${renderMarquee(e)}${body}${strap}</div>`;
 }
 
 function renderKosxStrip(app) {
@@ -84,7 +84,7 @@ function renderBoostWatermark(app) {
 
 function renderSignature() {
   const letters = ['L', 'e', 'v', 'i', 'f', 'l', 'o', 'w'];
-  return `<section class="levi-signature" aria-labelledby="levi-flow-title"><p class="levi-kicker">Levi</p><h1 id="levi-flow-title" class="levi-flow" aria-label="Levi flow">${letters.map((letter, index) => `<span${index === 4 ? ' class="levi-word"' : ''}>${letter}</span>`).join('')}</h1><svg class="levi-scribble" viewBox="0 0 360 28" aria-hidden="true"><path d="M6 16c28-12 42 10 70 2 24-8 36 12 62 4 22-6 40 10 66 2 28-8 48 12 78 0" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></section>`;
+  return `<section class="levi-signature" aria-labelledby="levi-flow-title"><h1 id="levi-flow-title" class="levi-flow" aria-label="Levi flow">${letters.map((letter, index) => `<span${index === 4 ? ' class="levi-word"' : ''}>${letter}</span>`).join('')}</h1><svg class="levi-scribble" viewBox="0 0 360 28" aria-hidden="true"><path d="M6 16c28-12 42 10 70 2 24-8 36 12 62 4 22-6 40 10 66 2 28-8 48 12 78 0" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></section>`;
 }
 
 function renderStrap(e, selection) {
@@ -109,7 +109,7 @@ function latestNote(selection) {
 
 function renderLatest(app, state, selection) {
   const e = value => app.escapeHtml(value);
-  return `<section class="home-band" id="home-latest" aria-labelledby="home-latest-title"><header class="home-band-heading"><h2 id="home-latest-title">最新精华帖 <small>${selection.latest.length} / 18</small></h2><p class="home-rule">${e(latestNote(selection))}</p></header>${renderCards(app, state, selection.latest, 'latest')}</section>${renderMarquee(e)}<section class="home-band home-underrated" id="home-underrated" aria-labelledby="home-underrated-title" data-underrated-rule="${e(selection.underratedRule)}"><header class="home-band-heading"><h2 id="home-underrated-title">昨日最被低估精华帖 <small>${selection.underrated.length}</small></h2><p class="home-rule">${e(selection.underratedNote)}</p></header>${selection.underrated.length ? renderCards(app, state, selection.underrated, 'under') : '<p class="home-empty">昨日没有可放入这一栏的公开帖。</p>'}</section>`;
+  return `<section class="home-band" id="home-latest" aria-labelledby="home-latest-title"><header class="home-band-heading"><h2 id="home-latest-title">最新精华帖 <small>${selection.latest.length} / 18</small></h2></header>${renderCards(app, state, selection.latest, 'latest')}<p class="home-rule">${e(latestNote(selection))}</p></section><section class="home-band home-underrated" id="home-underrated" aria-labelledby="home-underrated-title" data-underrated-rule="${e(selection.underratedRule)}"><header class="home-band-heading"><h2 id="home-underrated-title">昨日最被低估精华帖 <small>${selection.underrated.length}</small></h2><p class="home-rule">${e(selection.underratedNote)}</p></header>${selection.underrated.length ? renderCards(app, state, selection.underrated, 'under') : '<p class="home-empty">昨日没有可放入这一栏的公开帖。</p>'}</section>`;
 }
 
 function renderMarquee(e) {
