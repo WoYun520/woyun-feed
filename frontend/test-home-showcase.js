@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { addCalendarDays, beijingDateKey, parsePublicHeat, selectHomeShowcase } from './src/homeShowcase.js';
+import { addCalendarDays, beijingDateKey, parsePublicHeat, recordKosxBoost, selectHomeShowcase } from './src/homeShowcase.js';
+import { FeedDataAdapter } from './src/dataAdapter.js';
 import { renderHomeShowcase } from './src/homeShowcaseView.js';
 import { renderWorkspaceNavigation } from './src/workspaceShell.js';
 
@@ -129,6 +130,12 @@ test('default homepage renders cover cards, signature, navigation labels and no 
   assert.match(css, /--home-accent:\s*#c84924/);
   assert.match(css, /--home-wash:\s*#f5f5f2/);
   assert.doesNotMatch(css, /#fbfbf8|#f4f1ea|#8b3019/);
+  assert.match(html, /class="boost-watermark"/);
+  assert.match(html, /class="boost-watermark-count">\d+</);
+  assert.match(html, /boost-watermark-label">已助力/);
+  assert.match(css, /\.boost-watermark-count\s*\{[^}]*color:\s*#e8e8e4/);
+  assert.match(css, /\.kosx-panel\s*\{[^}]*border-radius:\s*16px/);
+  assert.match(css, /\.kosx-cta,\s*\.kosx-submit\s*\{[^}]*border:\s*0;[^}]*background:\s*#171917/);
 });
 
 test('category views and the masthead keep the three names visible without a second local store', () => {
@@ -149,5 +156,61 @@ test('category views and the masthead keep the three names visible without a sec
   assert.match(mast, /卧云精选贴（常驻保存）/);
   assert.match(mast, /data-home-view="week" aria-current="page"/);
   assert.match(mast, /id="home-menu"/);
-  for (const key of ['today','tutorials','candidates','saved','topics','profile']) assert.equal((mast.match(new RegExp(`id="nav-${key}"`, 'g')) || []).length, 1);
+  assert.match(mast, /KOSX 助力计划/);
+  assert.match(mast, /上传你的精华帖链接/);
+  assert.match(mast, />贴链接</);
+  assert.match(mast, /placeholder="粘贴 X 精华帖链接"/);
+  assert.match(mast, /class="kosx-cta"/);
+  assert.match(mast, /id="kosx-panel" hidden/);
+  for (const key of ['today','candidates']) assert.equal((mast.match(new RegExp(`id="nav-${key}"`, 'g')) || []).length, 1);
+  for (const key of ['tutorials','saved','topics','profile']) assert.equal((mast.match(new RegExp(`id="nav-${key}"`, 'g')) || []).length, 0);
+  for (const label of ['实用教程','收藏与跟进','主题工作台','我的关注','怎么用']) assert.equal(mast.includes(label), false);
+});
+
+test('opening an X cover counts once per visitor and post in local storage only', () => {
+  const bag = new Map();
+  const store = {getItem:key => bag.get(key) ?? null, setItem:(key, value) => bag.set(key, value)};
+  const first = 'https://x.com/example/status/2108148604447883464';
+  const same = 'https://twitter.com/example/status/2108148604447883464?s=20';
+  const second = 'https://x.com/other/status/2108148604447883465';
+  assert.equal(recordKosxBoost(store, first).counted, true);
+  assert.equal(recordKosxBoost(store, same).counted, false);
+  assert.equal(recordKosxBoost(store, second).count, 2);
+  assert.equal(recordKosxBoost(store, 'https://example.com/not-a-post').counted, false);
+  assert.equal(recordKosxBoost(store, second).count, 2);
+  assert.equal(bag.size, 1);
+});
+
+test('a pasted X link stays in pending review and is not added to the homepage', () => {
+  const previous = globalThis.localStorage;
+  const bag = new Map();
+  globalThis.localStorage = {getItem:key => bag.get(key) ?? null, setItem:(key, value) => bag.set(key, value), removeItem:key => bag.delete(key), key:index => [...bag.keys()][index] ?? null, get length() { return bag.size; }};
+  try {
+    const adapter = new FeedDataAdapter();
+    adapter.feedData = {mode:'live', schema_version:'0.3', profile:{}, items:[], sources:[], sections:{daily:[], discover:[]}, generated_at:'2026-10-10T13:01:27.954Z'};
+    const before = adapter.getState().allItems.length;
+    const url = 'https://x.com/example/status/2108148604447883999';
+    const result = adapter.submitKosxLink(url);
+    const state = adapter.getState();
+    assert.equal(result.added, true);
+    assert.equal(state.dotPendingCandidates.length, 1);
+    assert.equal(state.dotPendingCandidates[0].status, 'pending');
+    assert.equal(state.dotFeaturedItems.length, 0);
+    assert.equal(state.allItems.length, before);
+    assert.equal(adapter.localState.dot_candidates.length, 0);
+    assert.equal(adapter.submitKosxLink(`https://twitter.com/example/status/2108148604447883999`).duplicate, true);
+    assert.throws(() => adapter.setDotCandidateStatus([result.id], 'featured'), /不会自动出现在首页/);
+    assert.equal(adapter.getState().dotFeaturedItems.length, 0);
+    assert.equal(adapter.getState().dotPendingCandidates.length, 1);
+    const html = renderHomeShowcase(app(), adapter.getState());
+    assert.doesNotMatch(html, /2108148604447883999/);
+    assert.doesNotMatch(html, /待筛选的 X 链接/);
+    const reload = new FeedDataAdapter();
+    reload.feedData = adapter.feedData;
+    assert.equal(reload.getState().dotPendingCandidates.length, 1);
+    assert.equal(reload.localState.dot_candidates.length, 0);
+  } finally {
+    if (previous === undefined) delete globalThis.localStorage;
+    else globalThis.localStorage = previous;
+  }
 });

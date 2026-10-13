@@ -3,7 +3,7 @@ import { creatorPreferenceKey, readCreatorPreferences } from './creatorTutorials
 import { normalizePostImage } from './postMedia.js';
 import { postStatusId } from './postStream.js';
 import { postAuthorLabel } from './topicWorkspace.js';
-import { homeViewName, selectHomeShowcase } from './homeShowcase.js';
+import { homeViewName, readKosxBoost, selectHomeShowcase } from './homeShowcase.js';
 
 const shorten = (value, maximum) => {
   const text = (typeof value === 'string' ? value : '').replace(/\s+/g, ' ').trim();
@@ -58,10 +58,17 @@ export function renderHomeShowcase(app, state, {now} = {}) {
   const e = value => app.escapeHtml(value);
   const signature = renderSignature();
   const strap = renderStrap(e, selection);
-  if (view === 'yesterday') return `${signature}${strap}${renderList(app, state, selection.yesterday, {id:'home-yesterday', title:'昨日全部精华帖', note:yesterdayNote(selection)})}`;
-  if (view === 'week') return `${signature}${strap}${renderWeek(app, state, selection)}`;
-  if (view === 'kept') return `${signature}${strap}${renderKept(app, state, selection)}`;
-  return `${signature}${strap}${renderLatest(app, state, selection)}`;
+  const body = view === 'yesterday'
+    ? renderList(app, state, selection.yesterday, {id:'home-yesterday', title:'昨日全部精华帖', note:yesterdayNote(selection)})
+    : view === 'week' ? renderWeek(app, state, selection)
+    : view === 'kept' ? renderKept(app, state, selection)
+    : renderLatest(app, state, selection);
+  return `<div class="home-showcase">${renderBoostWatermark()}${signature}${strap}${body}</div>`;
+}
+
+function renderBoostWatermark() {
+  const count = readKosxBoost(preferenceStorage()).count;
+  return `<aside class="boost-watermark"><span class="boost-watermark-count">${count}</span><span class="boost-watermark-label">已助力</span></aside>`;
 }
 
 function renderSignature() {

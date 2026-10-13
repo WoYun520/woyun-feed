@@ -24,6 +24,49 @@ const DEMO_STORAGE_KEY = 'personal-feed:demo:v1';
 const LIVE_STORAGE_KEY = 'personal-feed:live:v1';
 const MAX_FEED_RESPONSE_CHARS = 10_000_000;
 const RETIRED_LIVE_SOURCES = new Set(['x', 'bilibili-hot-search']);
+function kosxLink(value) {
+  const key = dotPostKey(typeof value === 'string' ? value.trim() : '');
+  if (!key) return null;
+  let url;
+  try { url = new URL(value.trim()); } catch { return null; }
+  const author_handle = url.pathname.split('/')[1];
+  const statusId = key.slice(2);
+  if (!/^[A-Za-z0-9_]{1,15}$/.test(author_handle)) return null;
+  return {id:`kosx-${statusId}`, key, url:`https://x.com/${author_handle}/status/${statusId}`, author_handle};
+}
+
+function loadKosxPending(value) {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set();
+  const rows = [];
+  for (const row of value) {
+    if (!row || typeof row !== 'object' || Array.isArray(row)) continue;
+    const parsed = kosxLink(row.url);
+    if (!parsed || row.key !== parsed.key || row.id !== parsed.id || seen.has(parsed.key)) continue;
+    if (row.status !== 'pending' && row.status !== 'dismissed') continue;
+    if (typeof row.submitted_at !== 'string' || row.submitted_at.length > 64 || !Number.isFinite(Date.parse(row.submitted_at))) continue;
+    seen.add(parsed.key);
+    rows.push({...parsed, status:row.status, submitted_at:row.submitted_at});
+  }
+  return rows.slice(0, 300);
+}
+
+function kosxCandidateViews(records) {
+  return (Array.isArray(records) ? records : []).map(record => ({
+    id:record.id, key:record.key, status:record.status, imported_at:record.submitted_at, featured_at:null, kosx:true,
+    batch:{collector:'KOSX', collected_at:record.submitted_at, group:'items'},
+    material:{
+      original_url:record.url, author_handle:record.author_handle, published_at:null,
+      title_zh:'待筛选的 X 链接',
+      summary_zh:'访客通过 KOSX 助力计划粘贴的链接。尚未读取原文，未核对热度，未选入精选，不会出现在首页。',
+      bookmark_count:null, like_count:null, view_count:null, metric_display:'',
+      selection_reason:'只进入待筛选。提交不会自动公开。', my_angle:'',
+      unknowns:['未读取原文', '热度未知', '未选入精选'],
+    },
+    item:null,
+  }));
+}
+
 const loadDotRecords = value => {
   try {return {records:validateDotCandidateRecords(value || []),warning:null};}
   catch (error) {
@@ -43,6 +86,7 @@ const defaultLocalState = {
   item_snapshots: {},
   topics: [],
   dot_candidates: [],
+  kosx_pending: [],
 };
 
 export class FeedDataAdapter {
@@ -80,6 +124,7 @@ export class FeedDataAdapter {
           followups: Array.isArray(parsed.followups) ? parsed.followups : [],
           topics: Array.isArray(parsed.topics) ? parsed.topics : [],
           dot_candidates: dot.records,
+          kosx_pending: loadKosxPending(parsed.kosx_pending),
           profile_override: parsed.profile_override || null,
           item_snapshots: parsed.item_snapshots && typeof parsed.item_snapshots === 'object' && !Array.isArray(parsed.item_snapshots) ? parsed.item_snapshots : {},
         };
@@ -257,8 +302,9 @@ export class FeedDataAdapter {
     const baseVisibleItems = this.mode === 'live'
       ? this.feedData.items.filter(item => !item.source_refs?.length || item.source_refs.some(id => !RETIRED_LIVE_SOURCES.has(id)))
       : this.feedData.items;
-    const dotCandidates=structuredClone(this.localState.dot_candidates || []);
-    const dotFeaturedItems=dotCandidates.filter(record=>record.status==='featured').map(record=>record.item);
+    const storedCandidates=structuredClone(this.localState.dot_candidates || []);
+    const dotFeaturedItems=storedCandidates.filter(record=>record.status==='featured').map(record=>record.item);
+    const dotCandidates=[...storedCandidates, ...kosxCandidateViews(this.localState.kosx_pending)];
     const visibleItems=[...baseVisibleItems,...dotFeaturedItems];
     const practicalCount = this.feedData.items.filter(item => practicalMaterialKind(item)).length;
     const creatorItems = this.mode==='live' ? CREATOR_MATERIALS : [];
@@ -442,12 +488,35 @@ export class FeedDataAdapter {
     });
   }
 
+  submitKosxLink(raw) {
+    const parsed=kosxLink(raw);
+    if (!parsed) throw Error('请粘贴一条公开的 X 精华帖链接。');
+    return this.topicTransaction(state=>{
+      state.kosx_pending ||= [];
+      const existing=state.kosx_pending.find(row=>row.key===parsed.key);
+      if (existing) {
+        if (existing.status==='dismissed') { existing.status='pending'; return {added:false, restored:true, duplicate:false, id:existing.id}; }
+        return {added:false, restored:false, duplicate:true, id:existing.id};
+      }
+      if ((state.dot_candidates || []).some(row=>row.key===parsed.key)) return {added:false, restored:false, duplicate:true, id:parsed.id};
+      if (state.kosx_pending.length>=300) throw Error('待筛选已满，请先处理已有链接。');
+      state.kosx_pending.push({...parsed, status:'pending', submitted_at:new Date().toISOString()});
+      return {added:true, restored:false, duplicate:false, id:parsed.id};
+    });
+  }
+
   setDotCandidateStatus(ids,status) {
     if (!Array.isArray(ids) || !ids.length || ids.length>300 || new Set(ids).size!==ids.length || ids.some(id=>typeof id!=='string') || !['pending','featured','dismissed'].includes(status)) throw Error('请勾选素材，再选择筛选结果。');
     return this.topicTransaction(state=>{
-      const records=state.dot_candidates || [],wanted=new Set(ids);
-      if (ids.some(id=>!records.some(record=>record.id===id))) throw Error('素材已变化，请刷新后重新选择。');
+      state.kosx_pending ||= [];
+      const kosxWanted=ids.filter(id=>state.kosx_pending.some(row=>row.id===id));
+      if (kosxWanted.length && status==='featured') throw Error('KOSX 提交只留在待筛选，不会自动出现在首页。');
+      const records=state.dot_candidates || [];
+      const dotIds=ids.filter(id=>!kosxWanted.includes(id));
+      const wanted=new Set(dotIds);
+      if (dotIds.some(id=>!records.some(record=>record.id===id))) throw Error('素材已变化，请刷新后重新选择。');
       let changed=0;const now=new Date().toISOString();
+      for (const row of state.kosx_pending) if (kosxWanted.includes(row.id) && row.status!==status) { row.status=status; changed++; }
       for (const record of records) if (wanted.has(record.id) && record.status!==status) {
         record.status=status;record.featured_at=status==='featured' ? now : null;changed++;
       }

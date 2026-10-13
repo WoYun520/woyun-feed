@@ -13,6 +13,7 @@ import { SOURCE_GROUPS, matchesSource } from './sourceGroups.js';
 import { renderTopicWorkspace, bindTopicActions, renderTopicDialog, openTopicDialog } from './topicViews.js';
 import { renderSourceBoard, bindSourceBoardActions, feedUpdateInfo, boardUpdateMessage } from './sourceBoard.js';
 import { renderHomeShowcase } from './homeShowcaseView.js';
+import { recordKosxBoost } from './homeShowcase.js';
 import { repositoryName } from './repositoryGuide.js';
 import { renderCollectionPanel, bindCollectionActions } from './collectionViews.js';
 import { needsWelcome, rememberWelcome, renderWelcome, renderGuide } from './welcome.js';
@@ -1426,6 +1427,45 @@ class PersonalFeedApp {
       if(event.key!=='Escape') return;
       event.preventDefault();this.homeMenuOpen=false;this.render();document.getElementById('home-menu-button')?.focus();
     });
+    document.getElementById('kosx-open')?.addEventListener('click',()=>{
+      const panel=document.getElementById('kosx-panel');
+      const button=document.getElementById('kosx-open');
+      if(!panel || !button) return;
+      const open=panel.hasAttribute('hidden');
+      panel.toggleAttribute('hidden', !open);
+      button.setAttribute('aria-expanded', open ? 'true' : 'false');
+      if(open) document.getElementById('kosx-link')?.focus();
+    });
+    document.getElementById('kosx-panel')?.addEventListener('submit',event=>{
+      event.preventDefault();
+      const input=document.getElementById('kosx-link');
+      const status=document.getElementById('kosx-status');
+      try {
+        const result=feedAdapter.submitKosxLink(input?.value || '');
+        if(input && (result.added || result.restored)) input.value='';
+        const message=result.added ? '已放入待筛选。这次提交不会自动出现在首页。'
+          : result.restored ? '已放回待筛选。这次提交不会自动出现在首页。'
+          : '这条链接已经收过，没有重复加入。这次提交不会自动出现在首页。';
+        if(status) status.textContent=message;
+        const count=feedAdapter.getState()?.dotPendingCandidates?.length || 0;
+        const tab=document.getElementById('nav-candidates');
+        if(tab) {
+          let badge=tab.querySelector('.nav-badge');
+          if(count>0) {
+            if(!badge) { badge=document.createElement('span'); badge.className='nav-badge'; tab.appendChild(badge); }
+            badge.textContent=String(count);
+          } else badge?.remove();
+        }
+      } catch(error) {
+        if(status) status.textContent=error.message || '没有放入待筛选。';
+      }
+    });
+    document.querySelectorAll('.cover-card a[href]').forEach(link=>link.addEventListener('click',()=>{
+      const result=recordKosxBoost(localStorage, link.getAttribute('href') || '');
+      if(!result.counted) return;
+      const node=document.querySelector('.boost-watermark-count');
+      if(node) node.textContent=String(result.count);
+    }));
     document.getElementById('home-open-sources')?.addEventListener('click',()=>{
       this.homeSourcesOpen=true;this.render();document.querySelector('.home-legacy-board .page-headline')?.focus();
     });

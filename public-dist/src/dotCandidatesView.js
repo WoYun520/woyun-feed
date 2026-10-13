@@ -67,8 +67,12 @@ function renderCandidateReader(record, busy) {
 function renderCandidateReviewActions(record, busy) {
   const material = record.material && typeof record.material === 'object' ? record.material : {};
   const id = escape(record.id), pending = record.status === 'pending', disabled = busy ? ' disabled' : '';
+  const kosx = record.kosx === true || record.batch?.collector === 'KOSX';
+  const pendingActions = kosx
+    ? `<button type="button" class="btn-quiet" data-dot-status="dismissed" data-dot-id="${id}"${disabled}>暂不收录</button><span>只在待筛选，不会自动出现在首页。</span>`
+    : `<button type="button" class="btn-secondary-quiet" data-dot-status="featured" data-dot-id="${id}"${disabled}>选入精选</button><button type="button" class="btn-quiet" data-dot-status="dismissed" data-dot-id="${id}"${disabled}>暂不收录</button>`;
   return `<div class="dot-candidate-actions">${postLink(material.original_url, '打开原帖', 'dot-original-link')}
-      ${pending ? `<button type="button" class="btn-secondary-quiet" data-dot-status="featured" data-dot-id="${id}"${disabled}>选入精选</button><button type="button" class="btn-quiet" data-dot-status="dismissed" data-dot-id="${id}"${disabled}>暂不收录</button>` : `${record.status === 'featured' ? `<button type="button" class="btn-primary-action" data-action="topic-save" data-item-id="${id}"${disabled}>放进主题</button>` : ''}<button type="button" class="btn-secondary-quiet" data-dot-status="pending" data-dot-id="${id}"${disabled}>退回待筛选</button>`}
+      ${pending ? pendingActions : `${record.status === 'featured' ? `<button type="button" class="btn-primary-action" data-action="topic-save" data-item-id="${id}"${disabled}>放进主题</button>` : ''}<button type="button" class="btn-secondary-quiet" data-dot-status="pending" data-dot-id="${id}"${disabled}>退回待筛选</button>`}
     </div>`;
 }
 

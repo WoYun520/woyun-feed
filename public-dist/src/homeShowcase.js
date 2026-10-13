@@ -1,4 +1,7 @@
+import { dotPostKey } from './dotCandidates.js';
 import { selectPostStream } from './postStream.js';
+
+export const KOSX_BOOST_STORAGE_KEY = 'woyun-kosx-boost:v1';
 
 export const HOME_LATEST_LIMIT = 18;
 export const HOME_UNDERSTATED_LIMIT = 2;
@@ -149,4 +152,33 @@ export function selectHomeShowcase(state, {now} = {}) {
 
 export function homeViewName(value) {
   return VIEWS.includes(value) ? value : 'latest';
+}
+
+function boostIds(store) {
+  if (!store || typeof store.getItem !== 'function') return [];
+  try {
+    const parsed = JSON.parse(store.getItem(KOSX_BOOST_STORAGE_KEY) || '{"ids":[]}');
+    const ids = Array.isArray(parsed?.ids) ? parsed.ids : [];
+    return [...new Set(ids.filter(id => typeof id === 'string' && /^[1-9]\d{7,24}$/.test(id)))];
+  } catch {
+    return [];
+  }
+}
+
+// This browser only. Opening a cover does not call a Worker or KV.
+export function readKosxBoost(store) {
+  const ids = boostIds(store);
+  return {count:ids.length, ids};
+}
+
+export function recordKosxBoost(store, url) {
+  const current = readKosxBoost(store);
+  const key = dotPostKey(typeof url === 'string' ? url : '');
+  if (!key || !store || typeof store.setItem !== 'function') return {counted:false, count:current.count};
+  const id = key.slice(2);
+  if (current.ids.includes(id)) return {counted:false, count:current.count};
+  const ids = [...current.ids, id].slice(-300);
+  try { store.setItem(KOSX_BOOST_STORAGE_KEY, JSON.stringify({ids})); }
+  catch { return {counted:false, count:current.count}; }
+  return {counted:true, count:ids.length};
 }
