@@ -132,8 +132,10 @@ test('default homepage renders cover cards, signature, navigation labels and no 
   assert.match(css, /--home-wash:\s*#f5f5f2/);
   assert.doesNotMatch(css, /#fbfbf8|#f4f1ea|#8b3019/);
   assert.match(html, /class="boost-watermark"/);
-  assert.match(html, /class="boost-watermark-count">\d+</);
+  assert.match(html, /class="boost-watermark-count" id="home-boost-count">\d+</);
   assert.match(html, /boost-watermark-label">已助力/);
+  assert.ok(html.indexOf('boost-watermark-label') < html.indexOf('boost-watermark-count'));
+  assert.match(css, /\.boost-watermark\s*\{[^}]*pointer-events:\s*none/);
   assert.match(css, /\.boost-watermark-count\s*\{[^}]*color:\s*#e8e8e4/);
   assert.match(css, /\.kosx-panel\s*\{[^}]*border-radius:\s*16px/);
   assert.match(css, /\.kosx-cta,\s*\.kosx-submit\s*\{[^}]*border:\s*0;[^}]*background:\s*#171917/);

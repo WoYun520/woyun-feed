@@ -114,14 +114,22 @@ body:has(.workspace-shell[data-workspace-tab="today"]) { background: var(--home-
 .kosx-status { flex: 1 1 100%; margin: 0; color: var(--home-muted, #62675d); font-size: 13px; }
 .kosx-status:empty { display: none; }
 .home-showcase { position: relative; }
+.home-hero { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; column-gap: 18px; }
 .boost-watermark {
-  position: absolute; top: 8px; right: 0; z-index: 2; display: flex; flex-direction: column;
-  align-items: flex-end; gap: 4px; pointer-events: none;
+  position: relative; justify-self: end; display: flex; flex-direction: column; align-items: flex-end;
+  gap: 2px; margin: 8px 0 0; pointer-events: none; user-select: none;
+}
+.boost-watermark-figure { position: relative; display: block; }
+.boost-watermark-wash {
+  position: absolute; z-index: 0; inset: 8% -10% -8%;
+  background: radial-gradient(ellipse at center, rgba(23, 25, 23, .05), transparent 70%);
 }
 .boost-watermark-count {
-  color: #e8e8e4; font-size: clamp(88px, 12vw, 160px); font-weight: 700; line-height: .8; letter-spacing: -.05em;
+  position: relative; z-index: 1; color: #e8e8e4;
+  font-family: var(--font-serif), "Iowan Old Style", Palatino, "Songti SC", serif;
+  font-size: clamp(88px, 12vw, 160px); font-weight: 700; line-height: .8; letter-spacing: -.05em;
 }
-.boost-watermark-label { color: #e8e8e4; font-size: 13px; font-weight: 650; letter-spacing: .2em; }
+.boost-watermark-label { color: #e8e8e4; font-size: 13px; font-weight: 650; letter-spacing: .22em; }
 .levi-signature { position: relative; margin: 18px 0 8px; padding: 12px 0 8px; text-align: center; color: var(--home-ink, #171917); }
 .levi-kicker { margin: 0; font-size: 12px; letter-spacing: .22em; text-transform: uppercase; color: var(--home-muted, #62675d); }
 .levi-flow {
@@ -228,7 +236,11 @@ body:has(.workspace-shell[data-workspace-tab="today"]) { background: var(--home-
   .lift-cats { flex-basis: 100%; order: 3; gap: 0 14px; }
   .lift-cat { font-size: 15px; }
   .cover-grid { grid-template-columns: 1fr; gap: 22px; }
-  .levi-flow { font-size: clamp(56px, 16vw, 84px); }
+  .home-hero { grid-template-columns: 1fr; }
+  .boost-watermark { grid-row: 1; }
+  .levi-signature { grid-row: 2; }
+  .boost-watermark-count { font-size: clamp(52px, 18vw, 76px); }
+  .levi-flow { font-size: clamp(48px, 14vw, 72px); }
   .lift-menu { position: fixed; inset: 0; width: auto; border-radius: 0; padding: 28px 22px; overflow: auto; }
   .home-band-heading h2 { font-size: 28px; }
 }

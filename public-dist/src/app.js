@@ -13,7 +13,7 @@ import { SOURCE_GROUPS, matchesSource } from './sourceGroups.js';
 import { renderTopicWorkspace, bindTopicActions, renderTopicDialog, openTopicDialog } from './topicViews.js';
 import { renderSourceBoard, bindSourceBoardActions, feedUpdateInfo, boardUpdateMessage } from './sourceBoard.js';
 import { renderHomeShowcase } from './homeShowcaseView.js';
-import { recordKosxBoost } from './homeShowcase.js';
+import { boostVisitorId, readBoostTotal, recordKosxBoost, writeBoostTotal } from './homeShowcase.js';
 import { repositoryName } from './repositoryGuide.js';
 import { renderCollectionPanel, bindCollectionActions } from './collectionViews.js';
 import { needsWelcome, rememberWelcome, renderWelcome, renderGuide } from './welcome.js';
@@ -67,6 +67,7 @@ class PersonalFeedApp {
     this.kosxDraft = '';
     this.kosxMessage = '';
     this.kosxError = '';
+    this.homeBoostCount = readBoostTotal(this.boostStore());
     this.homeSourcesOpen = false;
     this.boardGroup = 'all';
     this.sourceLimits = {};
@@ -79,9 +80,55 @@ class PersonalFeedApp {
     this.init();
   }
 
+  boostStore() {
+    try { return globalThis.localStorage || null; } catch { return null; }
+  }
+
+  paintBoost(count) {
+    if (!Number.isSafeInteger(count) || count < 0) return;
+    this.homeBoostCount = count;
+    const node = document.getElementById('home-boost-count');
+    if (node) node.textContent = String(count);
+  }
+
+  async refreshHomeBoost() {
+    try {
+      const response = await fetch('/api/home-boost', {headers:{Accept:'application/json'}});
+      if (!response.ok) return;
+      const body = await response.json();
+      if (!Number.isSafeInteger(body.count) || body.count < 0) return;
+      writeBoostTotal(this.boostStore(), body.count);
+      this.paintBoost(body.count);
+    } catch { /* Keep the last total painted in this browser. */ }
+  }
+
+  async noteHomeBoost(href) {
+    const store = this.boostStore();
+    const local = recordKosxBoost(store, href);
+    if (!local.counted) return;
+    const optimistic = readBoostTotal(store) + 1;
+    writeBoostTotal(store, optimistic);
+    this.paintBoost(optimistic);
+    const visitor = boostVisitorId(store);
+    if (!visitor || !local.id) return;
+    try {
+      const response = await fetch('/api/home-boost', {
+        method:'POST',
+        headers:{'Content-Type':'application/json', Accept:'application/json'},
+        body:JSON.stringify({visitor, status:local.id}),
+      });
+      if (!response.ok) return;
+      const body = await response.json();
+      if (!Number.isSafeInteger(body.count) || body.count < 0) return;
+      writeBoostTotal(store, body.count);
+      this.paintBoost(body.count);
+    } catch { /* The local once-only mark stays, and the painted total waits for the next read. */ }
+  }
+
   async init() {
     this.bindGlobalEvents();
     await this.loadAndRender();
+    this.refreshHomeBoost();
     this.startDotInboxReception();
   }
 
@@ -1468,10 +1515,7 @@ class PersonalFeedApp {
       document.getElementById('kosx-status')?.focus();
     });
     document.querySelectorAll('.cover-card a[href]').forEach(link=>link.addEventListener('click',()=>{
-      const result=recordKosxBoost(localStorage, link.getAttribute('href') || '');
-      if(!result.counted) return;
-      const node=document.querySelector('.boost-watermark-count');
-      if(node) node.textContent=String(result.count);
+      this.noteHomeBoost(link.getAttribute('href') || '');
     }));
     document.getElementById('home-open-sources')?.addEventListener('click',()=>{
       this.homeSourcesOpen=true;this.render();document.querySelector('.home-legacy-board .page-headline')?.focus();

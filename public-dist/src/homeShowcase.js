@@ -2,6 +2,8 @@ import { dotPostKey } from './dotCandidates.js';
 import { selectPostStream } from './postStream.js';
 
 export const KOSX_BOOST_STORAGE_KEY = 'woyun-kosx-boost:v1';
+export const HOME_BOOST_TOTAL_KEY = 'personal-feed:home-boost-total:v1';
+export const HOME_BOOST_VISITOR_KEY = 'personal-feed:visitor:v1';
 
 export const HOME_LATEST_LIMIT = 18;
 export const HOME_UNDERSTATED_LIMIT = 2;
@@ -165,20 +167,39 @@ function boostIds(store) {
   }
 }
 
-// This browser only. Opening a cover does not call a Worker or KV.
+// Local dedupe only. The number on the page is the shared total from /api/home-boost.
 export function readKosxBoost(store) {
   const ids = boostIds(store);
   return {count:ids.length, ids};
 }
 
+export function readBoostTotal(store) {
+  const count = Number(store?.getItem?.(HOME_BOOST_TOTAL_KEY));
+  return Number.isSafeInteger(count) && count >= 0 ? count : 0;
+}
+
+export function writeBoostTotal(store, count) {
+  if (!Number.isSafeInteger(count) || count < 0 || typeof store?.setItem !== 'function') return;
+  try { store.setItem(HOME_BOOST_TOTAL_KEY, String(count)); } catch { /* The watermark keeps the last painted number. */ }
+}
+
+export function boostVisitorId(store) {
+  const existing = store?.getItem?.(HOME_BOOST_VISITOR_KEY);
+  if (typeof existing === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(existing)) return existing;
+  const id = globalThis.crypto?.randomUUID?.() || '';
+  if (!id || typeof store?.setItem !== 'function') return '';
+  try { store.setItem(HOME_BOOST_VISITOR_KEY, id); return id; }
+  catch { return ''; }
+}
+
 export function recordKosxBoost(store, url) {
   const current = readKosxBoost(store);
   const key = dotPostKey(typeof url === 'string' ? url : '');
-  if (!key || !store || typeof store.setItem !== 'function') return {counted:false, count:current.count};
+  if (!key || !store || typeof store.setItem !== 'function') return {counted:false, count:current.count, id:''};
   const id = key.slice(2);
-  if (current.ids.includes(id)) return {counted:false, count:current.count};
+  if (current.ids.includes(id)) return {counted:false, count:current.count, id};
   const ids = [...current.ids, id].slice(-300);
   try { store.setItem(KOSX_BOOST_STORAGE_KEY, JSON.stringify({ids})); }
-  catch { return {counted:false, count:current.count}; }
-  return {counted:true, count:ids.length};
+  catch { return {counted:false, count:current.count, id}; }
+  return {counted:true, count:ids.length, id};
 }

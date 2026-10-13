@@ -3,7 +3,7 @@ import { creatorPreferenceKey, readCreatorPreferences } from './creatorTutorials
 import { normalizePostImage } from './postMedia.js';
 import { postStatusId } from './postStream.js';
 import { postAuthorLabel } from './topicWorkspace.js';
-import { homeViewName, readKosxBoost, selectHomeShowcase } from './homeShowcase.js';
+import { homeViewName, readBoostTotal, selectHomeShowcase } from './homeShowcase.js';
 
 const shorten = (value, maximum) => {
   const text = (typeof value === 'string' ? value : '').replace(/\s+/g, ' ').trim();
@@ -63,12 +63,13 @@ export function renderHomeShowcase(app, state, {now} = {}) {
     : view === 'week' ? renderWeek(app, state, selection)
     : view === 'kept' ? renderKept(app, state, selection)
     : renderLatest(app, state, selection);
-  return `<div class="home-showcase">${renderBoostWatermark()}${signature}${strap}${body}</div>`;
+  return `<div class="home-showcase"><div class="home-hero">${signature}${renderBoostWatermark(app)}</div>${strap}${body}</div>`;
 }
 
-function renderBoostWatermark() {
-  const count = readKosxBoost(preferenceStorage()).count;
-  return `<aside class="boost-watermark"><span class="boost-watermark-count">${count}</span><span class="boost-watermark-label">已助力</span></aside>`;
+function renderBoostWatermark(app) {
+  const stored = readBoostTotal(preferenceStorage());
+  const count = Number.isSafeInteger(app?.homeBoostCount) && app.homeBoostCount >= 0 ? app.homeBoostCount : stored;
+  return `<aside class="boost-watermark" aria-label="已助力"><span class="boost-watermark-label">已助力</span><span class="boost-watermark-figure"><span class="boost-watermark-wash" aria-hidden="true"></span><span class="boost-watermark-count" id="home-boost-count">${count}</span></span></aside>`;
 }
 
 function renderSignature() {
