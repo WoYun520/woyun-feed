@@ -1499,12 +1499,15 @@ class PersonalFeedApp {
       window.scrollTo({top,behavior:'instant'});
       document.getElementById(this.kosxOpen ? 'kosx-link' : 'kosx-open')?.focus();
     });
-    document.getElementById('kosx-panel')?.addEventListener('submit',event=>{
+    document.getElementById('kosx-panel')?.addEventListener('submit',async event=>{
       event.preventDefault();
+      const form=event.currentTarget;
+      if(form?.dataset.busy==='1') return;
       const draft=document.getElementById('kosx-link')?.value || '';
       const top=window.scrollY;
+      if(form) form.dataset.busy='1';
       try {
-        const result=feedAdapter.submitKosxLink(draft);
+        const result=await feedAdapter.submitKosxLink(draft);
         this.kosxOpen=true;this.kosxDraft='';this.kosxError='';
         this.kosxMessage=result.duplicate ? '这条已在待筛选里' : '已进入待筛选';
       } catch(error) {
