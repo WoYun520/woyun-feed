@@ -75,8 +75,8 @@ body:has(.workspace-shell[data-workspace-tab="today"]) { background: var(--home-
   display: flex; align-items: center; gap: 10px 14px; min-height: 44px; margin: 0; padding: 4px 0;
   border-bottom: 1px solid #e8e8e4;
 }
-.kosx-name { margin: 0; flex: 0 0 auto; color: #62675d; font-size: 11px; font-weight: 650; letter-spacing: .02em; line-height: 1.3; }
-.kosx-hint { margin: 0; flex: 1 1 auto; min-width: 0; color: #171917; font-size: 15px; font-weight: 650; line-height: 1.35; }
+.kosx-name { margin: 0; flex: 0 0 auto; color: #171917; font-size: 16px; font-weight: 800; letter-spacing: 0; line-height: 1.2; }
+.kosx-hint { margin: 0; flex: 1 1 auto; min-width: 0; color: #62675d; font-size: 13px; font-weight: 500; line-height: 1.35; }
 .kosx-cta, .kosx-submit {
   display: inline-flex; align-items: center; justify-content: center; height: 36px; min-height: 36px; padding: 0 18px;
   border: 0; border-radius: 999px; background: #171917; color: #ffffff;

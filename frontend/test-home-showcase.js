@@ -162,9 +162,11 @@ test('default homepage renders cover cards, signature, navigation labels and no 
   assert.match(css, /\.boost-watermark-label\s*\{[^}]*color:\s*#62675d/);
   assert.match(css, /\.boost-watermark-wash\s*\{[^}]*radial-gradient/);
   assert.doesNotMatch(css, /\.boost-watermark-wash\s*\{[^}]*display:\s*none/);
-  assert.match(css, /\.kosx-name\s*\{[^}]*font-size:\s*11px/);
-  assert.match(css, /\.kosx-name\s*\{[^}]*color:\s*#62675d/);
-  assert.match(css, /\.kosx-hint\s*\{[^}]*font-size:\s*15px/);
+  assert.match(css, /\.kosx-name\s*\{[^}]*font-size:\s*16px/);
+  assert.match(css, /\.kosx-name\s*\{[^}]*font-weight:\s*800/);
+  assert.match(css, /\.kosx-name\s*\{[^}]*color:\s*#171917/);
+  assert.match(css, /\.kosx-hint\s*\{[^}]*font-size:\s*13px/);
+  assert.match(css, /\.kosx-hint\s*\{[^}]*color:\s*#62675d/);
   assert.match(css, /\.kosx-panel\s*\{[^}]*border-radius:\s*16px/);
   assert.match(css, /\.kosx-panel input\s*\{[^}]*border-radius:\s*8px/);
   assert.match(css, /\.kosx-cta,\s*\.kosx-submit\s*\{[^}]*border:\s*0;[^}]*background:\s*#171917/);
