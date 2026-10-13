@@ -1,6 +1,6 @@
 # 待筛选进料口
 
-公开首页的「贴链接」和 Overheard 都把一条 X 精华帖交给这个接口。服务只把它记为 `pending`，按帖子编号去重，写在私有 KV `DOT_INBOX` 的 `pending:` 前缀下。这里没有过审、拒绝或公开首页操作，也不会改写 `PUBLIC_FEED`。
+公开首页的「贴链接」和 Overheard 都把一条 X 精华帖交给这个接口。服务只把它记为 `pending`，按帖子编号去重，写在私有 KV `DOT_INBOX` 的 `pending:` 前缀下。这个 POST 本身不过审，也不改写 `PUBLIC_FEED`。要把一条已经在队列里的链接放上公开首页，用接收码调用 [待筛选过审](pending-review.md)。
 
 **当前仓库改动还没有部署。** 下面的地址要等有人在仓库根目录执行 `npx wrangler deploy` 之后才会出现在预览 Worker `woyun-feed-preview` 上。不要把这次部署打到名为 `woyun` 的 Worker。部署前，对现网地址发 POST 不会进入这套待筛选。
 
@@ -56,4 +56,6 @@ curl -sS 'https://woyun-feed-preview.hhzovo66.workers.dev/api/dot/pending' \
 
 浏览器不保存、不发送投递密钥或接收码。Worker 必须已经配置 `DOT_DELIVERY_TOKEN_HASH` 和 `DOT_REVIEW_TOKEN_HASH`，而且两把哈希不同。缺配置时 `/api/dot/pending` 与 `/api/dot/inbox` 一样返回 `503`，不回退到公开文件。本机 `node frontend/serve.js` 没有这条路由，贴链接在纯静态本地服务上会失败；要打到已部署的预览 Worker。
 
-无密钥的单条提交是公开的：任何能访问该地址的客户端都可以放入一条 X 链接。它只能进入待筛选，队列有 300 条上限，不能读取备注，也不能写公开首页。
+无密钥的单条提交是公开的：任何能访问该地址的客户端都可以放入一条 X 链接。它只能进入待筛选，队列有 300 条上限，不能读取备注，也不能写公开首页。已经过审或已略过的链接再贴一次，不会被退回 `pending`。
+
+过审和从首页撤回见 [待筛选过审](pending-review.md)。

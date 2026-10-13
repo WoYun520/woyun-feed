@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { FEED_CHANNELS, parseSubscription, normalizeSubscription, mergeSourceItems, sourceLinkIdentity, sourceBucketFromItems } from './feed-sources.js';
 import { normalizeRepositories } from './repository-normalize.js';
 import { makePublicFeed, publicUrl, PRIVATE_CONTENT } from './public-feed-data.js';
+import { attachKosxApproved } from './kosx-public-posts.js';
 import { readHackerNewsApi } from './hackernews-source-reader.js';
 import { readSopilotRank } from './sopilot-source-reader.js';
 import { readSopilotAuthor } from './sopilot-author-reader.js';
@@ -168,9 +169,15 @@ export async function loadPublicSeed(env) {
   return response.json();
 }
 
-export async function runScheduledUpdate(env) {
+export async function runScheduledUpdate(env, options) {
   const previous=await env.PUBLIC_FEED.get(PUBLIC_FEED_KEY,'json') || await loadPublicSeed(env);
-  const next=await refreshPublicFeed(previous);
+  const refreshed=await refreshPublicFeed(previous, options);
+  let approved=[];
+  if (typeof env?.DOT_INBOX?.list==='function') {
+    const {listApprovedKosxRecords}=await import('../dot-pending-service.js');
+    approved=await listApprovedKosxRecords(env);
+  }
+  const next=attachKosxApproved(refreshed, approved);
   // A single completed snapshot is published; partial failures keep each source's previous items.
   await env.PUBLIC_FEED.put(PUBLIC_FEED_KEY,JSON.stringify(next));
   console.log(JSON.stringify({event:'public-feed-updated',status:next.refresh.status,items:next.items.length,new_items:next.refresh.new_count,

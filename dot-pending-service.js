@@ -1,14 +1,19 @@
 import { dotPostKey } from './frontend/src/dotCandidates.js';
 import { containsCredentialText } from './frontend/src/contentPrivacy.js';
 import { dotInboxHash } from './dot-inbox-service.js';
+import { PUBLIC_FEED_KEY, loadPublicSeed } from './frontend/cloud-feed-service.js';
+import { attachKosxApproved, kosxPublicItem } from './frontend/kosx-public-posts.js';
+import { PRIVATE_CONTENT } from './frontend/public-feed-data.js';
 
 export const DOT_PENDING_PATH = '/api/dot/pending';
+export const DOT_PENDING_DECISION_PATH = '/api/dot/pending/decision';
 export const DOT_PENDING_PREFIX = 'pending:';
 export const DOT_PENDING_MAX = 300;
 export const DOT_PENDING_BATCH_MAX = 20;
 const MAX_NOTE = 400;
 const MAX_BODY = 64 * 1024;
 const recordFields = ['id', 'key', 'url', 'author_handle', 'note', 'status', 'submitted_at', 'source'];
+const decidedFields = [...recordFields, 'reviewed_at'];
 const hashPattern = /^[a-f0-9]{64}$/i;
 
 class PendingError extends Error {
@@ -31,7 +36,7 @@ function json(value, status = 200, extraHeaders = {}) {
 }
 
 export function isDotPendingRoute(pathname) {
-  return pathname === DOT_PENDING_PATH;
+  return pathname === DOT_PENDING_PATH || pathname === DOT_PENDING_DECISION_PATH;
 }
 
 function timestamp(value) {
@@ -141,8 +146,12 @@ async function readBody(request) {
 }
 
 function validRecord(value, storageKey) {
-  if (!plain(value) || Object.keys(value).length !== recordFields.length || recordFields.some(field => !Object.hasOwn(value, field))) return false;
-  if (value.status !== 'pending' || !['homepage', 'delivery'].includes(value.source)) return false;
+  const decided = value?.status === 'approved' || value?.status === 'rejected';
+  const fields = decided ? decidedFields : recordFields;
+  if (!plain(value) || Object.keys(value).length !== fields.length || fields.some(field => !Object.hasOwn(value, field))) return false;
+  if (!['pending', 'approved', 'rejected'].includes(value.status) || !['homepage', 'delivery'].includes(value.source)) return false;
+  if (decided && !timestamp(value.reviewed_at)) return false;
+  if (!decided && Object.hasOwn(value, 'reviewed_at')) return false;
   if (`${DOT_PENDING_PREFIX}${value.key}` !== storageKey || value.id !== `kosx-${value.key.slice(2)}`) return false;
   if (typeof value.note !== 'string' || value.note.length > MAX_NOTE || /[\u0000-\u001f\u007f]/.test(value.note) || containsCredentialText(value.note)) return false;
   if (!timestamp(value.submitted_at)) return false;
@@ -172,8 +181,17 @@ async function pendingCount(env) {
 function publicView(record, {includeNote}) {
   return {
     id:record.id, key:record.key, url:record.url, author_handle:record.author_handle, status:record.status,
-    submitted_at:record.submitted_at, ...(includeNote ? {note:record.note, source:record.source} : {}),
+    submitted_at:record.submitted_at,
+    ...(includeNote && record.reviewed_at ? {reviewed_at:record.reviewed_at} : {}),
+    ...(includeNote ? {note:record.note, source:record.source} : {}),
   };
+}
+
+function intakeView(record, {includeNote, existing}) {
+  const view = {...publicView(record, {includeNote}), existing};
+  if (existing && record.status === 'approved') view.message = '这条已经在公开首页。';
+  if (existing && record.status === 'rejected') view.message = '这条已从待筛选里略过。';
+  return view;
 }
 
 function queryCursor(url, isRead) {
@@ -185,6 +203,76 @@ function queryCursor(url, isRead) {
   return value;
 }
 
+export async function listApprovedKosxRecords(env) {
+  const records = [];
+  let cursor;
+  for (let page = 0; page < 10; page += 1) {
+    let listed;
+    try { listed = await env.DOT_INBOX.list({prefix:DOT_PENDING_PREFIX, limit:DOT_PENDING_MAX, ...(cursor ? {cursor} : {})}); }
+    catch { unavailable(); }
+    if (!listed || !Array.isArray(listed.keys) || listed.keys.length > DOT_PENDING_MAX || typeof listed.list_complete !== 'boolean') unavailable();
+    for (const entry of listed.keys) {
+      const key = entry?.name?.slice(DOT_PENDING_PREFIX.length);
+      if (!entry?.name?.startsWith(DOT_PENDING_PREFIX) || !key) unavailable();
+      const stored = await readStored(env, key);
+      if (!stored) unavailable();
+      if (stored.status === 'approved') records.push(stored);
+    }
+    if (listed.list_complete) return records;
+    if (typeof listed.cursor !== 'string' || !listed.cursor || listed.cursor === cursor) unavailable();
+    cursor = listed.cursor;
+  }
+  unavailable();
+}
+
+async function readPublicFeed(env) {
+  if (typeof env?.PUBLIC_FEED?.get !== 'function' || typeof env?.PUBLIC_FEED?.put !== 'function') unavailable();
+  let raw;
+  try { raw = await env.PUBLIC_FEED.get(PUBLIC_FEED_KEY); }
+  catch { unavailable(); }
+  if (typeof raw === 'string') {
+    try { raw = JSON.parse(raw); } catch { unavailable(); }
+  }
+  if (raw && typeof raw === 'object' && Array.isArray(raw.items) && Array.isArray(raw.sources)) return raw;
+  try { return await loadPublicSeed(env); }
+  catch { unavailable(); }
+}
+
+async function publishApproved(env) {
+  const feed = attachKosxApproved(await readPublicFeed(env), await listApprovedKosxRecords(env));
+  await env.PUBLIC_FEED.put(PUBLIC_FEED_KEY, JSON.stringify(feed));
+  return feed;
+}
+
+async function handleDecision(request, env, review) {
+  if (request.method !== 'POST') return json({error:'method_not_allowed', message:'不支持此操作。'}, 405, {Allow:'POST'});
+  if (!review) return json({error:'not_authorized', message:'过审需要接收码。投递密钥不能把链接放上首页。'}, 401, {'WWW-Authenticate':'Bearer realm="dot-pending"'});
+  if ([...new URL(request.url).searchParams.keys()].length) bad('unsupported_query', '此入口不支持这些查询参数；密钥只能放在请求头。');
+  if (request.headers.get('Content-Type')?.split(';')[0].trim().toLowerCase() !== 'application/json') return json({error:'json_required', message:'请使用 application/json 提交。'}, 415);
+  if (typeof env?.PUBLIC_FEED?.get !== 'function' || typeof env?.PUBLIC_FEED?.put !== 'function') unavailable();
+  const body = await readBody(request);
+  if (!plain(body) || Object.keys(body).length !== 2 || !Object.hasOwn(body, 'url') || !Object.hasOwn(body, 'status')) bad('invalid_body', '请提交要过审的 X 链接和结果。');
+  if (!['approved', 'rejected'].includes(body.status)) bad('invalid_status', '过审结果只能是 approved 或 rejected。');
+  const post = canonicalPendingPost(body.url);
+  if (!post) bad('invalid_url', '请粘贴有效的 X 链接。');
+  const stored = await readStored(env, post.key);
+  if (!stored) return json({error:'not_found', message:'这条链接不在待筛选里。'}, 404);
+  let record = stored;
+  const changed = stored.status !== body.status;
+  if (changed) {
+    record = {...stored, status:body.status, reviewed_at:new Date().toISOString()};
+    if (record.status === 'approved') {
+      const item = kosxPublicItem(record);
+      if (!item || containsCredentialText(item) || PRIVATE_CONTENT.test(JSON.stringify(item))) bad('invalid_note', '这条备注不能放上公开首页。');
+    }
+    await env.DOT_INBOX.put(`${DOT_PENDING_PREFIX}${record.key}`, JSON.stringify(record), {
+      metadata:{id:record.id, key:record.key, status:record.status, submitted_at:record.submitted_at, reviewed_at:record.reviewed_at},
+    });
+  }
+  await publishApproved(env);
+  return json({...publicView(record, {includeNote:true}), existing:!changed, published:record.status === 'approved'});
+}
+
 export async function handleDotPendingRequest(request, env) {
   try {
     const url = new URL(request.url);
@@ -192,10 +280,11 @@ export async function handleDotPendingRequest(request, env) {
     const origin = request.headers.get('Origin');
     if (origin !== null && origin !== url.origin) return json({error:'origin_not_allowed', message:'不接受其他网站发来的待筛选请求。'}, 403);
     if (!configured(env)) unavailable();
-    if (!['GET', 'POST'].includes(request.method)) return json({error:'method_not_allowed', message:'不支持此操作。'}, 405, {Allow:'GET, POST'});
-    const isRead = request.method === 'GET';
     const delivery = await authorized(request, env.DOT_DELIVERY_TOKEN_HASH);
     const review = await authorized(request, env.DOT_REVIEW_TOKEN_HASH);
+    if (url.pathname === DOT_PENDING_DECISION_PATH) return await handleDecision(request, env, review);
+    if (!['GET', 'POST'].includes(request.method)) return json({error:'method_not_allowed', message:'不支持此操作。'}, 405, {Allow:'GET, POST'});
+    const isRead = request.method === 'GET';
     if (isRead ? !review : request.headers.get('Authorization') && !delivery) return json({error:'not_authorized', message:'待筛选连接未通过，请检查对应的接入密钥。'}, 401, {'WWW-Authenticate':'Bearer realm="dot-pending"'});
     const cursor = queryCursor(url, isRead);
     if (isRead) {
@@ -235,7 +324,7 @@ export async function handleDotPendingRequest(request, env) {
       });
       existing.set(post.key, record);
     }
-    const results = posts.map(post => ({...publicView(existing.get(post.key), {includeNote:delivery}), existing:!created.includes(post)}));
+    const results = posts.map(post => intakeView(existing.get(post.key), {includeNote:delivery, existing:!created.includes(post)}));
     if (!batched) return json(results[0], created.length ? 201 : 200);
     return json({status:'pending', results}, created.length ? 201 : 200);
   } catch (error) {
