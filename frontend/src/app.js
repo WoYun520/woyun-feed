@@ -11,7 +11,9 @@ import { BACKUP_LIMIT } from './backup.js';
 import { WRITING_FORMATS } from './writingBrief.js';
 import { SOURCE_GROUPS, matchesSource } from './sourceGroups.js';
 import { renderTopicWorkspace, bindTopicActions, renderTopicDialog, openTopicDialog } from './topicViews.js';
-import { renderSourceBoard, bindSourceBoardActions, feedUpdateInfo, boardUpdateMessage } from './sourceBoard.js';
+import { bindSourceBoardActions, feedUpdateInfo, boardUpdateMessage } from './sourceBoard.js';
+import { renderHomeShowcase } from './homeShowcaseView.js';
+import { boostVisitorId, readBoostTotal, recordKosxBoost, writeBoostTotal } from './homeShowcase.js';
 import { repositoryName } from './repositoryGuide.js';
 import { renderCollectionPanel, bindCollectionActions } from './collectionViews.js';
 import { needsWelcome, rememberWelcome, renderWelcome, renderGuide } from './welcome.js';
@@ -59,6 +61,14 @@ class PersonalFeedApp {
     this.refreshing = false;
     this.refreshError = "";
     this.feedView = 'sources';
+    this.homeView = 'latest';
+    this.homeMenuOpen = false;
+    this.catsOpen = false;
+    this.kosxOpen = false;
+    this.kosxDraft = '';
+    this.kosxMessage = '';
+    this.kosxError = '';
+    this.homeBoostCount = readBoostTotal(this.boostStore());
     this.boardGroup = 'all';
     this.sourceLimits = {};
     this.sourceFilter = 'all';
@@ -70,9 +80,55 @@ class PersonalFeedApp {
     this.init();
   }
 
+  boostStore() {
+    try { return globalThis.localStorage || null; } catch { return null; }
+  }
+
+  paintBoost(count) {
+    if (!Number.isSafeInteger(count) || count < 0) return;
+    this.homeBoostCount = count;
+    const node = document.getElementById('home-boost-count');
+    if (node) node.textContent = String(count);
+  }
+
+  async refreshHomeBoost() {
+    try {
+      const response = await fetch('/api/home-boost', {headers:{Accept:'application/json'}});
+      if (!response.ok) return;
+      const body = await response.json();
+      if (!Number.isSafeInteger(body.count) || body.count < 0) return;
+      writeBoostTotal(this.boostStore(), body.count);
+      this.paintBoost(body.count);
+    } catch { /* Keep the last total painted in this browser. */ }
+  }
+
+  async noteHomeBoost(href) {
+    const store = this.boostStore();
+    const local = recordKosxBoost(store, href);
+    if (!local.counted) return;
+    const optimistic = readBoostTotal(store) + 1;
+    writeBoostTotal(store, optimistic);
+    this.paintBoost(optimistic);
+    const visitor = boostVisitorId(store);
+    if (!visitor || !local.id) return;
+    try {
+      const response = await fetch('/api/home-boost', {
+        method:'POST',
+        headers:{'Content-Type':'application/json', Accept:'application/json'},
+        body:JSON.stringify({visitor, status:local.id}),
+      });
+      if (!response.ok) return;
+      const body = await response.json();
+      if (!Number.isSafeInteger(body.count) || body.count < 0) return;
+      writeBoostTotal(store, body.count);
+      this.paintBoost(body.count);
+    } catch { /* The local once-only mark stays, and the painted total waits for the next read. */ }
+  }
+
   async init() {
     this.bindGlobalEvents();
     await this.loadAndRender();
+    this.refreshHomeBoost();
     this.startDotInboxReception();
   }
 
@@ -104,7 +160,8 @@ class PersonalFeedApp {
     if (!state) return;
     const container = document.getElementById('feed-load-status');
     if (container) {
-      container.innerHTML = state.loadStatus?.phase==='ready' && !this.pendingRender ? '' : renderFeedLoadStatus(this, state, { deferred: !!this.pendingRender });
+      const quietHome = this.isPublicHome(state) && document.querySelector('[data-public-home="true"]');
+      container.innerHTML = quietHome || (state.loadStatus?.phase==='ready' && !this.pendingRender) ? '' : renderFeedLoadStatus(this, state, { deferred: !!this.pendingRender });
       document.getElementById('btn-retry-feed')?.addEventListener('click', () => this.retryFeedRead());
     }
     const button = document.getElementById('btn-check-update');
@@ -138,7 +195,7 @@ class PersonalFeedApp {
     const existing = feedAdapter.getState();
     this.setupFeedSubscription();
     if (existing) { this.ensureWelcome(existing); this.render(); }
-    else {
+    else if (!feedAdapter.publicPreview) {
       if (appEl) appEl.innerHTML = renderInitialFeedLoad(this);
       this.initialLoadTimer = setTimeout(() => {
         if (this.loadingInitial && !feedAdapter.getState() && appEl) appEl.innerHTML = renderInitialFeedLoad(this, null, { slow: true });
@@ -157,6 +214,8 @@ class PersonalFeedApp {
       if (feedAdapter.getState()) {
         if (this.shouldDeferBackgroundRender()) { this.pendingRender = true; this.updateFeedStatus(); }
         else this.render();
+      } else if (appEl && feedAdapter.publicPreview) {
+        appEl.innerHTML = '<main class="page-container"><p class="home-empty">暂时没有可显示的内容。</p></main>';
       } else if (appEl) {
         appEl.innerHTML = renderInitialFeedLoad(this, error);
         document.getElementById('btn-retry-load')?.addEventListener('click', () => this.retryFeedRead());
@@ -436,7 +495,12 @@ class PersonalFeedApp {
     });
   }
 
+  isPublicHome(state = feedAdapter.getState()) {
+    return this.currentTab === 'today' && state?.mode === 'live' && this.feedView === 'sources';
+  }
+
   switchTab(tab) {
+    this.homeMenuOpen = false;
     this.currentTab = tab;
     window.scrollTo({ top: 0, behavior: 'smooth' });
     this.render();
@@ -628,15 +692,17 @@ class PersonalFeedApp {
     }
     this.pendingRender = false;
     this.renderedGeneratedAt = state.generated_at;
+    const publicHome = this.isPublicHome(state);
 
     appEl.innerHTML = `
-      <div class="workspace-shell" data-workspace-tab="${this.currentTab}">
-      ${renderWorkspaceNavigation(this.currentTab,state)}
-      <main id="workspace-main" tabindex="-1" class="page-container ${this.currentTab === 'today' && state.mode === 'live' && this.feedView === 'sources' ? 'source-board-page' : ''}" role="main">
-        ${renderWorkspaceStorageNotice(state)}
-        <div id="feed-load-status" role="status" aria-live="polite">${state.loadStatus?.phase === 'ready' ? '' : renderFeedLoadStatus(this, state)}</div>
-        ${this.currentTab === 'today' && this.welcomeVisible ? renderWelcome() : ''}
+      <div class="workspace-shell" data-workspace-tab="${this.currentTab}"${publicHome ? ' data-public-home="true"' : ''}>
+      ${renderWorkspaceNavigation(this.currentTab,state,{homeView:this.homeView,catsOpen:this.catsOpen})}
+      <main id="workspace-main" tabindex="-1" class="page-container ${publicHome ? 'source-board-page' : ''}" role="main">
+        ${publicHome ? '' : renderWorkspaceStorageNotice(state)}
+        <div id="feed-load-status" role="status" aria-live="polite">${publicHome || state.loadStatus?.phase === 'ready' ? '' : renderFeedLoadStatus(this, state)}</div>
+        ${!publicHome && this.currentTab === 'today' && this.welcomeVisible ? renderWelcome() : ''}
         ${this.renderMainContent(state)}
+        ${publicHome ? renderWorkspaceStorageNotice(state, {audience:'visitor'}) : ''}
       </main></div>
       <div id="modal-root"></div>
       <div id="toast-container" class="toast-container" aria-live="polite"></div>
@@ -730,7 +796,7 @@ class PersonalFeedApp {
 
   // 1. 今日首页视图
   renderTodayFeedView(state) {
-    if (state.mode === 'live' && this.feedView === 'sources') return renderSourceBoard(this,state);
+    if (state.mode === 'live' && this.feedView === 'sources') return renderHomeShowcase(this, state);
     state = this.readingState(state);
     const isProfileEmpty = state.mode === 'demo' && !state.profile.interests && !state.profile.exclude;
     const totalVisible = state.dailyItems.length + state.discoverItems.length;
@@ -1362,7 +1428,11 @@ class PersonalFeedApp {
       feedAdapter.setSaved(itemId,!saved);
       window.scrollTo({top:y,left:x,behavior:'instant'});
       if(button.id) (document.getElementById(button.id) || document.querySelector('.page-headline'))?.focus({preventScroll:true});
-      if(!saved) this.showToast('已收藏，继续浏览就好。','查看收藏',()=>{this.savedSubTab='items';this.switchTab('saved');},7000);
+      if(!saved) {
+        if (this.isPublicHome()) this.showToast('已收藏，只留在这个浏览器。');
+        else this.showToast('已收藏，继续浏览就好。','查看收藏',()=>{this.savedSubTab='items';this.switchTab('saved');},7000);
+      }
+      else if (this.isPublicHome()) this.showToast('已取消收藏。');
       else this.showToast('已取消收藏，主题里的材料保留。','撤销',()=>{
         try {feedAdapter.restoreSaved(itemId,{archived});this.showToast(archived ? '已恢复到归档。' : '已恢复收藏。');}
         catch(error){this.showToast(error.message);}
@@ -1405,6 +1475,49 @@ class PersonalFeedApp {
     bindPostMediaEvents(document);
     if (this.currentTab==='tutorials') bindCreatorActions(this,state);
     bindSourceBoardActions(this);
+    document.querySelectorAll('[data-home-view]').forEach(button=>button.addEventListener('click',()=>{
+      const view=button.dataset.homeView;
+      if(!['latest','yesterday','week','kept'].includes(view)) return;
+      this.homeView=view;this.homeMenuOpen=false;this.catsOpen=false;this.feedView='sources';this.currentTab='today';
+      this.render();window.scrollTo({top:0,behavior:'instant'});
+      document.querySelector(`[data-home-view="${view}"]`)?.focus();
+    }));
+    document.getElementById('home-cats-button')?.addEventListener('click',()=>{
+      const top=window.scrollY;this.catsOpen=!this.catsOpen;this.render();
+      window.scrollTo({top,behavior:'instant'});
+      document.getElementById(this.catsOpen ? 'home-cats' : 'home-cats-button')?.focus();
+    });
+    document.getElementById('home-cats')?.addEventListener('keydown',event=>{
+      if(event.key!=='Escape') return;
+      event.preventDefault();this.catsOpen=false;this.render();document.getElementById('home-cats-button')?.focus();
+    });
+    document.getElementById('kosx-open')?.addEventListener('click',()=>{
+      const top=window.scrollY;
+      this.kosxOpen=!this.kosxOpen;
+      if(!this.kosxOpen){this.kosxMessage='';this.kosxError='';}
+      this.render();
+      window.scrollTo({top,behavior:'instant'});
+      document.getElementById(this.kosxOpen ? 'kosx-link' : 'kosx-open')?.focus();
+    });
+    document.getElementById('kosx-panel')?.addEventListener('submit',event=>{
+      event.preventDefault();
+      const draft=document.getElementById('kosx-link')?.value || '';
+      const top=window.scrollY;
+      try {
+        const result=feedAdapter.submitKosxLink(draft);
+        this.kosxOpen=true;this.kosxDraft='';this.kosxError='';
+        this.kosxMessage=result.duplicate ? '这条已在待筛选里' : '已进入待筛选';
+      } catch(error) {
+        this.kosxOpen=true;this.kosxDraft=draft;this.kosxMessage='';
+        this.kosxError=error.message || '没有放入待筛选。';
+      }
+      this.render();
+      window.scrollTo({top,behavior:'instant'});
+      document.getElementById('kosx-status')?.focus();
+    });
+    document.querySelectorAll('.cover-card a[href]').forEach(link=>link.addEventListener('click',()=>{
+      this.noteHomeBoost(link.getAttribute('href') || '');
+    }));
     bindTopicActions(this,state);
     bindCollectionActions(this);
     this.bindTopicChoices(document);
