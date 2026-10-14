@@ -82,13 +82,12 @@ test('昨日全部 is homepage essence for that Beijing day, and underrated is p
   assert.ok(selected.reference.weekKeys.includes('2026-10-04'));
   assert.ok(selected.reference.weekKeys.includes('2026-10-10'));
   const pin = (item, day) => ({id:item.id, key:`x:${item.id}`, url:item.original_url, day});
-  const pinned = selectHomeShowcase({...input, underratedPins:[pin(sourced, '2026-10-09'), pin(human, '2026-10-09'), pin(pooled, '2026-10-09'), pin(stream, '2026-10-09'), pin(otherDay, '2026-10-08')]});
+  const pinned = selectHomeShowcase({...input, underratedPins:[pin(pooled, '2026-10-09'), pin(sourced, '2026-10-09'), pin(human, '2026-10-09'), pin(stream, '2026-10-09'), pin(otherDay, '2026-10-08')]});
   assert.equal(pinned.underratedRule, 'pinned');
-  assert.deepEqual(pinned.underrated.map(entry => entry.post.item.id), [sourced.id, human.id]);
-  assert.equal(pinned.underrated.some(entry => entry.post.item.kosx_review === 'pool'), false);
+  assert.deepEqual(pinned.underrated.map(entry => entry.post.item.id), [pooled.id, sourced.id]);
   const one = selectHomeShowcase({...input, underratedPins:[pin(human, '2026-10-09')]});
   assert.deepEqual(one.underrated.map(entry => entry.post.item.id), [human.id]);
-  const missed = selectHomeShowcase({...input, underratedPins:[pin(stream, '2026-10-09'), pin(pooled, '2026-10-09'), pin(otherDay, '2026-10-08')]});
+  const missed = selectHomeShowcase({...input, underratedPins:[pin(stream, '2026-10-09'), pin(otherDay, '2026-10-08')]});
   assert.equal(missed.underratedRule, 'empty');
   assert.deepEqual(missed.underrated, []);
   const page = renderHomeShowcase(app('yesterday'), input);
@@ -104,6 +103,11 @@ test('昨日全部 is homepage essence for that Beijing day, and underrated is p
   assert.doesNotMatch(band, /<p class="home-rule"|人工钉选的顺序|按现有公开指标粗排/);
   assert.ok(band.indexOf('过审精华') < band.indexOf('来源即过审'));
   assert.doesNotMatch(band, /池内精华|榜单帖/);
+  const pooledHtml = renderHomeShowcase(app(), {...input, underratedPins:[pin(pooled, '2026-10-09')]});
+  const pooledBand = pooledHtml.slice(pooledHtml.indexOf('id="home-underrated"'));
+  assert.match(pooledBand, /data-underrated-rule="pinned"/);
+  assert.match(pooledBand, /池内精华/);
+  assert.doesNotMatch(pooledBand, /榜单帖/);
   const quiet = renderHomeShowcase(app(), input);
   assert.doesNotMatch(quiet, /id="home-underrated"|昨日最被低估精华帖/);
 });
