@@ -71,7 +71,7 @@ export function renderHomeShowcase(app, state, {now} = {}) {
     : view === 'week' ? renderWeek(app, state, selection)
     : view === 'kept' ? renderKept(app, state, selection)
     : renderLatest(app, state, selection);
-  return `<div class="home-showcase">${renderKosxStrip(app)}<div class="home-hero">${signature}${renderBoostWatermark(app)}</div>${body}${strap}</div>`;
+  return `<div class="home-showcase">${renderKosxStrip(app)}<div class="home-hero">${signature}${renderBoostWatermark(app)}</div>${body}${strap}${renderKosxFooter()}</div>`;
 }
 
 function renderKosxStrip(app) {
@@ -81,7 +81,11 @@ function renderKosxStrip(app) {
   const error = typeof app?.kosxError === 'string' ? app.kosxError : '';
   const status = message || error;
   const e = value => app.escapeHtml(value);
-  return `<section class="kosx-band" aria-label="KOSX 助力计划"><div class="kosx-strip"><p class="kosx-name">KOSX 助力计划</p><p class="kosx-hint">上传你的精华帖链接</p><button type="button" class="kosx-cta" id="kosx-open" aria-expanded="${open ? 'true' : 'false'}" aria-controls="kosx-panel">贴链接</button></div><form class="kosx-panel" id="kosx-panel"${open ? '' : ' hidden'}><label for="kosx-link">粘贴 X 精华帖链接</label><input id="kosx-link" name="url" type="url" inputmode="url" autocomplete="off" spellcheck="false" maxlength="2000" placeholder="粘贴 X 精华帖链接" value="${e(draft)}"><button type="submit" class="kosx-submit">提交</button><p class="kosx-status" id="kosx-status" role="${error ? 'alert' : 'status'}" tabindex="-1">${e(status)}</p></form></section>`;
+  return `<section class="kosx-band" aria-label="KOSX 助力计划"><div class="kosx-strip"><div class="kosx-brand"><img class="kosx-mark" src="/assets/kosx/symbol-ink.svg" width="30" height="30" alt="KOSX 四瓣标志"><p class="kosx-name">KOSX 助力计划</p></div><p class="kosx-hint">上传你的精华帖链接</p><span class="kosx-paste"><span class="kosx-accent" aria-hidden="true"></span><button type="button" class="kosx-cta" id="kosx-open" aria-expanded="${open ? 'true' : 'false'}" aria-controls="kosx-panel">贴链接</button></span></div><form class="kosx-panel" id="kosx-panel"${open ? '' : ' hidden'}><label for="kosx-link">粘贴 X 精华帖链接</label><input id="kosx-link" name="url" type="url" inputmode="url" autocomplete="off" spellcheck="false" maxlength="2000" placeholder="粘贴 X 精华帖链接" value="${e(draft)}"><button type="submit" class="kosx-submit">提交</button><p class="kosx-status" id="kosx-status" role="${error ? 'alert' : 'status'}" tabindex="-1">${e(status)}</p></form></section>`;
+}
+
+function renderKosxFooter() {
+  return `<footer class="kosx-footer"><img class="kosx-wordmark" src="/assets/kosx/wordmark-ink.svg" width="187" height="32" alt="KOSX.ai，橙色圆点"></footer>`;
 }
 
 function renderBoostWatermark(app) {
