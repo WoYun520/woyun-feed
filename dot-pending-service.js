@@ -6,6 +6,7 @@ import { attachKosxApproved, kosxPublicItem } from './frontend/kosx-public-posts
 import { isKosxPoolHandle } from './frontend/kosx-pool.js';
 import { wouldEnterUnderrated } from './frontend/src/homeShowcase.js';
 import { PRIVATE_CONTENT } from './frontend/public-feed-data.js';
+import { normalizeCoverUrl } from './frontend/src/postMedia.js';
 import { REVIEW_COUNT_MAX, REVIEW_TEXT_MAX, REVIEW_TYPES, classifyReviewItem } from './frontend/src/reviewQueue.js';
 
 export const DOT_PENDING_PATH = '/api/dot/pending';
@@ -17,9 +18,9 @@ const MAX_NOTE = 400;
 const MAX_BODY = 64 * 1024;
 const recordFields = ['id', 'key', 'url', 'author_handle', 'note', 'status', 'submitted_at', 'source'];
 const decidedFields = [...recordFields, 'reviewed_at'];
-const signalFields = ['review_type', 'bookmark_count', 'like_count', 'has_article', 'text'];
+const signalFields = ['review_type', 'bookmark_count', 'like_count', 'has_article', 'cover_url', 'text'];
 const timeFields = ['published_at', 'created_at'];
-const intakeFields = ['url', 'author_handle', 'note', 'review_type', 'bookmark_count', 'like_count', 'has_article', 'text', 'published_at', 'created_at'];
+const intakeFields = ['url', 'author_handle', 'note', 'review_type', 'bookmark_count', 'like_count', 'has_article', 'cover_url', 'text', 'published_at', 'created_at'];
 const hashPattern = /^[a-f0-9]{64}$/i;
 
 class PendingError extends Error {
@@ -121,6 +122,13 @@ function cleanInstant(value, present) {
   return new Date(value).toISOString();
 }
 
+function cleanCover(value, present) {
+  if (!present) return undefined;
+  const cover = normalizeCoverUrl(value);
+  if (!cover) bad('invalid_cover', '封面需为不含密钥的 https 地址。');
+  return cover;
+}
+
 function onePost(value, {allowNote}) {
   if (!plain(value)) bad('invalid_body', '请提交 X 精华帖链接。');
   const keys = Object.keys(value);
@@ -141,6 +149,7 @@ function onePost(value, {allowNote}) {
   const bookmark_count = cleanCount(value.bookmark_count, Object.hasOwn(value, 'bookmark_count'), '收藏数');
   const like_count = cleanCount(value.like_count, Object.hasOwn(value, 'like_count'), '点赞数');
   const has_article = cleanArticle(value.has_article, Object.hasOwn(value, 'has_article'));
+  const cover_url = cleanCover(value.cover_url, Object.hasOwn(value, 'cover_url'));
   const text = cleanText(value.text, Object.hasOwn(value, 'text'));
   const published_at = cleanInstant(value.published_at, Object.hasOwn(value, 'published_at'));
   const created_at = cleanInstant(value.created_at, Object.hasOwn(value, 'created_at'));
@@ -151,6 +160,7 @@ function onePost(value, {allowNote}) {
     ...(bookmark_count !== undefined ? {bookmark_count} : {}),
     ...(like_count !== undefined ? {like_count} : {}),
     ...(has_article !== undefined ? {has_article} : {}),
+    ...(cover_url ? {cover_url} : {}),
     ...(text ? {text} : {}),
     ...(published_at ? {published_at} : {}),
     ...(created_at ? {created_at} : {}),
@@ -208,6 +218,7 @@ function signalsValid(value) {
     if (Object.hasOwn(value, field) && (typeof value[field] !== 'number' || !Number.isSafeInteger(value[field]) || value[field] < 0 || value[field] > REVIEW_COUNT_MAX)) return false;
   }
   if (Object.hasOwn(value, 'has_article') && typeof value.has_article !== 'boolean') return false;
+  if (Object.hasOwn(value, 'cover_url') && normalizeCoverUrl(value.cover_url) !== value.cover_url) return false;
   if (Object.hasOwn(value, 'text') && (typeof value.text !== 'string' || !value.text.trim() || value.text.length > REVIEW_TEXT_MAX || /[\u0000-\u001f\u007f]/.test(value.text) || containsCredentialText(value.text))) return false;
   for (const field of timeFields) if (Object.hasOwn(value, field) && !timestamp(value[field])) return false;
   const candidate = Object.hasOwn(value, 'underrated_candidate');
@@ -263,6 +274,7 @@ function signalView(record) {
   if (Object.hasOwn(record, 'bookmark_count')) view.bookmark_count = record.bookmark_count;
   if (Object.hasOwn(record, 'like_count')) view.like_count = record.like_count;
   if (Object.hasOwn(record, 'has_article')) view.has_article = record.has_article;
+  if (typeof record.cover_url === 'string') view.cover_url = record.cover_url;
   if (typeof record.text === 'string' && record.text) view.text = record.text;
   if (typeof record.published_at === 'string') view.published_at = record.published_at;
   if (typeof record.created_at === 'string') view.created_at = record.created_at;
@@ -305,6 +317,7 @@ function withReviewSignals(record, post) {
   if (post.bookmark_count !== undefined) next.bookmark_count = post.bookmark_count;
   if (post.like_count !== undefined) next.like_count = post.like_count;
   if (post.has_article !== undefined) next.has_article = post.has_article;
+  if (post.cover_url) next.cover_url = post.cover_url;
   if (post.text) next.text = post.text;
   if (post.published_at) next.published_at = post.published_at;
   if (post.created_at) next.created_at = post.created_at;
@@ -320,6 +333,7 @@ function absentSignal(stored, post, field) {
   if (Object.hasOwn(stored, field)) return undefined;
   if (field === 'bookmark_count' || field === 'like_count') return typeof post[field] === 'number' ? post[field] : undefined;
   if (field === 'has_article') return typeof post[field] === 'boolean' ? post[field] : undefined;
+  if (field === 'cover_url') return normalizeCoverUrl(post.cover_url) || undefined;
   if (field === 'review_type') return REVIEW_TYPES.includes(post[field]) ? post[field] : undefined;
   if (field === 'text') return typeof post.text === 'string' && post.text ? post.text : undefined;
   return undefined;
@@ -327,10 +341,10 @@ function absentSignal(stored, post, field) {
 
 // A later delivery may replace published_at / created_at when the body brings
 // a valid instant. Signal fields are fill-if-absent: bookmark_count, like_count,
-// review_type, has_article, and text are copied only when the stored row does
-// not already have them. Zero counts and has_article false count as present.
-// Notes and the review clock stay as first written. The caller leaves rejected
-// rows untouched.
+// review_type, has_article, cover_url, and text are copied only when the stored
+// row does not already have them. Zero counts and has_article false count as
+// present. An existing cover_url is not replaced. Notes and the review clock
+// stay as first written. The caller leaves rejected rows untouched.
 function mergeIntakeTimes(stored, post) {
   let changed = false;
   const next = {...stored};

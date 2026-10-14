@@ -1,10 +1,10 @@
 import { CREATOR_CATALOG } from './creatorCatalog.js';
 import { creatorPreferenceKey, readCreatorPreferences } from './creatorTutorials.js';
-import { normalizePostImage } from './postMedia.js';
+import { normalizeCoverUrl, normalizePostImage } from './postMedia.js';
 import { postStatusId } from './postStream.js';
 import { postAuthorLabel } from './topicWorkspace.js';
 import { isKosxPoolHandle } from '../kosx-pool.js';
-import { homeViewName, readBoostTotal, selectHomeShowcase } from './homeShowcase.js';
+import { homeViewName, isArticleClassItem, readBoostTotal, selectHomeShowcase } from './homeShowcase.js';
 
 export const KOSX_EMOJI_ALT = 'KOSX 精选计划表情';
 export const KOSX_EMOJI_INTERVAL_MS = 600;
@@ -141,6 +141,21 @@ function itemCover(item) {
   return normalizePostImage(item?.post_image, item?.original_url || item?.canonical_url);
 }
 
+function isKosxCard(item) {
+  if (!item || typeof item !== 'object') return false;
+  if (item.origin === 'kosx_approved') return true;
+  const refs = item.source_refs;
+  return Array.isArray(refs) && refs.length === 1 && refs[0] === 'sopilot-kosx';
+}
+
+// Article-class KOSX cards use a delivered cover when one was stored.
+// Anything else keeps the existing frame, including the text fallback.
+function articleCover(item) {
+  if (!isKosxCard(item) || !isArticleClassItem(item)) return null;
+  const url = normalizeCoverUrl(item?.cover_url);
+  return url ? {url, kind:'article_cover'} : null;
+}
+
 function collectionFor(state, post) {
   const savedIds = state.savedItemIds || new Set(), archivedIds = state.archivedItemIds || new Set();
   const matches = item => item && (post.itemIds?.includes(item.id) || item.alias_ids?.some(id => post.itemIds?.includes(id))
@@ -275,7 +290,7 @@ function renderPostCard(app, state, entry, group) {
   const post = entry.post, item = post.item, e = value => app.escapeHtml(value);
   const title = item.title || '来源未提供标题';
   const excerpt = typeof item.summary === 'string' ? item.summary.trim() : '';
-  const image = coverImage(post);
+  const image = articleCover(item) || coverImage(post);
   const collection = collectionFor(state, post);
   const id = e(item.id);
   const names = sourceNames(entry, state).join('、');
@@ -299,7 +314,7 @@ function renderItemCards(app, state, items, group) {
 function renderKeptCard(app, state, item, group) {
   const e = value => app.escapeHtml(value), title = item.title || '已保存的材料';
   const excerpt = typeof item.summary === 'string' ? item.summary.trim() : '';
-  const image = itemCover(item);
+  const image = articleCover(item) || itemCover(item);
   const time = [item.published_at, item.source_item_time, item.captured_at].find(value => typeof value === 'string' && Number.isFinite(Date.parse(value)));
   const label = item.published_at === time ? '原帖发布时间' : item.source_item_time === time ? '榜单条目时间' : time ? '采集或阅读时间' : '时间未提供';
   const names = (item.source_refs || []).map(id => homepageSourceLabel(state.sources?.find(source => source.id === id)?.name) || (item.origin === 'dot_import' ? '手动精选' : homepageSourceLabel(id)));
@@ -319,9 +334,14 @@ function renderKeptCard(app, state, item, group) {
 function renderCover(app, item, title, image, originalUrl, key) {
   const e = value => app.escapeHtml(value);
   const fallback = `<div class="cover-fallback"${image ? ' aria-hidden="true"' : ''}><p>无来源附图</p><strong>${e(shorten(title, 72))}</strong></div>`;
-  if (!image) return `<div class="cover-frame">${fallback}<a class="cover-hit" href="${e(app.safeUrl(originalUrl))}" target="_blank" rel="noopener noreferrer" aria-label="${e(`打开原帖：${title}`)}"></a></div>`;
+  const hit = `<a class="cover-hit" href="${e(app.safeUrl(originalUrl))}" target="_blank" rel="noopener noreferrer" aria-label="${e(`打开原帖：${title}`)}"></a>`;
+  if (!image) return `<div class="cover-frame">${fallback}${hit}</div>`;
+  if (image.kind === 'article_cover') {
+    const label = '文章封面，未核对原帖';
+    return `<div class="cover-frame">${fallback}<figure class="cover-photo cover-article" data-post-media><img src="${e(image.url)}" alt="${e(label)}" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-post-media-thumb><figcaption>${e(label)}</figcaption></figure>${hit}</div>`;
+  }
   const kind = image.kind === 'video_poster' ? '视频封面，未播放' : '来源附图，未核对原帖';
-  return `<div class="cover-frame">${fallback}<figure class="cover-photo" data-post-media><img src="${e(image.url)}" alt="${e(kind)}" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-post-media-thumb><button type="button" class="cover-zoom" data-post-media-open data-post-media-key="${e(key)}" data-post-media-url="${e(image.url)}" data-post-media-kind="${e(image.kind)}" data-post-media-source="${e(image.source_url)}" data-post-media-original="${e(originalUrl)}" aria-label="${e(`放大${kind}：${title}`)}">放大</button><figcaption>${e(kind)}</figcaption></figure><a class="cover-hit" href="${e(app.safeUrl(originalUrl))}" target="_blank" rel="noopener noreferrer" aria-label="${e(`打开原帖：${title}`)}"></a></div>`;
+  return `<div class="cover-frame">${fallback}<figure class="cover-photo" data-post-media><img src="${e(image.url)}" alt="${e(kind)}" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-post-media-thumb><button type="button" class="cover-zoom" data-post-media-open data-post-media-key="${e(key)}" data-post-media-url="${e(image.url)}" data-post-media-kind="${e(image.kind)}" data-post-media-source="${e(image.source_url)}" data-post-media-original="${e(originalUrl)}" aria-label="${e(`放大${kind}：${title}`)}">放大</button><figcaption>${e(kind)}</figcaption></figure>${hit}</div>`;
 }
 
 function saveButton(e, collection, id, title) {

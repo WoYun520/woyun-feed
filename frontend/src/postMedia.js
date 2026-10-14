@@ -1,4 +1,26 @@
 // Optional third-party media preview. A picture never verifies its post's claims.
+import { containsCredentialText } from './contentPrivacy.js';
+
+// Intake cover for an article card. https only, no userinfo, no private host,
+// and no credential-shaped text. A picture still does not verify the post.
+export const COVER_URL_MAX = 1500;
+
+export function normalizeCoverUrl(value) {
+  if (typeof value !== 'string' || value.length === 0 || value.length > COVER_URL_MAX) return null;
+  if (/[\u0000-\u0020\u007f]/.test(value) || containsCredentialText(value)) return null;
+  let url;
+  try { url = new URL(value); } catch { return null; }
+  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  if (url.protocol !== 'https:' || url.username || url.password || url.port || url.hash) return null;
+  if (!host.includes('.') || url.pathname === '/') return null;
+  if (/^(?:localhost|127\.|0\.|10\.|192\.168\.|169\.254\.|172\.(?:1[6-9]|2\d|3[01])\.)/.test(host)) return null;
+  if ((host.includes(':') && /^(?:::|fc|fd|fe80:)/.test(host)) || /\.(?:local|internal|localhost)$/.test(host)) return null;
+  if ([...url.searchParams.keys()].some(key => /token|secret|password|api.?key|authorization|credential/i.test(key))) return null;
+  const href = url.href;
+  if (href.length > COVER_URL_MAX || containsCredentialText(href) || /[\u0000-\u0020\u007f]/.test(href)) return null;
+  return href;
+}
+
 export function canonicalImagePost(value) {
   if (typeof value !== 'string' || value.length > 1000 || /[\u0000-\u0020\u007f]/.test(value)) return null;
   try {

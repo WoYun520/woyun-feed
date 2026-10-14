@@ -1,3 +1,4 @@
+import { normalizeCoverUrl } from './src/postMedia.js';
 import { REVIEW_COUNT_MAX, REVIEW_TYPES } from './src/reviewQueue.js';
 
 // Approved KOSX links are attached after the public snapshot is built.
@@ -91,6 +92,7 @@ export function kosxPublicItem(record) {
   const like_count = publicCount(record.like_count);
   const review_type = REVIEW_TYPES.includes(record.review_type) ? record.review_type : '';
   const hasArticle = record.has_article === true || record.has_article === false ? record.has_article : undefined;
+  const cover_url = normalizeCoverUrl(record.cover_url);
   return {
     id:record.id,
     title,
@@ -112,6 +114,7 @@ export function kosxPublicItem(record) {
     ...(bookmark_count !== null ? {bookmark_count} : {}),
     ...(like_count !== null ? {like_count} : {}),
     ...(hasArticle !== undefined ? {has_article:hasArticle} : {}),
+    ...(cover_url ? {cover_url} : {}),
     ...(pool ? {kosx_review:'pool'} : {}),
     unknowns:['未读取原文', '热度未知', '过审不等于已实测'],
   };

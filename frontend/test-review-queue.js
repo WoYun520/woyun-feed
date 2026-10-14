@@ -10,6 +10,8 @@ import { normalizeRepositories } from './repository-normalize.js';
 import { HOME_WEEK_BOOKMARK_MIN, beijingDateKey, selectHomeShowcase } from './src/homeShowcase.js';
 import { KOSX_POOL_HANDLES } from './kosx-pool.js';
 import { kosxPublicItem } from './kosx-public-posts.js';
+import { normalizeCoverUrl } from './src/postMedia.js';
+import { renderHomeShowcase } from './src/homeShowcaseView.js';
 import { DotInboxClient } from './src/dotInboxClient.js';
 import { classifyReviewItem, presentReviewItem, sortReviewQueue } from './src/reviewQueue.js';
 import { renderReviewQueue, bindReviewQueueEvents } from './src/reviewQueueView.js';
@@ -67,6 +69,12 @@ const submit = (env, body, token = delivery) => handleDotPendingRequest(request(
 const decide = (env, body) => handleDotPendingRequest(request('POST', {path:DOT_PENDING_DECISION_PATH, token:review, body}), env);
 const stored = env => [...env.DOT_INBOX.values.values()].map(entry => JSON.parse(entry.raw));
 const showcase = feed => selectHomeShowcase({sources:feed.sources, allItems:feed.items, items:feed.items, profile:feed.profile || {}, generated_at:feed.generated_at});
+const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+const renderFeed = (feed, homeView = 'latest') => renderHomeShowcase({
+  homeView, escapeHtml, formatTime:value => value,
+  safeUrl(value) { try { const url = new URL(value); return ['http:','https:'].includes(url.protocol) ? url.href : '#'; } catch { return '#'; } },
+}, {sources:feed.sources, allItems:feed.items, items:feed.items, profile:feed.profile || {}, generated_at:feed.generated_at,
+  hiddenItemIds:new Set(), savedItemIds:new Set(), archivedItemIds:new Set(), savedItems:[], dotFeaturedItems:[]});
 
 test('classification prefers an article card, then tutorials, pitfalls, and short or promo posts', () => {
   assert.equal(classifyReviewItem({has_article:true, text:'短'}).review_type, '文章');
@@ -192,6 +200,15 @@ test('a candidate flag cannot be set while rejecting, and bad signals are refuse
     [{url:'https://x.com/example/status/2108148604447884013', bookmark_count:-1}, 'invalid_metrics'],
     [{url:'https://x.com/example/status/2108148604447884014', has_article:'yes'}, 'invalid_article'],
     [{url:'https://x.com/example/status/2108148604447884015', underrated_candidate:true}, 'invalid_body'],
+    [{url:'https://x.com/example/status/2108148604447884016', cover_url:'http://cdn.example.com/covers/a.jpg'}, 'invalid_cover'],
+    [{url:'https://x.com/example/status/2108148604447884017', cover_url:'https://user:pass@cdn.example.com/covers/a.jpg'}, 'invalid_cover'],
+    [{url:'https://x.com/example/status/2108148604447884018', cover_url:'https://cdn.example.com/covers/a.jpg?token=abcdefghijklmnop'}, 'invalid_cover'],
+    [{url:'https://x.com/example/status/2108148604447884019', cover_url:'https://127.0.0.1/covers/a.jpg'}, 'invalid_cover'],
+    [{url:'https://x.com/example/status/2108148604447884021', cover_url:''}, 'invalid_cover'],
+    [{url:'https://x.com/example/status/2108148604447884022', cover_url:'not a url'}, 'invalid_cover'],
+    [{url:'https://x.com/example/status/2108148604447884023', cover_url:`https://cdn.example.com/${'a'.repeat(1600)}`}, 'invalid_cover'],
+    [{url:'https://x.com/example/status/2108148604447884024', cover_url:'https://cdn.example.com/covers/a.jpg#part'}, 'invalid_cover'],
+    [{url:'https://x.com/example/status/2108148604447884025', cover_url:'javascript:alert(1)'}, 'invalid_cover'],
   ]) {
     const response = await submit(env, body);
     assert.equal(response.status, 400, code);
@@ -199,6 +216,9 @@ test('a candidate flag cannot be set while rejecting, and bad signals are refuse
   }
   assert.equal(env.DOT_INBOX.writes.filter(entry => entry.key.startsWith(DOT_PENDING_PREFIX)).length, 1);
   assert.equal(env.PUBLIC_FEED.writes.length, 0);
+  const pasted = await submit(env, {url:'https://x.com/example/status/2108148604447884020', cover_url:'https://cdn.example.com/covers/article.jpg'}, null);
+  assert.equal(pasted.status, 401);
+  assert.equal(env.DOT_INBOX.writes.filter(entry => entry.key.startsWith(DOT_PENDING_PREFIX)).length, 1);
 });
 
 test('the review queue shows type, heat and the article card, and the candidate box starts unchecked', () => {
@@ -590,4 +610,109 @@ test('worker public feed reads do not grow an underrated pin just because a cand
   assert.equal(await overlayPublicUnderratedPins(raw, env), raw);
   assert.equal(raw.includes('underrated_pins'), false);
   assert.equal(raw.includes('underrated_candidate'), false);
+});
+
+test('delivery stores a cover, copies it onto the public item, and a later delivery only fills a missing cover', async () => {
+  const env = await environment();
+  const cover = 'https://cdn.example.com/covers/article.jpg?format=jpg&name=large';
+  const storedCover = normalizeCoverUrl(cover);
+  assert.equal(storedCover, cover);
+  const url = 'https://x.com/example/status/2108148604447884401';
+  const bareUrl = 'https://x.com/example/status/2108148604447884402';
+  const created = await (await submit(env, {
+    url, note:'一篇可以对照的文章', review_type:'文章', has_article:true, bookmark_count:240,
+    cover_url:'https://CDN.Example.com/covers/article.jpg?format=jpg&name=large',
+    published_at:'2026-10-08T04:00:00.000Z',
+  })).json();
+  assert.equal(created.cover_url, storedCover);
+  assert.equal(created.status, 'pending');
+  const listed = await (await handleDotPendingRequest(request('GET', {token:review}), env)).json();
+  assert.equal(listed.items.find(item => item.url === url).cover_url, storedCover);
+  const approved = await (await decide(env, {url, status:'approved'})).json();
+  assert.equal(approved.cover_url, storedCover);
+  const published = env.PUBLIC_FEED.json().items.find(item => item.original_url === url);
+  assert.equal(published.cover_url, storedCover);
+  assert.equal(published.review_type, '文章');
+  assert.equal(published.has_article, true);
+  const direct = kosxPublicItem({
+    id:'kosx-9', status:'approved', reviewed_at:'2026-10-14T01:00:00.000Z', author_handle:'example',
+    url:'https://x.com/example/status/9', note:'', review_type:'文章', cover_url:'http://cdn.example.com/covers/a.jpg',
+  });
+  assert.equal(Object.hasOwn(direct, 'cover_url'), false);
+
+  await submit(env, {url:bareUrl, review_type:'文章', bookmark_count:220, published_at:'2026-10-08T05:00:00.000Z'});
+  await decide(env, {url:bareUrl, status:'approved'});
+  const bare = env.PUBLIC_FEED.json().items.find(item => item.original_url === bareUrl);
+  assert.equal(Object.hasOwn(bare, 'cover_url'), false);
+  const page = renderFeed(env.PUBLIC_FEED.json());
+  const week = renderFeed(env.PUBLIC_FEED.json(), 'week');
+  const shown = `src="${escapeHtml(storedCover)}"`;
+  assert.match(page, new RegExp(shown.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(week, new RegExp(shown.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(page, /文章封面，未核对原帖/);
+  const bareCard = page.slice(page.indexOf(`data-home-card="${bare.id}"`), page.indexOf('</article>', page.indexOf(`data-home-card="${bare.id}"`)));
+  assert.match(bareCard, /无来源附图/);
+  assert.doesNotMatch(bareCard, /<img/);
+
+  const other = 'https://cdn.example.com/covers/later.jpg';
+  const keptWrites = env.PUBLIC_FEED.writes.length;
+  const again = await (await submit(env, {url, cover_url:other, bookmark_count:1})).json();
+  assert.equal(again.existing, true);
+  assert.equal(again.cover_url, storedCover);
+  assert.equal(again.bookmark_count, 240);
+  assert.equal(again.reviewed_at, approved.reviewed_at);
+  assert.equal(env.PUBLIC_FEED.writes.length, keptWrites);
+  assert.equal(env.PUBLIC_FEED.json().items.find(item => item.original_url === url).cover_url, storedCover);
+
+  const missingUrl = 'https://x.com/example/status/2108148604447884403';
+  const missingCreated = await (await submit(env, {url:missingUrl, review_type:'文章', note:'封面后补'})).json();
+  assert.equal(Object.hasOwn(missingCreated, 'cover_url'), false);
+  const missingApproved = await (await decide(env, {url:missingUrl, status:'approved'})).json();
+  assert.equal(Object.hasOwn(env.PUBLIC_FEED.json().items.find(item => item.original_url === missingUrl), 'cover_url'), false);
+  const beforeWrites = env.PUBLIC_FEED.writes.length;
+  const filled = await (await submit(env, {url:missingUrl, cover_url:other, review_type:'短帖'})).json();
+  assert.equal(filled.cover_url, other);
+  assert.equal(filled.review_type, '文章');
+  assert.equal(filled.reviewed_at, missingApproved.reviewed_at);
+  assert.equal(filled.status, 'approved');
+  assert.ok(env.PUBLIC_FEED.writes.length > beforeWrites);
+  const filledItem = env.PUBLIC_FEED.json().items.find(item => item.original_url === missingUrl);
+  assert.equal(filledItem.cover_url, other);
+  assert.equal(filledItem.source_item_time, missingApproved.reviewed_at);
+  assert.match(renderFeed(env.PUBLIC_FEED.json()), new RegExp(escapeHtml(other).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  const stillWrites = env.PUBLIC_FEED.writes.length;
+  const keptCover = await (await submit(env, {url:missingUrl, cover_url:'https://cdn.example.com/covers/replace.jpg'})).json();
+  assert.equal(keptCover.cover_url, other);
+  assert.equal(env.PUBLIC_FEED.writes.length, stillWrites);
+
+  const rejectedUrl = 'https://x.com/example/status/2108148604447884404';
+  const rejectedCreated = await (await submit(env, {url:rejectedUrl, note:'略过'})).json();
+  await decide(env, {url:rejectedUrl, status:'rejected'});
+  const rejectedKey = `${DOT_PENDING_PREFIX}${rejectedCreated.key}`;
+  const rejectedRaw = env.DOT_INBOX.values.get(rejectedKey).raw;
+  const rejectedWrites = env.PUBLIC_FEED.writes.length;
+  const againRejected = await (await submit(env, {url:rejectedUrl, cover_url:other, review_type:'文章'})).json();
+  assert.equal(againRejected.status, 'rejected');
+  assert.equal(Object.hasOwn(againRejected, 'cover_url'), false);
+  assert.equal(env.DOT_INBOX.values.get(rejectedKey).raw, rejectedRaw);
+  assert.equal(env.PUBLIC_FEED.writes.length, rejectedWrites);
+
+  const pendingUrl = 'https://x.com/example/status/2108148604447884405';
+  await submit(env, {url:pendingUrl, review_type:'教程指南'});
+  const pendingWrites = env.PUBLIC_FEED.writes.length;
+  const pendingFilled = await (await submit(env, {url:pendingUrl, cover_url:other})).json();
+  assert.equal(pendingFilled.status, 'pending');
+  assert.equal(pendingFilled.cover_url, other);
+  assert.equal(env.PUBLIC_FEED.writes.length, pendingWrites);
+  assert.equal(env.PUBLIC_FEED.json().items.some(item => item.original_url === pendingUrl), false);
+
+  const poolHandle = KOSX_POOL_HANDLES[0];
+  const poolUrl = `https://x.com/${poolHandle}/status/2108148604447884406`;
+  const pooled = await (await submit(env, {
+    url:poolUrl, review_type:'教程指南', bookmark_count:320, cover_url:cover, published_at:'2026-10-08T04:00:00.000Z',
+  })).json();
+  assert.equal(pooled.status, 'approved');
+  assert.equal(pooled.approval, 'pool');
+  assert.equal(pooled.cover_url, storedCover);
+  assert.equal(env.PUBLIC_FEED.json().items.find(item => item.original_url === poolUrl).cover_url, storedCover);
 });

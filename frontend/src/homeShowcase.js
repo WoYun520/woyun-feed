@@ -107,6 +107,14 @@ function isHomepageEssence(item) {
 const WEEK_ARTICLE_TYPES = new Set(['文章', '教程指南']);
 const WEEK_REJECT_TYPES = new Set(['短帖', '产品安利', '避坑']);
 
+// 文章类 for a cover: an article or tutorial, or an X Article card that is not
+// a short post, promo, or pitfall note. Excerpt clues do not count.
+export function isArticleClassItem(item) {
+  const type = typeof item?.review_type === 'string' ? item.review_type : '';
+  if (WEEK_REJECT_TYPES.has(type)) return false;
+  return WEEK_ARTICLE_TYPES.has(type) || item?.has_article === true;
+}
+
 function publicBookmarkCount(item) {
   const value = item?.bookmark_count;
   return Number.isSafeInteger(value) && value >= 0 && value <= 1_000_000_000 ? value : null;

@@ -19,15 +19,16 @@
 - 鉴权：`Authorization: Bearer <投递密钥>`。这把密钥与 `POST /api/dot/inbox` 是同一把原始投递密钥，不是哈希。哈希存在 Worker secret `DOT_DELIVERY_TOKEN_HASH`。密钥只能放在这个请求头里，不要放进网址、正文或日志。
 - 请求头还要带 `Content-Type: application/json`。
 - 服务端调用不要带 `Origin`。如果带了，必须等于站点自己的源；其他源返回 `403`。
-- 正文可以是一条：`{"url":"https://x.com/name/status/123","author_handle":"name","note":"可选","review_type":"教程指南","bookmark_count":120,"like_count":80,"has_article":true,"text":"可选摘录","published_at":"2026-10-08T04:00:00.000Z","created_at":"2026-10-08T04:00:00.000Z"}`。除 `url` 外都可以省略。
+- 正文可以是一条：`{"url":"https://x.com/name/status/123","author_handle":"name","note":"可选","review_type":"教程指南","bookmark_count":120,"like_count":80,"has_article":true,"cover_url":"https://cdn.example.com/covers/article.jpg","text":"可选摘录","published_at":"2026-10-08T04:00:00.000Z","created_at":"2026-10-08T04:00:00.000Z"}`。除 `url` 外都可以省略。
 - 也可以一次最多 20 条：`{"items":[{"url":"https://x.com/name/status/123","note":"可选","review_type":"避坑","bookmark_count":40,"like_count":20,"has_article":false,"published_at":"2026-10-08T04:00:00.000Z"},{"url":"https://x.com/name/status/456"}]}`。
 - 过审信号（只在带投递密钥时接受；首页贴链接仍只能提交 `url`）：
   - `review_type`：`文章`、`教程指南`、`避坑`、`短帖`、`产品安利` 之一。省略时，服务按 `note`、`text`、`has_article` 粗分。`note` 写成 `类型：教程指南`，或整段备注就是这五个词之一，也会当作指定类型。
   - `bookmark_count`、`like_count`：非负整数。省略表示未知，不会用另一个数去补。
   - `has_article`：`true` 或 `false`，表示这条是不是 X Article 卡。省略表示未知。
+  - `cover_url`：文章封面的 https 地址，最长 1500 字。必须能当成网址解析，路径不能是空的。不能带账号密码、端口或片段，也不能是本机、内网，或在地址里夹带密钥（包括查询参数名叫 token、password、api_key 的）。省略表示没有封面。空字符串、`http`、以及带密钥的地址都会拒绝，不会改成别的图。首页只在文章类卡片上使用它，没有封面时不另做假图。
   - `text`：单行摘录，最长 800 字，用来粗分类型。不要放密钥。
   - `published_at`、`created_at`：原帖发布时间，必须带时区（例如 X 的 `created_at`，或抓取这条链接时读到的 `published_at`）。省略表示未知。格式不对会拒绝，不会改成别的时间。
-- 过审或账号池写入公开首页时，会带上已保存的 `bookmark_count`、`like_count`、`review_type`、`has_article`。公开条目的 `published_at` 优先用进料里的 `published_at`，没有再用 `created_at`。两个都没有、且链接是 X 状态编号时，用 snowflake 推算原帖时间（Twitter 纪元 `1288834974657`，毫秒为 `(id >> 22) + 纪元`）。不是 X 状态编号的不编造时间。`source_item_time` 和 `captured_at` 仍是过审时间。这些字段不改变过审或略过的规则，也不会把帖钉进昨日低估栏。原帖时间如果落在「昨日」，账号池仍按首页规则停在待筛选。重复投递不改已经写下的类型、热度、摘录和备注，也不把 `rejected` 改回去。队列里还没有的 `bookmark_count`、`like_count`、`review_type`、`has_article`、`text`，这次正文带了有效值就补上；已经有的保持原值。收藏数为 `0`、`has_article` 为 `false` 都算已经写下，后来的数字或 `true` 不会替换。已经在队列里的同一条，如果这次带了可用的 `published_at` 或 `created_at`，仍会改写这两个时间。已经过审的，只要补上了信号或改了时间，就按当前队列重写公开首页上的这一条，让公开条目带上收藏数等字段。过审时间不变，公开条目的 `source_item_time` 和 `captured_at` 仍是过审时间。
+- 过审或账号池写入公开首页时，会带上已保存的 `bookmark_count`、`like_count`、`review_type`、`has_article`、`cover_url`。公开条目的 `published_at` 优先用进料里的 `published_at`，没有再用 `created_at`。两个都没有、且链接是 X 状态编号时，用 snowflake 推算原帖时间（Twitter 纪元 `1288834974657`，毫秒为 `(id >> 22) + 纪元`）。不是 X 状态编号的不编造时间。`source_item_time` 和 `captured_at` 仍是过审时间。这些字段不改变过审或略过的规则，也不会把帖钉进昨日低估栏。原帖时间如果落在「昨日」，账号池仍按首页规则停在待筛选。重复投递不改已经写下的类型、热度、摘录和备注，也不把 `rejected` 改回去。队列里还没有的 `bookmark_count`、`like_count`、`review_type`、`has_article`、`cover_url`、`text`，这次正文带了有效值就补上；已经有的保持原值。已经写下的封面地址不会被后一次替换。收藏数为 `0`、`has_article` 为 `false` 都算已经写下，后来的数字或 `true` 不会替换。已经在队列里的同一条，如果这次带了可用的 `published_at` 或 `created_at`，仍会改写这两个时间。已经过审的，只要补上了信号、封面或改了时间，就按当前队列重写公开首页上的这一条，让公开条目带上收藏数和封面。已经略过的不补封面。过审时间不变，公开条目的 `source_item_time` 和 `captured_at` 仍是过审时间。
 - `url` 必须是 `https://x.com`、`twitter.com` 或 `mobile.twitter.com` 上的 `/{账号}/status/{数字}`。服务收成 `https://x.com/{账号}/status/{数字}`，去重键是状态编号。
 - `author_handle` 如果出现，必须和链接里的账号一致，忽略大小写。
 - `note` 最长 400 字，单行，不能夹带密钥或密码样式的文本。
@@ -48,7 +49,7 @@ curl -sS -X POST 'https://woyun-feed-preview.hhzovo66.workers.dev/api/dot/pendin
 
 单条正文则直接返回上面 `results` 里的那一个对象，不包在 `results` 里。批量的 `status` 是 `approved`（全部已上首页）、`partial`（有的上了、有的还在待筛选）或 `pending`（都还在待筛选）。
 
-`published: true` 才表示这条已经写入公开首页。`approval: "pool"` 表示账号池自动过审；`pool: false` 表示作者不在账号池。`existing: true` 表示队列里本来就有这条；服务不改原来的提交时间、备注，也不把 `rejected` 改回去。已经在首页上的重复投递仍返回「这条已经在公开首页。」，过审时间不变。若这次带了可用的 `published_at` 或 `created_at`，公开首页上这条的 `published_at` 会改成这次的时间。队列里还没有的收藏数、点赞数、类型、Article 卡或摘录，这次带了就会补上，并出现在这条公开条目上。已经有的不改。
+`published: true` 才表示这条已经写入公开首页。`approval: "pool"` 表示账号池自动过审；`pool: false` 表示作者不在账号池。`existing: true` 表示队列里本来就有这条；服务不改原来的提交时间、备注，也不把 `rejected` 改回去。已经在首页上的重复投递仍返回「这条已经在公开首页。」，过审时间不变。若这次带了可用的 `published_at` 或 `created_at`，公开首页上这条的 `published_at` 会改成这次的时间。队列里还没有的收藏数、点赞数、类型、Article 卡、摘录或封面地址，这次带了就会补上，并出现在这条公开条目上。已经有的不改。已经略过的不补封面。公开首页的文章类卡片会显示这张封面；没有封面时仍是「无来源附图」。
 
 账号池自动上首页的帖和接收码过审的帖用同一套时间顺序：有进料原帖时间时用它，否则用 X snowflake，不再把过审时间当作原帖发布时间。不按粉丝数把谁排到前面。接收码后来再标一次 `approved`，会把 `approval` 改成 `review`，过审时间不变。
 
