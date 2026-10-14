@@ -58,7 +58,7 @@ function kosxCandidateViews(records) {
     material:{
       original_url:record.url, author_handle:record.author_handle, published_at:null,
       title_zh:'待筛选的 X 链接',
-      summary_zh:'访客通过 KOSX 助力计划粘贴的链接。尚未读取原文，未核对热度，未选入精选，不会出现在首页。',
+      summary_zh:'访客通过 KOSX 精选计划粘贴的链接。尚未读取原文，未核对热度，未选入精选，不会出现在首页。',
       bookmark_count:null, like_count:null, view_count:null, metric_display:'',
       selection_reason:'只进入待筛选。提交不会自动公开。', my_angle:'',
       unknowns:['未读取原文', '热度未知', '未选入精选'],

@@ -5,6 +5,111 @@ import { postStatusId } from './postStream.js';
 import { postAuthorLabel } from './topicWorkspace.js';
 import { homeViewName, readBoostTotal, selectHomeShowcase } from './homeShowcase.js';
 
+export const KOSX_EMOJI_ALT = 'KOSX 精选计划表情';
+export const KOSX_EMOJI_INTERVAL_MS = 600;
+export const KOSX_EMOJI_FRAMES = [1, 2, 3, 4, 5, 6].map(frame => `/assets/kosx/emoji/kosx-emoji-0${frame}-80.png`);
+
+let kosxEmojiIndex = 0;
+let kosxEmojiTimer = 0;
+let kosxEmojiRoot = null;
+let kosxEmojiView = null;
+let kosxEmojiMedia = null;
+let kosxEmojiCache = [];
+
+export function kosxEmojiFrame(index, reducedMotion = false) {
+  if (reducedMotion) return 0;
+  const count = KOSX_EMOJI_FRAMES.length;
+  const current = Number.isInteger(index) ? index : 0;
+  return ((current % count) + count) % count;
+}
+
+function kosxEmojiReduced() {
+  return kosxEmojiMedia?.matches === true;
+}
+
+function stopKosxEmojiTimer() {
+  if (!kosxEmojiTimer) return;
+  (kosxEmojiView || globalThis).clearInterval(kosxEmojiTimer);
+  kosxEmojiTimer = 0;
+}
+
+export function resetKosxEmoji() {
+  stopKosxEmojiTimer();
+  kosxEmojiMedia?.removeEventListener?.('change', syncKosxEmoji);
+  kosxEmojiIndex = 0;
+  kosxEmojiRoot = null;
+  kosxEmojiView = null;
+  kosxEmojiMedia = null;
+  kosxEmojiCache = [];
+}
+
+function preloadKosxEmoji(view) {
+  if (kosxEmojiCache.length || typeof view?.Image !== 'function') return;
+  kosxEmojiCache = KOSX_EMOJI_FRAMES.map(src => {
+    const image = new view.Image();
+    image.decoding = 'sync';
+    image.src = src;
+    return image;
+  });
+}
+
+function kosxEmojiReady(index) {
+  const cached = kosxEmojiCache[index];
+  return !cached || cached.complete !== false;
+}
+
+function paintKosxEmoji(img) {
+  const frame = kosxEmojiFrame(kosxEmojiIndex, kosxEmojiReduced());
+  kosxEmojiIndex = frame;
+  const src = KOSX_EMOJI_FRAMES[frame];
+  if (img.getAttribute?.('src') !== src && img.src !== src) img.src = src;
+  if (img.alt !== KOSX_EMOJI_ALT) img.alt = KOSX_EMOJI_ALT;
+}
+
+function syncKosxEmoji() {
+  const img = kosxEmojiRoot?.querySelector?.('[data-kosx-emoji]');
+  if (!img) {
+    stopKosxEmojiTimer();
+    return;
+  }
+  paintKosxEmoji(img);
+  if (kosxEmojiReduced()) {
+    stopKosxEmojiTimer();
+    return;
+  }
+  if (kosxEmojiTimer) return;
+  const view = kosxEmojiView || globalThis;
+  kosxEmojiTimer = view.setInterval(() => {
+    const node = kosxEmojiRoot?.querySelector?.('[data-kosx-emoji]');
+    if (!node) {
+      stopKosxEmojiTimer();
+      return;
+    }
+    if (kosxEmojiReduced()) {
+      kosxEmojiIndex = 0;
+      paintKosxEmoji(node);
+      stopKosxEmojiTimer();
+      return;
+    }
+    const next = kosxEmojiFrame(kosxEmojiIndex + 1);
+    if (!kosxEmojiReady(next)) return;
+    kosxEmojiIndex = next;
+    if (node.src !== KOSX_EMOJI_FRAMES[next]) node.src = KOSX_EMOJI_FRAMES[next];
+    if (node.alt !== KOSX_EMOJI_ALT) node.alt = KOSX_EMOJI_ALT;
+  }, KOSX_EMOJI_INTERVAL_MS);
+}
+
+export function mountKosxEmoji(root = globalThis.document) {
+  kosxEmojiRoot = root || null;
+  kosxEmojiView = root?.defaultView || globalThis;
+  preloadKosxEmoji(kosxEmojiView);
+  if (!kosxEmojiMedia && typeof kosxEmojiView.matchMedia === 'function') {
+    kosxEmojiMedia = kosxEmojiView.matchMedia('(prefers-reduced-motion: reduce)');
+    kosxEmojiMedia.addEventListener?.('change', syncKosxEmoji);
+  }
+  syncKosxEmoji();
+}
+
 const shorten = (value, maximum) => {
   const text = (typeof value === 'string' ? value : '').replace(/\s+/g, ' ').trim();
   const characters = Array.from(text);
@@ -81,7 +186,7 @@ function renderKosxStrip(app) {
   const error = typeof app?.kosxError === 'string' ? app.kosxError : '';
   const status = message || error;
   const e = value => app.escapeHtml(value);
-  return `<section class="kosx-band" aria-label="KOSX 助力计划"><div class="kosx-strip"><div class="kosx-brand"><img class="kosx-mark" src="/assets/kosx/symbol-ink.svg" width="30" height="30" alt="KOSX 四瓣标志"><p class="kosx-name">KOSX 助力计划</p></div><p class="kosx-hint">上传你的精华帖链接</p><span class="kosx-paste"><span class="kosx-accent" aria-hidden="true"></span><button type="button" class="kosx-cta" id="kosx-open" aria-expanded="${open ? 'true' : 'false'}" aria-controls="kosx-panel">贴链接</button></span></div><form class="kosx-panel" id="kosx-panel"${open ? '' : ' hidden'}><label for="kosx-link">粘贴 X 精华帖链接</label><input id="kosx-link" name="url" type="url" inputmode="url" autocomplete="off" spellcheck="false" maxlength="2000" placeholder="粘贴 X 精华帖链接" value="${e(draft)}"><button type="submit" class="kosx-submit">提交</button><p class="kosx-status" id="kosx-status" role="${error ? 'alert' : 'status'}" tabindex="-1">${e(status)}</p></form></section>`;
+  return `<section class="kosx-band" aria-label="KOSX 精选计划"><div class="kosx-strip"><div class="kosx-brand"><img class="kosx-emoji" src="${KOSX_EMOJI_FRAMES[0]}" width="40" height="40" alt="${KOSX_EMOJI_ALT}" data-kosx-emoji><p class="kosx-name">KOSX 精选计划</p></div><p class="kosx-hint">上传你的精华帖链接</p><span class="kosx-paste"><span class="kosx-accent" aria-hidden="true"></span><button type="button" class="kosx-cta" id="kosx-open" aria-expanded="${open ? 'true' : 'false'}" aria-controls="kosx-panel">贴链接</button></span></div><form class="kosx-panel" id="kosx-panel"${open ? '' : ' hidden'}><label for="kosx-link">粘贴 X 精华帖链接</label><input id="kosx-link" name="url" type="url" inputmode="url" autocomplete="off" spellcheck="false" maxlength="2000" placeholder="粘贴 X 精华帖链接" value="${e(draft)}"><button type="submit" class="kosx-submit">提交</button><p class="kosx-status" id="kosx-status" role="${error ? 'alert' : 'status'}" tabindex="-1">${e(status)}</p></form></section>`;
 }
 
 function renderKosxFooter() {

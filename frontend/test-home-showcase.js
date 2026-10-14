@@ -1,9 +1,9 @@
-import test from 'node:test';
+import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { addCalendarDays, beijingDateKey, parsePublicHeat, recordKosxBoost, selectHomeShowcase } from './src/homeShowcase.js';
 import { FeedDataAdapter } from './src/dataAdapter.js';
-import { renderHomeShowcase } from './src/homeShowcaseView.js';
+import { KOSX_EMOJI_ALT, KOSX_EMOJI_FRAMES, KOSX_EMOJI_INTERVAL_MS, mountKosxEmoji, renderHomeShowcase, resetKosxEmoji } from './src/homeShowcaseView.js';
 import { renderWorkspaceNavigation } from './src/workspaceShell.js';
 
 const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
@@ -181,9 +181,12 @@ test('default homepage renders cover cards, signature, navigation labels and no 
   assert.match(html, /打开原帖/);
   assert.match(html, /data-action="toggle-save"/);
   assert.doesNotMatch(html, /放进主题|data-action="topic-save"|实用教程|收藏与跟进|主题工作台|我的关注|怎么用|待筛选/);
-  assert.match(html, /KOSX 助力计划/);
-  assert.match(html, /class="kosx-mark" src="\/assets\/kosx\/symbol-ink\.svg" width="30" height="30" alt="KOSX 四瓣标志"/);
-  assert.ok(html.indexOf('kosx-mark') < html.indexOf('kosx-name'));
+  assert.match(html, /aria-label="KOSX 精选计划"/);
+  assert.match(html, /KOSX 精选计划/);
+  assert.doesNotMatch(html, /助力计划|kosx-mark|symbol-ink/);
+  assert.match(html, /class="kosx-emoji" src="\/assets\/kosx\/emoji\/kosx-emoji-01-80\.png" width="40" height="40" alt="KOSX 精选计划表情"/);
+  assert.equal((html.match(/alt="KOSX 精选计划表情"/g) || []).length, 1);
+  assert.ok(html.indexOf('kosx-emoji') < html.indexOf('kosx-name'));
   assert.ok(html.indexOf('kosx-name') < html.indexOf('kosx-hint'));
   assert.match(html, /上传你的精华帖链接/);
   assert.match(html, /class="kosx-accent" aria-hidden="true"/);
@@ -237,8 +240,9 @@ test('default homepage renders cover cards, signature, navigation labels and no 
   assert.doesNotMatch(css, /\.boost-watermark-wash\s*\{[^}]*display:\s*none/);
   assert.match(css, /\.kosx-strip\s*\{[^}]*min-height:\s*44px/);
   assert.match(css, /\.kosx-brand\s*\{[^}]*gap:\s*8px/);
-  assert.match(css, /\.kosx-mark\s*\{[^}]*width:\s*30px/);
-  assert.match(css, /\.kosx-mark\s*\{[^}]*height:\s*30px/);
+  assert.match(css, /\.kosx-emoji\s*\{[^}]*width:\s*40px/);
+  assert.match(css, /\.kosx-emoji\s*\{[^}]*height:\s*40px/);
+  assert.doesNotMatch(css, /\.kosx-mark/);
   assert.match(css, /\.kosx-name\s*\{[^}]*font-size:\s*16px/);
   assert.match(css, /\.kosx-name\s*\{[^}]*font-weight:\s*800/);
   assert.match(css, /\.kosx-name\s*\{[^}]*color:\s*#171917/);
@@ -255,6 +259,7 @@ test('default homepage renders cover cards, signature, navigation labels and no 
   assert.match(css, /\.kosx-cta,\s*\.kosx-submit\s*\{[^}]*border:\s*0;[^}]*background:\s*#171917/);
   assert.match(css, /\.cover-grid\s*\{[^}]*gap:\s*32px/);
   const appSource = readFileSync(new URL('./src/app.js', import.meta.url), 'utf8');
+  assert.match(appSource, /mountKosxEmoji\(document\)/);
   assert.match(appSource, /已进入待筛选/);
   assert.match(appSource, /这条已在待筛选里/);
   assert.doesNotMatch(appSource, /已放入待筛选|已放回待筛选|这条链接已经收过/);
@@ -266,7 +271,9 @@ test('category views and the masthead keep the three names visible without a sec
   input.dotFeaturedItems = [featured];
   const yesterday = renderHomeShowcase(app('yesterday'), input);
   const kept = renderHomeShowcase(app('kept'), input);
-  assert.match(yesterday, /class="kosx-mark"/);
+  assert.match(yesterday, /class="kosx-emoji"/);
+  assert.match(yesterday, /KOSX 精选计划/);
+  assert.doesNotMatch(yesterday, /助力计划|kosx-mark/);
   assert.match(yesterday, /kosx-footer/);
   assert.match(kept, /alt="KOSX\.ai，橙色圆点"/);
   assert.match(yesterday, /昨日全部精华帖/);
@@ -368,6 +375,8 @@ test('a pasted X link stays in pending review and is not added to the homepage',
     const html = renderHomeShowcase(app(), adapter.getState());
     assert.doesNotMatch(html, /2108148604447883999/);
     assert.doesNotMatch(html, /待筛选的 X 链接/);
+    assert.match(adapter.getState().dotPendingCandidates[0].material.summary_zh, /KOSX 精选计划/);
+    assert.doesNotMatch(adapter.getState().dotPendingCandidates[0].material.summary_zh, /助力计划/);
     const reload = new FeedDataAdapter();
     reload.feedData = adapter.feedData;
     assert.equal(reload.getState().dotPendingCandidates.length, 1);
@@ -377,5 +386,102 @@ test('a pasted X link stays in pending review and is not added to the homepage',
     else globalThis.fetch = previousFetch;
     if (previous === undefined) delete globalThis.localStorage;
     else globalThis.localStorage = previous;
+  }
+});
+
+function emojiSlot({reduced = false} = {}) {
+  let src = KOSX_EMOJI_FRAMES[0];
+  let alt = KOSX_EMOJI_ALT;
+  const listeners = [];
+  const media = {
+    matches: reduced,
+    addEventListener(type, fn) { if (type === 'change') listeners.push(fn); },
+    removeEventListener(type, fn) {
+      if (type !== 'change') return;
+      const index = listeners.indexOf(fn);
+      if (index >= 0) listeners.splice(index, 1);
+    },
+  };
+  const img = {
+    get src() { return src; },
+    set src(value) { src = value; },
+    get alt() { return alt; },
+    set alt(value) { alt = value; },
+    getAttribute(name) { return name === 'src' ? src : name === 'alt' ? alt : null; },
+  };
+  return {
+    img,
+    setReduced(value) {
+      media.matches = value;
+      for (const fn of [...listeners]) fn();
+    },
+    document: {
+      querySelector(selector) { return selector === '[data-kosx-emoji]' ? img : null; },
+      defaultView: {
+        matchMedia(query) {
+          assert.equal(query, '(prefers-reduced-motion: reduce)');
+          return media;
+        },
+        setInterval: (...args) => globalThis.setInterval(...args),
+        clearInterval: (...args) => globalThis.clearInterval(...args),
+      },
+    },
+  };
+}
+
+test('emoji carousel hard-cuts six frames every 600ms and freezes on frame 1 when motion is reduced', (t) => {
+  assert.equal(KOSX_EMOJI_FRAMES.length, 6);
+  assert.equal(KOSX_EMOJI_INTERVAL_MS, 600);
+  assert.equal(new Set(KOSX_EMOJI_FRAMES).size, 6);
+  t.mock.timers.enable({apis:['setInterval']});
+  const slot = emojiSlot();
+  try {
+    mountKosxEmoji(slot.document);
+    assert.equal(slot.img.src, KOSX_EMOJI_FRAMES[0]);
+    assert.equal(slot.img.alt, KOSX_EMOJI_ALT);
+    t.mock.timers.tick(599);
+    assert.equal(slot.img.src, KOSX_EMOJI_FRAMES[0]);
+    t.mock.timers.tick(1);
+    assert.equal(slot.img.src, KOSX_EMOJI_FRAMES[1]);
+    assert.equal(slot.img.alt, KOSX_EMOJI_ALT);
+    t.mock.timers.tick(600 * 5);
+    assert.equal(slot.img.src, KOSX_EMOJI_FRAMES[0]);
+    mountKosxEmoji(slot.document);
+    assert.equal(slot.img.src, KOSX_EMOJI_FRAMES[0]);
+    t.mock.timers.tick(600);
+    assert.equal(slot.img.src, KOSX_EMOJI_FRAMES[1]);
+    slot.setReduced(true);
+    assert.equal(slot.img.src, KOSX_EMOJI_FRAMES[0]);
+    assert.equal(slot.img.alt, KOSX_EMOJI_ALT);
+    t.mock.timers.tick(1800);
+    assert.equal(slot.img.src, KOSX_EMOJI_FRAMES[0]);
+    slot.setReduced(false);
+    t.mock.timers.tick(600);
+    assert.equal(slot.img.src, KOSX_EMOJI_FRAMES[1]);
+    slot.img.alt = '其他说明';
+    t.mock.timers.tick(600);
+    assert.equal(slot.img.src, KOSX_EMOJI_FRAMES[2]);
+    assert.equal(slot.img.alt, KOSX_EMOJI_ALT);
+  } finally {
+    resetKosxEmoji();
+    mock.timers.reset();
+  }
+});
+
+test('emoji carousel stays on frame 1 when reduced motion is already requested', (t) => {
+  t.mock.timers.enable({apis:['setInterval']});
+  const slot = emojiSlot({reduced:true});
+  try {
+    mountKosxEmoji(slot.document);
+    t.mock.timers.tick(2400);
+    assert.equal(slot.img.src, KOSX_EMOJI_FRAMES[0]);
+    assert.equal(slot.img.alt, KOSX_EMOJI_ALT);
+    slot.setReduced(false);
+    assert.equal(slot.img.src, KOSX_EMOJI_FRAMES[0]);
+    t.mock.timers.tick(600);
+    assert.equal(slot.img.src, KOSX_EMOJI_FRAMES[1]);
+  } finally {
+    resetKosxEmoji();
+    mock.timers.reset();
   }
 });
