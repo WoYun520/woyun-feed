@@ -3,6 +3,7 @@ import { creatorPreferenceKey, readCreatorPreferences } from './creatorTutorials
 import { normalizePostImage } from './postMedia.js';
 import { postStatusId } from './postStream.js';
 import { postAuthorLabel } from './topicWorkspace.js';
+import { isKosxPoolHandle } from '../kosx-pool.js';
 import { homeViewName, readBoostTotal, selectHomeShowcase } from './homeShowcase.js';
 
 export const KOSX_EMOJI_ALT = 'KOSX 精选计划表情';
@@ -216,7 +217,10 @@ function latestNote(selection) {
 
 function renderLatest(app, state, selection) {
   const e = value => app.escapeHtml(value);
-  return `<section class="home-band" id="home-latest" aria-labelledby="home-latest-title"><header class="home-band-heading"><h2 id="home-latest-title">最新精华帖 <small>${selection.latest.length} / 18</small></h2></header>${renderCards(app, state, selection.latest, 'latest')}<p class="home-rule">${e(latestNote(selection))}</p></section>${renderSlogan(e)}<section class="home-band home-underrated" id="home-underrated" aria-labelledby="home-underrated-title" data-underrated-rule="${e(selection.underratedRule)}"><header class="home-band-heading"><h2 id="home-underrated-title">昨日最被低估精华帖 <small>${selection.underrated.length}</small></h2></header>${selection.underrated.length ? renderCards(app, state, selection.underrated, 'under') : '<p class="home-empty">昨日没有可放入这一栏的公开帖。</p>'}</section>`;
+  const underrated = selection.underrated.length
+    ? `<section class="home-band home-underrated" id="home-underrated" aria-labelledby="home-underrated-title" data-underrated-rule="${e(selection.underratedRule)}"><header class="home-band-heading"><h2 id="home-underrated-title">昨日最被低估精华帖 <small>${selection.underrated.length}</small></h2></header>${renderCards(app, state, selection.underrated, 'under')}</section>`
+    : '';
+  return `<section class="home-band" id="home-latest" aria-labelledby="home-latest-title"><header class="home-band-heading"><h2 id="home-latest-title">最新精华帖 <small>${selection.latest.length} / 18</small></h2></header>${renderCards(app, state, selection.latest, 'latest')}<p class="home-rule">${e(latestNote(selection))}</p></section>${renderSlogan(e)}${underrated}`;
 }
 
 function renderSlogan(e) {
@@ -242,6 +246,28 @@ function renderKept(app, state, selection) {
   return `<section class="home-band" id="home-kept" aria-labelledby="home-kept-title"><header class="home-band-heading"><h2 id="home-kept-title">卧云精选贴（常驻保存） <small>${featured.length + saved.length}</small></h2><p class="home-rule">${e(note)}</p></header><h3 class="home-subhead">我选入的精选 <small>${featured.length}</small></h3>${featured.length ? renderItemCards(app, state, featured, 'kept-featured') : '<p class="home-empty">这个浏览器还没有选入精选。选入仍由人工决定，不会自动出现在首页。</p>'}<h3 class="home-subhead">已收藏 <small>${saved.length}</small></h3>${saved.length ? renderItemCards(app, state, saved, 'kept-saved') : '<p class="home-empty">还没有收藏。点卡片上的收藏，会写在这个浏览器里。</p>'}${selection.kept.archivedCount ? `<p class="home-rule">另有归档材料留在这个浏览器，不重复列在这里。</p>` : ''}</section>`;
 }
 
+function itemAuthorHandle(item) {
+  if (typeof item?.author_handle === 'string' && /^[A-Za-z0-9_]{1,15}$/.test(item.author_handle)) return item.author_handle;
+  for (const value of [item?.original_url, item?.canonical_url]) {
+    try {
+      const url = new URL(value);
+      if (!['http:', 'https:'].includes(url.protocol)) continue;
+      const host = url.hostname.replace(/^www\./, '').toLowerCase();
+      if (host !== 'x.com' && host !== 'twitter.com') continue;
+      const handle = url.pathname.split('/').filter(Boolean)[0] || '';
+      if (/^[A-Za-z0-9_]{1,15}$/.test(handle) && handle.toLowerCase() !== 'i') return handle;
+    } catch { /* not a post url */ }
+  }
+  return '';
+}
+
+// Pool auto-approve stores kosx_review:"pool". Other cover posts only carry the author,
+// so membership falls back to the same impact.kosx.ai handle list used at intake.
+function kosxPoolBadge(item) {
+  if (item?.kosx_review === 'pool' || isKosxPoolHandle(itemAuthorHandle(item))) return '<span class="kosx-pool-badge">KOSX</span>';
+  return '';
+}
+
 function renderCards(app, state, entries, group) {
   return `<div class="cover-grid">${entries.map(entry => renderPostCard(app, state, entry, group)).join('')}</div>`;
 }
@@ -259,7 +285,7 @@ function renderPostCard(app, state, entry, group) {
   const when = entry.time.iso ? `<time datetime="${e(entry.time.iso)}">${e(app.formatTime ? app.formatTime(entry.time.iso) : entry.time.iso)}</time>` : '时间未提供';
   return `<article class="cover-card shape-card" id="home-card-${e(group)}-${id}" data-shape="card" data-home-card="${id}" data-home-group="${e(group)}">
     ${renderCover(app, item, title, image, post.originalUrl, `${group}:${item.id}`)}
-    <div class="cover-body"><p class="cover-meta"><span>${e(names)}</span>${author ? `<span>${e(author)}</span>` : ''}<span>${e(entry.time.label)} ${when}</span></p>
+    <div class="cover-body"><p class="cover-meta">${kosxPoolBadge(item)}<span>${e(names)}</span>${author ? `<span>${e(author)}</span>` : ''}<span>${e(entry.time.label)} ${when}</span></p>
       <h3><a href="${e(app.safeUrl(post.originalUrl))}" target="_blank" rel="noopener noreferrer">${e(title)}</a></h3>
       <p class="cover-excerpt">${e(shorten(excerpt, 96) || '来源未提供摘录，请打开原帖。')}</p>
       <details class="cover-evidence"><summary>摘录与时间依据</summary><p>${e(excerpt || '来源未提供摘录。')}</p>${heat ? `<p>来源标注：${e(heat)}。未核对。</p>` : '<p>来源没有给出可展示的热度文字。</p>'}<p>${e(entry.time.label)}。未核对原帖，未实测。</p>${post.instruction?.eligible ? `<p>${e(post.instruction.label)}。这是摘录里的线索，不是实测。</p>` : ''}</details>
@@ -284,7 +310,7 @@ function renderKeptCard(app, state, item, group) {
   const id = e(item.id);
   return `<article class="cover-card shape-card" id="home-card-${e(group)}-${id}" data-shape="card" data-home-card="${id}" data-home-group="${e(group)}">
     ${renderCover(app, item, title, image, item.original_url, `${group}:${item.id}`)}
-    <div class="cover-body"><p class="cover-meta"><span>${e(names.filter(Boolean).join('、') || '来源未提供')}</span><span>${e(label)}${time ? ` <time datetime="${e(time)}">${e(app.formatTime ? app.formatTime(time) : time)}</time>` : ''}</span></p>
+    <div class="cover-body"><p class="cover-meta">${kosxPoolBadge(item)}<span>${e(names.filter(Boolean).join('、') || '来源未提供')}</span><span>${e(label)}${time ? ` <time datetime="${e(time)}">${e(app.formatTime ? app.formatTime(time) : time)}</time>` : ''}</span></p>
       <h3><a href="${e(app.safeUrl(item.original_url))}" target="_blank" rel="noopener noreferrer">${e(title)}</a></h3>
       <p class="cover-excerpt">${e(shorten(excerpt, 96) || '没有摘录。')}</p>
       <div class="cover-actions"><a class="shape-pill-solid" href="${e(app.safeUrl(item.original_url))}" target="_blank" rel="noopener noreferrer">打开原帖</a>${saveButton(e, collection, `home-save-${group}-${item.id}`, title)}</div>

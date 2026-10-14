@@ -191,6 +191,11 @@ body:has(.workspace-shell[data-workspace-tab="today"]) { background: var(--home-
 }
 .cover-body { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px 16px; }
 .cover-meta { display: flex; flex-wrap: wrap; gap: 4px 10px; margin: 0; color: var(--home-muted, #62675d); font-size: 12px; line-height: 1.5; }
+.kosx-pool-badge {
+  display: inline-block; align-self: center; padding: 0 6px; border-radius: 999px;
+  background: #f0f0ec; color: #8a8f86; font-size: 10px; font-weight: 600;
+  letter-spacing: .04em; line-height: 16px;
+}
 .cover-body h3 { margin: 0; font-size: 18px; font-weight: 650; line-height: 1.4; letter-spacing: -.02em; }
 .cover-body h3 a { color: var(--home-ink, #171917); text-decoration: none; }
 .cover-body h3 a:hover { color: var(--home-accent, #c84924); }

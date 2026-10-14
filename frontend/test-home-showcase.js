@@ -5,6 +5,7 @@ import { addCalendarDays, beijingDateKey, parsePublicHeat, recordKosxBoost, sele
 import { FeedDataAdapter } from './src/dataAdapter.js';
 import { KOSX_EMOJI_ALT, KOSX_EMOJI_FRAMES, KOSX_EMOJI_INTERVAL_MS, mountKosxEmoji, renderHomeShowcase, resetKosxEmoji } from './src/homeShowcaseView.js';
 import { renderWorkspaceNavigation } from './src/workspaceShell.js';
+import { KOSX_POOL_HANDLES } from './kosx-pool.js';
 
 const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 const app = (homeView = 'latest') => ({homeView, escapeHtml:escape, safeUrl:value => {
@@ -19,6 +20,7 @@ const post = (id, published, extra = {}) => ({
   canonical_url:extra.url || `https://x.com/example/status/${id}`,
   published_at:published, source_item_time:published, captured_at:published,
   heat_label:extra.heat || '', source_rank:extra.rank ?? null, post_image:extra.image,
+  ...(extra.author_handle ? {author_handle:extra.author_handle} : {}),
   ...(extra.kosx_review ? {kosx_review:extra.kosx_review} : {}),
 });
 const state = items => ({
@@ -116,6 +118,47 @@ test('public feed pins reach the homepage through the adapter', () => {
     if (previous === undefined) delete globalThis.localStorage;
     else globalThis.localStorage = previous;
   }
+});
+
+function cardHtml(html, id) {
+  const marker = `data-home-card="${id}"`;
+  const start = html.indexOf(marker);
+  assert.ok(start >= 0, id);
+  const open = html.lastIndexOf('<article', start);
+  const close = html.indexOf('</article>', start);
+  return html.slice(open, close);
+}
+
+test('an empty underrated band is omitted and a filled band stays on the homepage', () => {
+  const today = post('210099', '2026-10-10T08:00:00.000Z', {title:'今天的公开帖'});
+  const emptyHtml = renderHomeShowcase(app(), state([today]));
+  assert.match(emptyHtml, /id="home-latest"/);
+  assert.doesNotMatch(emptyHtml, /id="home-underrated"/);
+  assert.doesNotMatch(emptyHtml, /昨日最被低估精华帖/);
+  assert.doesNotMatch(emptyHtml, /昨日没有可放入这一栏的公开帖/);
+  const yesterday = post('209002', '2026-10-09T02:00:00.000Z', {title:'低热度原帖', heat:'120 曝光/小时'});
+  const filled = renderHomeShowcase(app(), state([today, yesterday]));
+  assert.match(filled, /id="home-underrated"/);
+  assert.match(filled, /昨日最被低估精华帖/);
+  assert.match(filled, /低热度原帖/);
+  assert.doesNotMatch(filled, /昨日没有可放入这一栏的公开帖/);
+});
+
+test('cover cards show a quiet KOSX badge only for account-pool authors', () => {
+  const member = KOSX_POOL_HANDLES[0];
+  const pooled = post('210201', '2026-10-10T09:00:00.000Z', {title:'账号池封面', author_handle:member.toUpperCase(), url:`https://x.com/${member}/status/210201`});
+  const flagged = post('210202', '2026-10-10T08:00:00.000Z', {title:'过审池帖', author_handle:'former_pool', kosx_review:'pool', url:'https://x.com/former_pool/status/210202'});
+  const linked = post('210203', '2026-10-10T07:00:00.000Z', {title:'链接里的池成员', url:`https://twitter.com/${member}/status/210203`});
+  const outsider = post('210204', '2026-10-10T06:00:00.000Z', {title:'站外作者', author_handle:'not_in_pool', url:'https://x.com/not_in_pool/status/210204'});
+  const html = renderHomeShowcase(app(), state([pooled, flagged, linked, outsider]));
+  for (const item of [pooled, flagged, linked]) assert.match(cardHtml(html, item.id), /<span class="kosx-pool-badge">KOSX<\/span>/);
+  assert.doesNotMatch(cardHtml(html, outsider.id), /kosx-pool-badge|KOSX/);
+  assert.equal(html.match(/class="kosx-pool-badge"/g).length, 3);
+  const css = readFileSync(new URL('./src/homeShowcase.css', import.meta.url), 'utf8');
+  assert.match(css, /\.kosx-pool-badge\s*\{[^}]*font-size:\s*10px/);
+  assert.match(css, /\.kosx-pool-badge\s*\{[^}]*color:\s*#8a8f86/);
+  assert.match(css, /\.kosx-pool-badge\s*\{[^}]*background:\s*#f0f0ec/);
+  assert.doesNotMatch(css, /\.kosx-pool-badge\s*\{[^}]*(?:#171917|#c84924|#EC672B)/);
 });
 
 test('underrated yesterday posts are the lowest same-unit public heat and stay out of the latest 18', () => {
