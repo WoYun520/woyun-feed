@@ -27,7 +27,7 @@
   - `has_article`：`true` 或 `false`，表示这条是不是 X Article 卡。省略表示未知。
   - `text`：单行摘录，最长 800 字，用来粗分类型。不要放密钥。
   - `published_at`、`created_at`：原帖发布时间，必须带时区（例如 X 的 `created_at`，或抓取这条链接时读到的 `published_at`）。省略表示未知。格式不对会拒绝，不会改成别的时间。
-- 过审或账号池写入公开首页时，会带上已保存的 `bookmark_count`、`like_count`、`review_type`、`has_article`。公开条目的 `published_at` 优先用进料里的 `published_at`，没有再用 `created_at`。两个都没有、且链接是 X 状态编号时，用 snowflake 推算原帖时间（Twitter 纪元 `1288834974657`，毫秒为 `(id >> 22) + 纪元`）。不是 X 状态编号的不编造时间。`source_item_time` 和 `captured_at` 仍是过审时间。这些字段不改变过审或略过的规则，也不会把帖钉进昨日低估栏。原帖时间如果落在「昨日」，账号池仍按首页规则停在待筛选。重复投递不改第一次写下的类型、热度和备注。已经在队列里的同一条，如果这次带了可用的 `published_at` 或 `created_at`，会写回这条记录；已经过审的还会重写公开首页上的 `published_at`。过审时间不变。
+- 过审或账号池写入公开首页时，会带上已保存的 `bookmark_count`、`like_count`、`review_type`、`has_article`。公开条目的 `published_at` 优先用进料里的 `published_at`，没有再用 `created_at`。两个都没有、且链接是 X 状态编号时，用 snowflake 推算原帖时间（Twitter 纪元 `1288834974657`，毫秒为 `(id >> 22) + 纪元`）。不是 X 状态编号的不编造时间。`source_item_time` 和 `captured_at` 仍是过审时间。这些字段不改变过审或略过的规则，也不会把帖钉进昨日低估栏。原帖时间如果落在「昨日」，账号池仍按首页规则停在待筛选。重复投递不改已经写下的类型、热度、摘录和备注，也不把 `rejected` 改回去。队列里还没有的 `bookmark_count`、`like_count`、`review_type`、`has_article`、`text`，这次正文带了有效值就补上；已经有的保持原值。收藏数为 `0`、`has_article` 为 `false` 都算已经写下，后来的数字或 `true` 不会替换。已经在队列里的同一条，如果这次带了可用的 `published_at` 或 `created_at`，仍会改写这两个时间。已经过审的，只要补上了信号或改了时间，就按当前队列重写公开首页上的这一条，让公开条目带上收藏数等字段。过审时间不变，公开条目的 `source_item_time` 和 `captured_at` 仍是过审时间。
 - `url` 必须是 `https://x.com`、`twitter.com` 或 `mobile.twitter.com` 上的 `/{账号}/status/{数字}`。服务收成 `https://x.com/{账号}/status/{数字}`，去重键是状态编号。
 - `author_handle` 如果出现，必须和链接里的账号一致，忽略大小写。
 - `note` 最长 400 字，单行，不能夹带密钥或密码样式的文本。
@@ -48,7 +48,7 @@ curl -sS -X POST 'https://woyun-feed-preview.hhzovo66.workers.dev/api/dot/pendin
 
 单条正文则直接返回上面 `results` 里的那一个对象，不包在 `results` 里。批量的 `status` 是 `approved`（全部已上首页）、`partial`（有的上了、有的还在待筛选）或 `pending`（都还在待筛选）。
 
-`published: true` 才表示这条已经写入公开首页。`approval: "pool"` 表示账号池自动过审；`pool: false` 表示作者不在账号池。`existing: true` 表示队列里本来就有这条；服务不改原来的提交时间、备注，也不把 `rejected` 改回去。已经在首页上的重复投递仍返回「这条已经在公开首页。」，过审时间不变。若这次带了可用的 `published_at` 或 `created_at`，公开首页上这条的 `published_at` 会改成这次的时间。
+`published: true` 才表示这条已经写入公开首页。`approval: "pool"` 表示账号池自动过审；`pool: false` 表示作者不在账号池。`existing: true` 表示队列里本来就有这条；服务不改原来的提交时间、备注，也不把 `rejected` 改回去。已经在首页上的重复投递仍返回「这条已经在公开首页。」，过审时间不变。若这次带了可用的 `published_at` 或 `created_at`，公开首页上这条的 `published_at` 会改成这次的时间。队列里还没有的收藏数、点赞数、类型、Article 卡或摘录，这次带了就会补上，并出现在这条公开条目上。已经有的不改。
 
 账号池自动上首页的帖和接收码过审的帖用同一套时间顺序：有进料原帖时间时用它，否则用 X snowflake，不再把过审时间当作原帖发布时间。不按粉丝数把谁排到前面。接收码后来再标一次 `approved`，会把 `approval` 改成 `review`，过审时间不变。
 
