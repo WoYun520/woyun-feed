@@ -702,7 +702,6 @@ class PersonalFeedApp {
         <div id="feed-load-status" role="status" aria-live="polite">${publicHome || state.loadStatus?.phase === 'ready' ? '' : renderFeedLoadStatus(this, state)}</div>
         ${!publicHome && this.currentTab === 'today' && this.welcomeVisible ? renderWelcome() : ''}
         ${this.renderMainContent(state)}
-        ${publicHome ? renderWorkspaceStorageNotice(state, {audience:'visitor'}) : ''}
       </main></div>
       <div id="modal-root"></div>
       <div id="toast-container" class="toast-container" aria-live="polite"></div>

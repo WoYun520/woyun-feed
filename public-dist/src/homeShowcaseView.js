@@ -168,15 +168,13 @@ function sourceNames(entry, state) {
 export function renderHomeShowcase(app, state, {now} = {}) {
   const selection = selectHomeShowcase(withCreatorScope(state), {now});
   const view = homeViewName(app.homeView);
-  const e = value => app.escapeHtml(value);
   const signature = renderSignature();
-  const strap = renderStrap(e, selection);
   const body = view === 'yesterday'
     ? renderList(app, state, selection.yesterday, {id:'home-yesterday', title:'昨日全部精华帖', note:yesterdayNote(selection)})
     : view === 'week' ? renderWeek(app, state, selection)
     : view === 'kept' ? renderKept(app, state, selection)
     : renderLatest(app, state, selection);
-  return `<div class="home-showcase">${renderKosxStrip(app)}<div class="home-hero">${signature}${renderBoostWatermark(app)}</div>${body}${strap}${renderKosxFooter()}</div>`;
+  return `<div class="home-showcase">${renderKosxStrip(app)}<div class="home-hero">${signature}${renderBoostWatermark(app)}</div>${body}${renderKosxFooter()}</div>`;
 }
 
 function renderKosxStrip(app) {
@@ -186,7 +184,7 @@ function renderKosxStrip(app) {
   const error = typeof app?.kosxError === 'string' ? app.kosxError : '';
   const status = message || error;
   const e = value => app.escapeHtml(value);
-  return `<section class="kosx-band" aria-label="KOSX 精选计划"><div class="kosx-strip"><div class="kosx-brand"><img class="kosx-mark" src="/assets/kosx/symbol-ink.svg" width="30" height="30" alt="KOSX 四瓣标志"><p class="kosx-name">KOSX 精选计划</p></div><div class="kosx-middle"><p class="kosx-hint">上传你的精华帖链接</p><span class="kosx-paste"><span class="kosx-accent" aria-hidden="true"></span><button type="button" class="kosx-cta" id="kosx-open" aria-expanded="${open ? 'true' : 'false'}" aria-controls="kosx-panel">贴链接</button></span></div><img class="kosx-emoji" src="${KOSX_EMOJI_FRAMES[0]}" width="40" height="40" alt="${KOSX_EMOJI_ALT}" data-kosx-emoji></div><form class="kosx-panel" id="kosx-panel"${open ? '' : ' hidden'}><label for="kosx-link">粘贴 X 精华帖链接</label><input id="kosx-link" name="url" type="url" inputmode="url" autocomplete="off" spellcheck="false" maxlength="2000" placeholder="粘贴 X 精华帖链接" value="${e(draft)}"><button type="submit" class="kosx-submit">提交</button><p class="kosx-status" id="kosx-status" role="${error ? 'alert' : 'status'}" tabindex="-1">${e(status)}</p></form></section>`;
+  return `<section class="kosx-band" aria-label="KOSX 精选计划"><div class="kosx-strip"><div class="kosx-brand"><img class="kosx-mark" src="/assets/kosx/symbol-ink.svg" width="30" height="30" alt="KOSX 四瓣标志"><p class="kosx-name">KOSX 精选计划</p><img class="kosx-emoji" src="${KOSX_EMOJI_FRAMES[0]}" width="40" height="40" alt="${KOSX_EMOJI_ALT}" data-kosx-emoji></div><div class="kosx-middle"><p class="kosx-hint">上传你的精华帖链接</p><span class="kosx-paste"><span class="kosx-accent" aria-hidden="true"></span><button type="button" class="kosx-cta" id="kosx-open" aria-expanded="${open ? 'true' : 'false'}" aria-controls="kosx-panel">贴链接</button></span></div></div><form class="kosx-panel" id="kosx-panel"${open ? '' : ' hidden'}><label for="kosx-link">粘贴 X 精华帖链接</label><input id="kosx-link" name="url" type="url" inputmode="url" autocomplete="off" spellcheck="false" maxlength="2000" placeholder="粘贴 X 精华帖链接" value="${e(draft)}"><button type="submit" class="kosx-submit">提交</button><p class="kosx-status" id="kosx-status" role="${error ? 'alert' : 'status'}" tabindex="-1">${e(status)}</p></form></section>`;
 }
 
 function renderKosxFooter() {
@@ -204,14 +202,6 @@ function renderSignature() {
   return `<section class="levi-signature" aria-labelledby="levi-flow-title"><h1 id="levi-flow-title" class="levi-flow" aria-label="Levi flow">${letters.map((letter, index) => `<span${index === 4 ? ' class="levi-word"' : ''}>${letter}</span>`).join('')}</h1><svg class="levi-scribble" viewBox="0 0 360 28" aria-hidden="true"><path d="M6 16c28-12 42 10 70 2 24-8 36 12 62 4 22-6 40 10 66 2 28-8 48 12 78 0" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></section>`;
 }
 
-function renderStrap(e, selection) {
-  const when = selection.reference.dateKey ? `<time datetime="${e(selection.reference.iso)}">${e(selection.reference.dateKey)}</time>` : '时间未提供';
-  const clock = selection.reference.source === 'generated_at'
-    ? `昨日和七日按公开资料整理日（北京时间）${when} 计算，不是打开页面的时钟。`
-    : '这批资料没有整理时间，昨日和七日按当前北京时间计算。';
-  return `<p class="home-strap">卧云信息流把公开帖放在一起。先看封面和摘录，再打开原帖。收藏和手动精选只留在这个浏览器。${clock}</p>`;
-}
-
 function yesterdayNote(selection) {
   const day = selection.reference.yesterday || '未能确定';
   return `昨日全部是整理日的前一个北京时间自然日（${day}）里、通过现有质量规则的公开帖，按发布时间从新到旧。已收起抽奖或推广信号 ${selection.counts.folded} 条。未核对原帖，未实测。`;
@@ -226,7 +216,7 @@ function latestNote(selection) {
 
 function renderLatest(app, state, selection) {
   const e = value => app.escapeHtml(value);
-  return `<section class="home-band" id="home-latest" aria-labelledby="home-latest-title"><header class="home-band-heading"><h2 id="home-latest-title">最新精华帖 <small>${selection.latest.length} / 18</small></h2></header>${renderCards(app, state, selection.latest, 'latest')}<p class="home-rule">${e(latestNote(selection))}</p></section>${renderSlogan(e)}<section class="home-band home-underrated" id="home-underrated" aria-labelledby="home-underrated-title" data-underrated-rule="${e(selection.underratedRule)}"><header class="home-band-heading"><h2 id="home-underrated-title">昨日最被低估精华帖 <small>${selection.underrated.length}</small></h2><p class="home-rule">${e(selection.underratedNote)}</p></header>${selection.underrated.length ? renderCards(app, state, selection.underrated, 'under') : '<p class="home-empty">昨日没有可放入这一栏的公开帖。</p>'}</section>`;
+  return `<section class="home-band" id="home-latest" aria-labelledby="home-latest-title"><header class="home-band-heading"><h2 id="home-latest-title">最新精华帖 <small>${selection.latest.length} / 18</small></h2></header>${renderCards(app, state, selection.latest, 'latest')}<p class="home-rule">${e(latestNote(selection))}</p></section>${renderSlogan(e)}<section class="home-band home-underrated" id="home-underrated" aria-labelledby="home-underrated-title" data-underrated-rule="${e(selection.underratedRule)}"><header class="home-band-heading"><h2 id="home-underrated-title">昨日最被低估精华帖 <small>${selection.underrated.length}</small></h2></header>${selection.underrated.length ? renderCards(app, state, selection.underrated, 'under') : '<p class="home-empty">昨日没有可放入这一栏的公开帖。</p>'}</section>`;
 }
 
 function renderSlogan(e) {

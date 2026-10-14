@@ -53,7 +53,6 @@ body:has(.workspace-shell[data-workspace-tab="today"]) { background: var(--home-
   position: static; left: auto; top: auto; transform: none; margin-left: 0;
   display: flex; flex: 0 1 auto; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 4px 8px; min-width: 0;
 }
-.home-local-note { margin: 28px 0 0; color: var(--home-muted, #62675d); font-size: 12px; line-height: 1.6; }
 .lift-cat:hover, .lift-pill:hover { color: #171917; }
 .lift-pill[aria-current="page"]:hover, .lift-cat[aria-current="page"]:hover { color: #ffffff; }
 .lift-menu {
@@ -72,13 +71,13 @@ body:has(.workspace-shell[data-workspace-tab="today"]) { background: var(--home-
 
 .kosx-band { margin: 0 0 20px; }
 .kosx-strip {
-  display: grid; grid-template-columns: auto minmax(0, 1fr) 40px; align-items: center; column-gap: 28px;
+  display: flex; align-items: center; column-gap: 28px;
   min-height: 44px; margin: 0; padding: 0; border-bottom: 1px solid #e8e8e4;
 }
-.kosx-brand { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.kosx-brand { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; min-width: 0; }
 .kosx-mark { display: block; width: 30px; height: 30px; flex: 0 0 auto; }
-.kosx-emoji { display: block; width: 40px; height: 40px; justify-self: end; object-fit: contain; }
-.kosx-middle { display: flex; align-items: center; justify-content: center; gap: 28px; min-width: 0; }
+.kosx-emoji { display: block; width: 40px; height: 40px; flex: 0 0 auto; margin-left: 2px; object-fit: contain; } /* 8px brand gap + 2px = 10px after the title */
+.kosx-middle { display: flex; align-items: center; justify-content: flex-end; gap: 28px; min-width: 0; margin-left: auto; }
 .kosx-name { margin: 0; flex: 0 0 auto; color: #171917; font-size: 16px; font-weight: 800; letter-spacing: 0; line-height: 1.2; white-space: nowrap; }
 .kosx-hint { margin: 0; flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #62675d; font-size: 13px; font-weight: 500; line-height: 1.35; }
 .kosx-cta, .kosx-submit {
@@ -147,7 +146,6 @@ body:has(.workspace-shell[data-workspace-tab="today"]) { background: var(--home-
 .levi-flow span:nth-child(7) { transform: translate(-6px, 8px) rotate(-10deg); }
 .levi-flow span:nth-child(8) { transform: translate(8px, -4px) rotate(8deg); }
 .levi-scribble { display: block; width: 220px; height: 22px; margin: 2px auto 0; color: var(--home-ink, #171917); }
-.home-strap { max-width: 760px; margin: 8px auto 28px; color: var(--home-muted, #62675d); font-size: 14px; line-height: 1.7; text-align: center; }
 .home-band { margin: 0 0 36px; }
 .home-band-heading { margin: 0 0 18px; }
 .home-band-heading h2, .home-subhead { margin: 0; font-family: var(--font-serif); font-weight: 600; letter-spacing: -.03em; color: var(--home-ink, #171917); }
@@ -250,14 +248,8 @@ body:has(.workspace-shell[data-workspace-tab="today"]) { background: var(--home-
   .home-band-heading h2 { font-size: 28px; }
 }
 @media (max-width: 520px) {
-  .kosx-strip {
-    grid-template-columns: minmax(0, 1fr) 40px;
-    grid-template-areas: "brand emoji" "middle middle";
-    column-gap: 16px; row-gap: 8px; align-items: center; min-height: 44px;
-  }
-  .kosx-brand { grid-area: brand; }
-  .kosx-emoji { grid-area: emoji; }
-  .kosx-middle { grid-area: middle; justify-content: flex-start; gap: 16px; }
+  .kosx-strip { flex-wrap: wrap; column-gap: 16px; row-gap: 8px; align-items: center; min-height: 44px; }
+  .kosx-middle { flex-basis: 100%; margin-left: 0; justify-content: flex-start; gap: 16px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .home-slogan-line { animation: none; }
