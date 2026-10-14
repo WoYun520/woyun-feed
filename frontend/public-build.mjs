@@ -10,7 +10,8 @@ export { makePublicFeed, publicUrl } from './public-feed-data.js';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const trialBase='trials/ffmpeg-frame-20261003/';
 export const PUBLIC_TRIAL_FILES=[trialBase+'index.html',trialBase+'input.mp4',trialBase+'frame.jpg'];
-const KOSX_ASSETS=['symbol-ink.svg','symbol-ink.png','symbol-ink-32.png','symbol-white-32.png','wordmark-ink.svg','wordmark-ink.png','favicon.svg','apple-touch-icon.png'].map(file=>'assets/kosx/'+file);
+const KOSX_EMOJI_ASSETS=[1,2,3,4,5,6].flatMap(frame=>{const name=String(frame).padStart(2,'0');return [`emoji/kosx-emoji-${name}-40.png`,`emoji/kosx-emoji-${name}-80.png`];});
+const KOSX_ASSETS=['symbol-ink.svg','symbol-ink.png','symbol-ink-32.png','symbol-white-32.png','wordmark-ink.svg','wordmark-ink.png','favicon.svg','apple-touch-icon.png',...KOSX_EMOJI_ASSETS,'emoji/kosx-emoji-sheet-80.png'].map(file=>'assets/kosx/'+file);
 const PUBLIC_BINARY_FILES=new Set([trialBase+'input.mp4',trialBase+'frame.jpg','assets/woyun-guides.png',...KOSX_ASSETS.filter(file=>file.endsWith('.png'))]);
 export const PUBLIC_FILES = ['assets/woyun-guides.png', ...KOSX_ASSETS, ...PUBLIC_TRIAL_FILES, ...['github.svg','youtube.svg','producthunt.svg','v2ex.svg','juejin.svg','zhihu.svg','baidu.svg','x.svg','apps.svg','rss.svg','news.svg','message-circle.svg','book-2.svg','chart-line.svg','simple-icons-LICENSE.md','tabler-icons-LICENSE','README.md','manifest.json'].map(file=>'assets/source-icons/'+file), 'index.html', 'about.html', '404.html', '_headers', 'THIRD_PARTY_NOTICES.md', 'data/public-feed.json',
   ...['app.js', 'workspaceShell.js', 'workspace.css', 'editorialHome.js', 'editorialHome.css', 'dotCandidateFilters.js', 'dataAdapter.js', 'siteConfig.js', 'styles.css', 'feedSelection.js', 'trialPlan.js', 'backup.js', 'contentPrivacy.js', 'writingBrief.js',
