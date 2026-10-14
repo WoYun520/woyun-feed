@@ -3,6 +3,8 @@ import { containsCredentialText } from './frontend/src/contentPrivacy.js';
 import { dotInboxHash } from './dot-inbox-service.js';
 import { PUBLIC_FEED_KEY, loadPublicSeed } from './frontend/cloud-feed-service.js';
 import { attachKosxApproved, kosxPublicItem } from './frontend/kosx-public-posts.js';
+import { isKosxPoolHandle } from './frontend/kosx-pool.js';
+import { wouldEnterUnderrated } from './frontend/src/homeShowcase.js';
 import { PRIVATE_CONTENT } from './frontend/public-feed-data.js';
 
 export const DOT_PENDING_PATH = '/api/dot/pending';
@@ -147,8 +149,11 @@ async function readBody(request) {
 
 function validRecord(value, storageKey) {
   const decided = value?.status === 'approved' || value?.status === 'rejected';
-  const fields = decided ? decidedFields : recordFields;
+  const fields = decided ? [...decidedFields] : [...recordFields];
+  if (value?.status === 'approved' && Object.hasOwn(value, 'approval')) fields.push('approval');
   if (!plain(value) || Object.keys(value).length !== fields.length || fields.some(field => !Object.hasOwn(value, field))) return false;
+  if (Object.hasOwn(value, 'approval') && !['pool', 'review'].includes(value.approval)) return false;
+  if (value?.approval === 'pool' && value.source !== 'delivery') return false;
   if (!['pending', 'approved', 'rejected'].includes(value.status) || !['homepage', 'delivery'].includes(value.source)) return false;
   if (decided && !timestamp(value.reviewed_at)) return false;
   if (!decided && Object.hasOwn(value, 'reviewed_at')) return false;
@@ -183,15 +188,77 @@ function publicView(record, {includeNote}) {
     id:record.id, key:record.key, url:record.url, author_handle:record.author_handle, status:record.status,
     submitted_at:record.submitted_at,
     ...(includeNote && record.reviewed_at ? {reviewed_at:record.reviewed_at} : {}),
+    ...(includeNote && record.approval ? {approval:record.approval} : {}),
     ...(includeNote ? {note:record.note, source:record.source} : {}),
   };
 }
 
-function intakeView(record, {includeNote, existing}) {
+function intakeView(record, {includeNote, existing, held}) {
   const view = {...publicView(record, {includeNote}), existing};
-  if (existing && record.status === 'approved') view.message = '这条已经在公开首页。';
-  if (existing && record.status === 'rejected') view.message = '这条已从待筛选里略过。';
+  if (includeNote) {
+    view.pool = isKosxPoolHandle(record.author_handle);
+    view.published = record.status === 'approved';
+  }
+  if (held) view.message = '这条会进入昨日最被低估，保持待筛选，需接收码人工过审。';
+  else if (existing && record.status === 'approved') view.message = '这条已经在公开首页。';
+  else if (existing && record.status === 'rejected') view.message = '这条已从待筛选里略过。';
+  else if (includeNote && record.approval === 'pool' && record.status === 'approved') view.message = '账号池成员的精华帖已按时间放上公开首页，不进入昨日最被低估。';
   return view;
+}
+
+function decidedRecord(stored, status, reviewed_at, approval) {
+  const record = {
+    id:stored.id, key:stored.key, url:stored.url, author_handle:stored.author_handle, note:stored.note,
+    status, submitted_at:stored.submitted_at, source:stored.source, reviewed_at,
+  };
+  if (approval) record.approval = approval;
+  return record;
+}
+
+function showcaseState(feed) {
+  return {sources:feed.sources, allItems:feed.items, items:feed.items, profile:feed.profile || {}, generated_at:feed.generated_at};
+}
+
+function canRelease(item) {
+  return !!item && !containsCredentialText(item) && !PRIVATE_CONTENT.test(JSON.stringify(item));
+}
+
+// Delivery of a pool handle can publish onto the chronological cover.
+// Homepage paste, non-members, rejected rows, and anything that would enter
+// 昨日最被低估 stay pending for the review code. Follower counts are not read.
+async function applyPoolRelease(env, posts, existing, delivery) {
+  const held = new Set();
+  const promoted = new Set();
+  if (!delivery) return {held, promoted};
+  const pendingPool = posts.map(post => existing.get(post.key)).filter(record => record?.source === 'delivery' && record.status === 'pending' && isKosxPoolHandle(record.author_handle));
+  const repair = posts.some(post => {
+    const record = existing.get(post.key);
+    return record?.source === 'delivery' && record.status === 'approved' && record.approval === 'pool';
+  });
+  if (!pendingPool.length && !repair) return {held, promoted};
+  if (typeof env?.PUBLIC_FEED?.get !== 'function' || typeof env?.PUBLIC_FEED?.put !== 'function') unavailable();
+  const reviewed_at = new Date().toISOString();
+  const base = await readPublicFeed(env);
+  const approved = await listApprovedKosxRecords(env);
+  const accepted = [...approved];
+  for (const record of pendingPool) {
+    const trial = decidedRecord(record, 'approved', reviewed_at, null);
+    const item = kosxPublicItem(trial);
+    if (!canRelease(item)) continue;
+    let blocked = true;
+    try { blocked = wouldEnterUnderrated(showcaseState(attachKosxApproved(base, [...accepted, trial])), record.id); }
+    catch { blocked = true; }
+    if (blocked) { held.add(record.key); continue; }
+    const next = decidedRecord(record, 'approved', reviewed_at, 'pool');
+    await env.DOT_INBOX.put(`${DOT_PENDING_PREFIX}${record.key}`, JSON.stringify(next), {
+      metadata:{id:next.id, key:next.key, status:'approved', submitted_at:next.submitted_at, reviewed_at, approval:'pool'},
+    });
+    existing.set(record.key, next);
+    accepted.push(next);
+    promoted.add(record.key);
+  }
+  if (accepted.length !== approved.length || repair) await publishApproved(env);
+  return {held, promoted};
 }
 
 function queryCursor(url, isRead) {
@@ -258,19 +325,18 @@ async function handleDecision(request, env, review) {
   const stored = await readStored(env, post.key);
   if (!stored) return json({error:'not_found', message:'这条链接不在待筛选里。'}, 404);
   let record = stored;
-  const changed = stored.status !== body.status;
-  if (changed) {
-    record = {...stored, status:body.status, reviewed_at:new Date().toISOString()};
-    if (record.status === 'approved') {
-      const item = kosxPublicItem(record);
-      if (!item || containsCredentialText(item) || PRIVATE_CONTENT.test(JSON.stringify(item))) bad('invalid_note', '这条备注不能放上公开首页。');
-    }
+  const statusChanged = stored.status !== body.status;
+  const markReview = body.status === 'approved' && stored.approval === 'pool';
+  if (statusChanged || markReview) {
+    const reviewed_at = statusChanged ? new Date().toISOString() : stored.reviewed_at;
+    record = decidedRecord(stored, body.status, reviewed_at, body.status === 'approved' ? 'review' : null);
+    if (record.status === 'approved' && !canRelease(kosxPublicItem(record))) bad('invalid_note', '这条备注不能放上公开首页。');
     await env.DOT_INBOX.put(`${DOT_PENDING_PREFIX}${record.key}`, JSON.stringify(record), {
-      metadata:{id:record.id, key:record.key, status:record.status, submitted_at:record.submitted_at, reviewed_at:record.reviewed_at},
+      metadata:{id:record.id, key:record.key, status:record.status, submitted_at:record.submitted_at, reviewed_at:record.reviewed_at, ...(record.approval ? {approval:record.approval} : {})},
     });
   }
   await publishApproved(env);
-  return json({...publicView(record, {includeNote:true}), existing:!changed, published:record.status === 'approved'});
+  return json({...publicView(record, {includeNote:true}), existing:!statusChanged, published:record.status === 'approved'});
 }
 
 export async function handleDotPendingRequest(request, env) {
@@ -324,9 +390,12 @@ export async function handleDotPendingRequest(request, env) {
       });
       existing.set(post.key, record);
     }
-    const results = posts.map(post => intakeView(existing.get(post.key), {includeNote:delivery, existing:!created.includes(post)}));
-    if (!batched) return json(results[0], created.length ? 201 : 200);
-    return json({status:'pending', results}, created.length ? 201 : 200);
+    const {held, promoted} = await applyPoolRelease(env, posts, existing, delivery);
+    const results = posts.map(post => intakeView(existing.get(post.key), {includeNote:delivery, existing:!created.includes(post), held:held.has(post.key)}));
+    const changed = created.length || promoted.size;
+    if (!batched) return json(results[0], changed ? 201 : 200);
+    const status = results.every(row => row.status === 'approved') ? 'approved' : results.some(row => row.status === 'approved') ? 'partial' : 'pending';
+    return json({status, results}, changed ? 201 : 200);
   } catch (error) {
     if (error instanceof PendingError) return json({error:error.code, message:error.message}, error.status, error.status === 401 ? {'WWW-Authenticate':'Bearer realm="dot-pending"'} : {});
     return json({error:'pending_unavailable', message:'待筛选暂时不可用，请稍后重试。'}, 503);
