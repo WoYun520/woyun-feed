@@ -18,7 +18,8 @@ const MAX_BODY = 64 * 1024;
 const recordFields = ['id', 'key', 'url', 'author_handle', 'note', 'status', 'submitted_at', 'source'];
 const decidedFields = [...recordFields, 'reviewed_at'];
 const signalFields = ['review_type', 'bookmark_count', 'like_count', 'has_article', 'text'];
-const intakeFields = ['url', 'author_handle', 'note', 'review_type', 'bookmark_count', 'like_count', 'has_article', 'text'];
+const timeFields = ['published_at', 'created_at'];
+const intakeFields = ['url', 'author_handle', 'note', 'review_type', 'bookmark_count', 'like_count', 'has_article', 'text', 'published_at', 'created_at'];
 const hashPattern = /^[a-f0-9]{64}$/i;
 
 class PendingError extends Error {
@@ -114,6 +115,12 @@ function cleanText(value, present) {
   return text || undefined;
 }
 
+function cleanInstant(value, present) {
+  if (!present) return undefined;
+  if (!timestamp(value)) bad('invalid_time', '原帖时间需为带时区的时间。');
+  return new Date(value).toISOString();
+}
+
 function onePost(value, {allowNote}) {
   if (!plain(value)) bad('invalid_body', '请提交 X 精华帖链接。');
   const keys = Object.keys(value);
@@ -135,6 +142,8 @@ function onePost(value, {allowNote}) {
   const like_count = cleanCount(value.like_count, Object.hasOwn(value, 'like_count'), '点赞数');
   const has_article = cleanArticle(value.has_article, Object.hasOwn(value, 'has_article'));
   const text = cleanText(value.text, Object.hasOwn(value, 'text'));
+  const published_at = cleanInstant(value.published_at, Object.hasOwn(value, 'published_at'));
+  const created_at = cleanInstant(value.created_at, Object.hasOwn(value, 'created_at'));
   return {
     ...post,
     note,
@@ -143,6 +152,8 @@ function onePost(value, {allowNote}) {
     ...(like_count !== undefined ? {like_count} : {}),
     ...(has_article !== undefined ? {has_article} : {}),
     ...(text ? {text} : {}),
+    ...(published_at ? {published_at} : {}),
+    ...(created_at ? {created_at} : {}),
   };
 }
 
@@ -198,6 +209,7 @@ function signalsValid(value) {
   }
   if (Object.hasOwn(value, 'has_article') && typeof value.has_article !== 'boolean') return false;
   if (Object.hasOwn(value, 'text') && (typeof value.text !== 'string' || !value.text.trim() || value.text.length > REVIEW_TEXT_MAX || /[\u0000-\u001f\u007f]/.test(value.text) || containsCredentialText(value.text))) return false;
+  for (const field of timeFields) if (Object.hasOwn(value, field) && !timestamp(value[field])) return false;
   const candidate = Object.hasOwn(value, 'underrated_candidate');
   const candidateAt = Object.hasOwn(value, 'underrated_candidate_at');
   if (candidate !== candidateAt) return false;
@@ -210,6 +222,7 @@ function validRecord(value, storageKey) {
   const fields = decided ? [...decidedFields] : [...recordFields];
   if (value?.status === 'approved' && Object.hasOwn(value, 'approval')) fields.push('approval');
   for (const field of signalFields) if (Object.hasOwn(value, field)) fields.push(field);
+  for (const field of timeFields) if (Object.hasOwn(value, field)) fields.push(field);
   if (Object.hasOwn(value, 'underrated_candidate')) fields.push('underrated_candidate', 'underrated_candidate_at');
   if (!plain(value) || Object.keys(value).length !== fields.length || fields.some(field => !Object.hasOwn(value, field))) return false;
   if (!signalsValid(value)) return false;
@@ -251,6 +264,8 @@ function signalView(record) {
   if (Object.hasOwn(record, 'like_count')) view.like_count = record.like_count;
   if (Object.hasOwn(record, 'has_article')) view.has_article = record.has_article;
   if (typeof record.text === 'string' && record.text) view.text = record.text;
+  if (typeof record.published_at === 'string') view.published_at = record.published_at;
+  if (typeof record.created_at === 'string') view.created_at = record.created_at;
   if (record.underrated_candidate === true) {
     view.underrated_candidate = true;
     view.underrated_candidate_at = record.underrated_candidate_at;
@@ -291,11 +306,13 @@ function withReviewSignals(record, post) {
   if (post.like_count !== undefined) next.like_count = post.like_count;
   if (post.has_article !== undefined) next.has_article = post.has_article;
   if (post.text) next.text = post.text;
+  if (post.published_at) next.published_at = post.published_at;
+  if (post.created_at) next.created_at = post.created_at;
   return next;
 }
 
 function copySignals(stored, record) {
-  for (const field of signalFields) if (Object.hasOwn(stored, field)) record[field] = stored[field];
+  for (const field of [...signalFields, ...timeFields]) if (Object.hasOwn(stored, field)) record[field] = stored[field];
   return record;
 }
 

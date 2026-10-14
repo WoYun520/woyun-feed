@@ -1,3 +1,5 @@
+import { REVIEW_COUNT_MAX, REVIEW_TYPES } from './src/reviewQueue.js';
+
 // Approved KOSX links are attached after the public snapshot is built.
 // The scheduled crawl does not know this source, so it cannot fetch or drop it
 // by itself; callers reattach the current approved set after each rebuild.
@@ -24,10 +26,27 @@ export function isKosxPublicItem(item) {
     || (Array.isArray(item?.source_refs) && item.source_refs.length === 1 && item.source_refs[0] === KOSX_PUBLIC_SOURCE_ID);
 }
 
+function knownInstant(value) {
+  if (typeof value !== 'string' || value.length > 64 || !Number.isFinite(Date.parse(value))) return '';
+  return new Date(value).toISOString();
+}
+
+function publicCount(value) {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 && value <= REVIEW_COUNT_MAX ? value : null;
+}
+
+// Intake may already carry the X post time from the pending URL fetch.
+// published_at wins, then created_at. A missing or unusable value stays empty
+// so the caller can keep the review clock instead of guessing from the status id.
+export function originalPostInstant(record) {
+  return knownInstant(record?.published_at) || knownInstant(record?.created_at) || '';
+}
+
 export function kosxPublicItem(record) {
   if (!record || record.status !== 'approved' || typeof record.reviewed_at !== 'string' || !Number.isFinite(Date.parse(record.reviewed_at))) return null;
   const note = typeof record.note === 'string' ? record.note.trim() : '';
-  const when = new Date(record.reviewed_at).toISOString();
+  const reviewed = new Date(record.reviewed_at).toISOString();
+  const posted = originalPostInstant(record);
   const pool = record.approval === 'pool';
   const title = (note || `@${record.author_handle} 的精华帖`).slice(0, 500);
   const summary = (pool
@@ -37,6 +56,10 @@ export function kosxPublicItem(record) {
     : (note
       ? `${note}。过审后放上首页。尚未读取原文，未核对热度。`
       : '过审后放上首页的 X 链接。尚未读取原文，未核对热度。')).slice(0, 1000);
+  const bookmark_count = publicCount(record.bookmark_count);
+  const like_count = publicCount(record.like_count);
+  const review_type = REVIEW_TYPES.includes(record.review_type) ? record.review_type : '';
+  const hasArticle = record.has_article === true || record.has_article === false ? record.has_article : undefined;
   return {
     id:record.id,
     title,
@@ -45,15 +68,19 @@ export function kosxPublicItem(record) {
     source_refs:[KOSX_PUBLIC_SOURCE_ID],
     original_url:record.url,
     canonical_url:record.url,
-    published_at:when,
-    source_item_time:when,
-    captured_at:when,
+    published_at:posted || reviewed,
+    source_item_time:reviewed,
+    captured_at:reviewed,
     content_status:'excerpt_only',
     verification_status:'not_tested',
     link_kind:'post',
     origin:'kosx_approved',
     author_handle:record.author_handle,
     author_name:record.author_handle,
+    ...(review_type ? {review_type} : {}),
+    ...(bookmark_count !== null ? {bookmark_count} : {}),
+    ...(like_count !== null ? {like_count} : {}),
+    ...(hasArticle !== undefined ? {has_article:hasArticle} : {}),
     ...(pool ? {kosx_review:'pool'} : {}),
     unknowns:['未读取原文', '热度未知', '过审不等于已实测'],
   };

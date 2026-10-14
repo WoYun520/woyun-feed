@@ -7,7 +7,9 @@ import { UNDERRATED_PIN_KEY, handleDotUnderratedRequest, overlayPublicUnderrated
 import { PUBLIC_FEED_KEY } from './cloud-feed-service.js';
 import { makePublicFeed } from './public-feed-data.js';
 import { normalizeRepositories } from './repository-normalize.js';
-import { selectHomeShowcase } from './src/homeShowcase.js';
+import { HOME_WEEK_BOOKMARK_MIN, beijingDateKey, selectHomeShowcase } from './src/homeShowcase.js';
+import { KOSX_POOL_HANDLES } from './kosx-pool.js';
+import { kosxPublicItem } from './kosx-public-posts.js';
 import { DotInboxClient } from './src/dotInboxClient.js';
 import { classifyReviewItem, presentReviewItem, sortReviewQueue } from './src/reviewQueue.js';
 import { renderReviewQueue, bindReviewQueueEvents } from './src/reviewQueueView.js';
@@ -271,6 +273,126 @@ test('the review client reads and decides with the stored code without putting t
   assert.deepEqual(JSON.parse(calls[1].body), {url:postUrl, status:'approved', underrated_candidate:true, review_type:'文章'});
   assert.equal(JSON.stringify(client.getState()).includes(code), false);
   assert.equal(calls.some(entry => entry.path === '/api/dot/underrated'), false);
+});
+
+test('approved public items keep intake signals and the original post time for the week shelf', async () => {
+  const direct = kosxPublicItem({
+    id:'kosx-1', status:'approved', reviewed_at:'2026-10-14T01:00:00.000Z', author_handle:'example',
+    url:'https://x.com/example/status/1', note:'',
+    published_at:'2026-10-08T04:00:00.000Z', created_at:'2026-10-01T00:00:00.000Z',
+    bookmark_count:HOME_WEEK_BOOKMARK_MIN, like_count:1, has_article:false, review_type:'文章',
+  });
+  assert.equal(direct.published_at, '2026-10-08T04:00:00.000Z');
+  assert.equal(direct.bookmark_count, HOME_WEEK_BOOKMARK_MIN);
+  const fromCreated = kosxPublicItem({
+    id:'kosx-2', status:'approved', reviewed_at:'2026-10-14T01:00:00.000Z', author_handle:'example',
+    url:'https://x.com/example/status/2', note:'', created_at:'2026-10-07T08:00:00.000Z', bookmark_count:0,
+  });
+  assert.equal(fromCreated.published_at, '2026-10-07T08:00:00.000Z');
+  assert.equal(fromCreated.bookmark_count, 0);
+  assert.equal(Object.hasOwn(fromCreated, 'like_count'), false);
+  const fallback = kosxPublicItem({
+    id:'kosx-3', status:'approved', reviewed_at:'2026-10-14T01:00:00.000Z', author_handle:'example',
+    url:'https://x.com/example/status/2108148604447884104', note:'',
+    bookmark_count:'200', review_type:'不是类型', has_article:'yes',
+  });
+  assert.equal(fallback.published_at, '2026-10-14T01:00:00.000Z');
+  assert.notEqual(fallback.published_at, new Date(Number(BigInt('2108148604447884104') >> 22n) + 1288834974657).toISOString());
+  assert.equal(Object.hasOwn(fallback, 'bookmark_count'), false);
+  assert.equal(Object.hasOwn(fallback, 'review_type'), false);
+  assert.equal(Object.hasOwn(fallback, 'has_article'), false);
+
+  const env = await environment();
+  const posted = '2026-10-08T04:00:00.000Z';
+  const highUrl = 'https://x.com/example/status/2108148604447884101';
+  const floorUrl = 'https://x.com/example/status/2108148604447884102';
+  const lowUrl = 'https://x.com/example/status/2108148604447884103';
+  const bareUrl = 'https://x.com/example/status/2108148604447884104';
+  const poolHandle = KOSX_POOL_HANDLES[0];
+  const poolPost = `https://x.com/${poolHandle}/status/2108148604447884105`;
+  const yesterdayPool = `https://x.com/${poolHandle}/status/2108148604447884106`;
+
+  assert.equal((await submit(env, {url:highUrl, review_type:'文章', bookmark_count:250, like_count:0, has_article:true, published_at:posted, created_at:'2026-10-01T00:00:00.000Z'})).status, 201);
+  const highDecision = await (await decide(env, {url:highUrl, status:'approved'})).json();
+  const high = env.PUBLIC_FEED.json().items.find(item => item.original_url === highUrl);
+  assert.equal(high.origin, 'kosx_approved');
+  assert.equal(high.published_at, posted);
+  assert.notEqual(high.published_at, highDecision.reviewed_at);
+  assert.equal(high.source_item_time, highDecision.reviewed_at);
+  assert.equal(high.bookmark_count, 250);
+  assert.equal(high.like_count, 0);
+  assert.equal(high.has_article, true);
+  assert.equal(high.review_type, '文章');
+
+  await submit(env, {url:floorUrl, bookmark_count:HOME_WEEK_BOOKMARK_MIN, like_count:4, has_article:true, created_at:'2026-10-07T16:00:00+08:00'});
+  await decide(env, {url:floorUrl, status:'approved'});
+  const floor = env.PUBLIC_FEED.json().items.find(item => item.original_url === floorUrl);
+  assert.equal(floor.published_at, '2026-10-07T08:00:00.000Z');
+  assert.equal(floor.bookmark_count, HOME_WEEK_BOOKMARK_MIN);
+  assert.equal(floor.like_count, 4);
+  assert.equal(floor.has_article, true);
+  assert.equal(floor.review_type, '文章');
+
+  await submit(env, {url:lowUrl, review_type:'教程指南', bookmark_count:HOME_WEEK_BOOKMARK_MIN - 1, like_count:9, has_article:false, published_at:posted});
+  await decide(env, {url:lowUrl, status:'approved'});
+  const low = env.PUBLIC_FEED.json().items.find(item => item.original_url === lowUrl);
+  assert.equal(low.bookmark_count, HOME_WEEK_BOOKMARK_MIN - 1);
+  assert.equal(low.has_article, false);
+  assert.equal(low.review_type, '教程指南');
+
+  await submit(env, {url:bareUrl, review_type:'文章', bookmark_count:900, has_article:false});
+  const bareDecision = await (await decide(env, {url:bareUrl, status:'approved'})).json();
+  const bare = env.PUBLIC_FEED.json().items.find(item => item.original_url === bareUrl);
+  assert.equal(bare.published_at, bareDecision.reviewed_at);
+  assert.equal(bare.bookmark_count, 900);
+  assert.equal(bare.has_article, false);
+  assert.equal(Object.hasOwn(bare, 'like_count'), false);
+  assert.notEqual(bare.published_at, new Date(Number(BigInt('2108148604447884104') >> 22n) + 1288834974657).toISOString());
+
+  const pooled = await (await submit(env, {url:poolPost, review_type:'教程指南', bookmark_count:320, like_count:11, has_article:false, published_at:posted})).json();
+  assert.equal(pooled.status, 'approved');
+  assert.equal(pooled.approval, 'pool');
+  assert.equal(pooled.published, true);
+  const poolItem = env.PUBLIC_FEED.json().items.find(item => item.original_url === poolPost);
+  assert.equal(poolItem.kosx_review, 'pool');
+  assert.equal(poolItem.published_at, posted);
+  assert.notEqual(poolItem.published_at, pooled.reviewed_at);
+  assert.equal(poolItem.bookmark_count, 320);
+  assert.equal(poolItem.like_count, 11);
+  assert.equal(poolItem.review_type, '教程指南');
+  assert.equal(poolItem.has_article, false);
+
+  const held = await (await submit(env, {url:yesterdayPool, review_type:'文章', bookmark_count:500, has_article:true, published_at:'2026-10-09T02:00:00.000Z'})).json();
+  assert.equal(held.status, 'pending');
+  assert.equal(held.published, false);
+  assert.match(held.message, /昨日最被低估/);
+  assert.equal(env.PUBLIC_FEED.json().items.some(item => item.original_url === yesterdayPool), false);
+
+  const home = showcase(env.PUBLIC_FEED.json());
+  const kept = [
+    {id:'kosx-2108148604447884105', bookmarks:320},
+    {id:'kosx-2108148604447884101', bookmarks:250},
+    {id:'kosx-2108148604447884102', bookmarks:HOME_WEEK_BOOKMARK_MIN},
+  ];
+  if (home.reference.weekKeys.includes(beijingDateKey(Date.parse(bare.published_at)))) kept.push({id:bare.id, bookmarks:900});
+  kept.sort((left, right) => right.bookmarks - left.bookmarks);
+  assert.equal(home.weekRule, 'bookmarks');
+  assert.deepEqual(home.week.map(entry => entry.post.item.id), kept.map(entry => entry.id));
+  assert.equal(home.week.some(entry => entry.post.item.bookmark_count < HOME_WEEK_BOOKMARK_MIN), false);
+  assert.equal(home.week.some(entry => entry.post.originalUrl === lowUrl), false);
+
+  const again = await (await submit(env, {url:highUrl, published_at:'2026-10-01T00:00:00.000Z', bookmark_count:1, like_count:99})).json();
+  assert.equal(again.existing, true);
+  assert.equal(again.published_at, posted);
+  assert.equal(again.bookmark_count, 250);
+  assert.equal(again.like_count, 0);
+
+  const bad = await submit(env, {url:'https://x.com/example/status/2108148604447884107', published_at:'2026-10-08'});
+  assert.equal(bad.status, 400);
+  assert.equal((await bad.json()).error, 'invalid_time');
+  const pasted = await submit(env, {url:'https://x.com/example/status/2108148604447884108', created_at:posted}, null);
+  assert.equal(pasted.status, 401);
+  assert.equal(env.PUBLIC_FEED.json().items.find(item => item.original_url === highUrl).published_at, posted);
 });
 
 test('worker public feed reads do not grow an underrated pin just because a candidate flag exists', async () => {
