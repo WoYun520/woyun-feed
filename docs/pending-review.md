@@ -52,13 +52,13 @@ curl -sS -X POST 'https://woyun-feed-preview.hhzovo66.workers.dev/api/dot/pendin
 
 ## 首页上看到什么
 
-过审链接使用来源「KOSX 过审」。标题优先用进料时的备注；没有备注时用作者账号。摘要会写明尚未读取原文、未核对热度。公开条目会带上进料时已有的 `bookmark_count`、`like_count`、`review_type`、`has_article`。「七日精选」读的就是这条公开 `bookmark_count`。`published_at` 优先用进料的 `published_at`，其次 `created_at`。都没有时，从 X 状态编号的 snowflake 推算（Twitter 纪元 `1288834974657`，毫秒为 `(id >> 22) + 纪元`）。不是 X 状态编号的不编造时间，这时才退回过审时间。`source_item_time` 和 `captured_at` 仍是过审时间。账号池自动过审和接收码过审走同一套写入，不按粉丝数把谁排到前面。
+过审链接使用来源「KOSX 过审」。标题优先用进料时的备注；没有备注时用作者账号。摘要会写明尚未读取原文、未核对热度。公开条目会带上进料时已有的 `bookmark_count`、`like_count`、`review_type`、`has_article`。「七日精选」读的就是这条公开 `bookmark_count`，并要求类型是文章或教程指南。进料时没有收藏数的，之后用投递密钥补上；已经过审的公开条目会一起改。已经写下的收藏数、点赞数、类型、Article 卡和摘录不会被后一次替换。`published_at` 优先用进料的 `published_at`，其次 `created_at`。都没有时，从 X 状态编号的 snowflake 推算（Twitter 纪元 `1288834974657`，毫秒为 `(id >> 22) + 纪元`）。不是 X 状态编号的不编造时间，这时才退回过审时间。`source_item_time` 和 `captured_at` 仍是过审时间。账号池自动过审和接收码过审走同一套写入，不按粉丝数把谁排到前面。
 
 「昨日全部」只列已经放上公开首页的精华帖，原帖北京日期是昨日。信息流里没有走上这条精华线的帖不进入。昨日最被低估只显示人工从「昨日全部」钉选的帖，不按来源热度、榜位或发布时间补。已经在这一日精华线上的账号池自动过审帖，钉上之后也会显示。没有对上的钉选时这一栏留空。
 
 每天的公开快照重建之后，仍会按队列里的 `approved` 记录把这些链接接回 `PUBLIC_FEED`。只停在 `pending` 的链接不会被接回去。
 
-已经写进 `PUBLIC_FEED`、`published_at` 仍等于过审时间的旧记录，要等一次重新发布才会分开。下一次公开快照会按队列重写：队列里没有原帖时间时，用 snowflake 填 `published_at`。想马上改，或 snowflake 不等于进料里的真实时间：用投递密钥再送同一条已过审链接，并带上 `published_at` 或 `created_at`。服务会改队列记录，并覆盖公开首页上这条的 `published_at`。接收码对这条再提交一次 `approved` 也会按当前队列重写公开条目；这次若重建记录，会保留已经保存的原帖时间。过审时间不变。预览 Worker 发布之前，现网旧行不会自己改。不要把这次发布打到名为 `woyun` 的 Worker。
+已经写进 `PUBLIC_FEED`、`published_at` 仍等于过审时间的旧记录，要等一次重新发布才会分开。下一次公开快照会按队列重写：队列里没有原帖时间时，用 snowflake 填 `published_at`。想马上改，或 snowflake 不等于进料里的真实时间：用投递密钥再送同一条已过审链接，并带上 `published_at` 或 `created_at`。服务会改队列记录，并覆盖公开首页上这条的 `published_at`。公开条目没有 `bookmark_count` 时，「七日精选」不会按收藏数收下它。用投递密钥再送同一条未略过的链接，带上队列里还没有的 `bookmark_count`、`like_count`、`review_type`、`has_article` 或 `text`。服务只补空缺，不覆盖已经保存的值，并重写这条公开条目。已经略过的不改。接收码对这条再提交一次 `approved` 也会按当前队列重写公开条目；这次若重建记录，会保留已经保存的原帖时间和信号。过审时间、`source_item_time` 和 `captured_at` 不变。预览 Worker 发布之前，现网旧行不会自己改。不要把这次发布打到名为 `woyun` 的 Worker。
 
 队列上限仍是 300 条，过审和略过的记录也算在里面。
 

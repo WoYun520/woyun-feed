@@ -316,14 +316,33 @@ function copySignals(stored, record) {
   return record;
 }
 
-// A later delivery may fill in the original post time. Notes, heat, and the
-// review clock stay as first written. Rejected rows are left untouched.
+function absentSignal(stored, post, field) {
+  if (Object.hasOwn(stored, field)) return undefined;
+  if (field === 'bookmark_count' || field === 'like_count') return typeof post[field] === 'number' ? post[field] : undefined;
+  if (field === 'has_article') return typeof post[field] === 'boolean' ? post[field] : undefined;
+  if (field === 'review_type') return REVIEW_TYPES.includes(post[field]) ? post[field] : undefined;
+  if (field === 'text') return typeof post.text === 'string' && post.text ? post.text : undefined;
+  return undefined;
+}
+
+// A later delivery may replace published_at / created_at when the body brings
+// a valid instant. Signal fields are fill-if-absent: bookmark_count, like_count,
+// review_type, has_article, and text are copied only when the stored row does
+// not already have them. Zero counts and has_article false count as present.
+// Notes and the review clock stay as first written. The caller leaves rejected
+// rows untouched.
 function mergeIntakeTimes(stored, post) {
   let changed = false;
   const next = {...stored};
   for (const field of timeFields) {
     if (!timestamp(post[field]) || next[field] === post[field]) continue;
     next[field] = post[field];
+    changed = true;
+  }
+  for (const field of signalFields) {
+    const value = absentSignal(stored, post, field);
+    if (value === undefined) continue;
+    next[field] = value;
     changed = true;
   }
   return changed ? next : null;
@@ -533,7 +552,7 @@ export async function handleDotPendingRequest(request, env) {
       });
       existing.set(post.key, record);
     }
-    const timed = [];
+    const refreshed = [];
     for (const post of posts) {
       if (created.includes(post)) continue;
       const stored = existing.get(post.key);
@@ -544,10 +563,10 @@ export async function handleDotPendingRequest(request, env) {
         metadata:{id:next.id, key:next.key, status:next.status, submitted_at:next.submitted_at, ...(next.reviewed_at ? {reviewed_at:next.reviewed_at} : {}), ...(next.approval ? {approval:next.approval} : {})},
       });
       existing.set(post.key, next);
-      if (next.status === 'approved') timed.push(next.key);
+      if (next.status === 'approved') refreshed.push(next.key);
     }
     const {held, promoted, published} = await applyPoolRelease(env, posts, existing, delivery);
-    if (timed.length && !published) await publishApproved(env);
+    if (refreshed.length && !published) await publishApproved(env);
     const results = posts.map(post => intakeView(existing.get(post.key), {includeNote:delivery, existing:!created.includes(post), held:held.has(post.key)}));
     const changed = created.length || promoted.size;
     if (!batched) return json(results[0], changed ? 201 : 200);

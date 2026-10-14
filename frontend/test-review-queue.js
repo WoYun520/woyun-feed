@@ -129,6 +129,8 @@ test('missing type is classified from the note or text, and a later duplicate do
   assert.equal(duplicate.existing, true);
   assert.equal(duplicate.review_type, '避坑');
   assert.equal(duplicate.bookmark_count, 8);
+  assert.equal(duplicate.like_count, 8);
+  assert.equal(duplicate.text, '避坑：别再把密钥写进仓库。');
   const fromNote = await submit(env, {url:'https://x.com/example/status/2108148604447884011', note:'类型：文章'});
   assert.equal((await fromNote.json()).review_type, '文章');
 });
@@ -391,13 +393,193 @@ test('approved public items keep intake signals and the original post time for t
   assert.equal(again.published_at, corrected);
   assert.equal(again.bookmark_count, 250);
   assert.equal(again.like_count, 0);
+  assert.equal(again.has_article, true);
+  assert.equal(again.review_type, '文章');
 
   const bad = await submit(env, {url:'https://x.com/example/status/2108148604447884107', published_at:'2026-10-08'});
   assert.equal(bad.status, 400);
   assert.equal((await bad.json()).error, 'invalid_time');
   const pasted = await submit(env, {url:'https://x.com/example/status/2108148604447884108', created_at:posted}, null);
   assert.equal(pasted.status, 401);
-  assert.equal(env.PUBLIC_FEED.json().items.find(item => item.original_url === highUrl).published_at, corrected);
+  const rewritten = env.PUBLIC_FEED.json().items.find(item => item.original_url === highUrl);
+  assert.equal(rewritten.published_at, corrected);
+  assert.equal(rewritten.bookmark_count, 250);
+  assert.equal(rewritten.like_count, 0);
+  assert.equal(rewritten.has_article, true);
+  assert.equal(rewritten.review_type, '文章');
+  assert.equal(rewritten.source_item_time, highDecision.reviewed_at);
+  assert.equal(rewritten.captured_at, highDecision.reviewed_at);
+});
+
+test('re-delivery fills absent signals on an approved row and republishes them without replacing values already stored', async () => {
+  const env = await environment();
+  const url = 'https://x.com/example/status/2108148604447884301';
+  const created = await (await submit(env, {url, note:'文章候选', review_type:'文章'})).json();
+  assert.equal(created.status, 'pending');
+  assert.equal(Object.hasOwn(created, 'bookmark_count'), false);
+  assert.equal(Object.hasOwn(created, 'like_count'), false);
+  assert.equal(Object.hasOwn(created, 'has_article'), false);
+  assert.equal(Object.hasOwn(created, 'text'), false);
+  const approved = await (await decide(env, {url, status:'approved'})).json();
+  const before = env.PUBLIC_FEED.json().items.find(item => item.original_url === url);
+  assert.equal(Object.hasOwn(before, 'bookmark_count'), false);
+  assert.equal(before.review_type, '文章');
+  assert.equal(before.source_item_time, approved.reviewed_at);
+  assert.equal(before.captured_at, approved.reviewed_at);
+  const feedWrites = env.PUBLIC_FEED.writes.length;
+
+  const excerpt = '补上的摘录，说明这是一篇可以对照的文章。';
+  const filled = await (await submit(env, {
+    url, bookmark_count:240, like_count:12, review_type:'短帖', has_article:true, text:excerpt,
+  })).json();
+  assert.equal(filled.status, 'approved');
+  assert.equal(filled.existing, true);
+  assert.equal(filled.reviewed_at, approved.reviewed_at);
+  assert.equal(filled.note, '文章候选');
+  assert.equal(filled.bookmark_count, 240);
+  assert.equal(filled.like_count, 12);
+  assert.equal(filled.has_article, true);
+  assert.equal(filled.text, excerpt);
+  assert.equal(filled.review_type, '文章');
+  const after = env.PUBLIC_FEED.json().items.find(item => item.original_url === url);
+  assert.equal(after.bookmark_count, 240);
+  assert.equal(after.like_count, 12);
+  assert.equal(after.has_article, true);
+  assert.equal(after.review_type, '文章');
+  assert.equal(after.source_item_time, approved.reviewed_at);
+  assert.equal(after.captured_at, approved.reviewed_at);
+  assert.equal(after.published_at, before.published_at);
+  assert.ok(env.PUBLIC_FEED.writes.length > feedWrites);
+
+  const keptWrites = env.PUBLIC_FEED.writes.length;
+  const kept = await (await submit(env, {
+    url, bookmark_count:1, like_count:99, review_type:'产品安利', has_article:false, text:'后来的摘录不应覆盖',
+  })).json();
+  assert.equal(kept.bookmark_count, 240);
+  assert.equal(kept.like_count, 12);
+  assert.equal(kept.has_article, true);
+  assert.equal(kept.review_type, '文章');
+  assert.equal(kept.text, excerpt);
+  assert.equal(kept.reviewed_at, approved.reviewed_at);
+  assert.equal(env.PUBLIC_FEED.writes.length, keptWrites);
+  const still = env.PUBLIC_FEED.json().items.find(item => item.original_url === url);
+  assert.equal(still.bookmark_count, 240);
+  assert.equal(still.review_type, '文章');
+  assert.equal(still.has_article, true);
+  assert.equal(still.source_item_time, approved.reviewed_at);
+
+  const legacyUrl = 'https://x.com/example/status/2108148604447884302';
+  const legacyCreated = await (await submit(env, {url:legacyUrl, note:'旧记录'})).json();
+  const legacyApproved = await (await decide(env, {url:legacyUrl, status:'approved'})).json();
+  const legacyKey = `${DOT_PENDING_PREFIX}${legacyCreated.key}`;
+  const legacyRow = JSON.parse(env.DOT_INBOX.values.get(legacyKey).raw);
+  delete legacyRow.review_type;
+  env.DOT_INBOX.values.set(legacyKey, {raw:JSON.stringify(legacyRow), metadata:env.DOT_INBOX.values.get(legacyKey).metadata});
+  const legacyFilled = await (await submit(env, {
+    url:legacyUrl, review_type:'教程指南', bookmark_count:210, has_article:false, text:'旧行补上的摘录',
+  })).json();
+  assert.equal(legacyFilled.review_type, '教程指南');
+  assert.equal(legacyFilled.bookmark_count, 210);
+  assert.equal(legacyFilled.has_article, false);
+  assert.equal(legacyFilled.text, '旧行补上的摘录');
+  assert.equal(legacyFilled.reviewed_at, legacyApproved.reviewed_at);
+  const legacyItem = env.PUBLIC_FEED.json().items.find(item => item.original_url === legacyUrl);
+  assert.equal(legacyItem.review_type, '教程指南');
+  assert.equal(legacyItem.bookmark_count, 210);
+  assert.equal(legacyItem.has_article, false);
+  assert.equal(legacyItem.source_item_time, legacyApproved.reviewed_at);
+  assert.equal(legacyItem.captured_at, legacyApproved.reviewed_at);
+
+  const zeroUrl = 'https://x.com/example/status/2108148604447884303';
+  await submit(env, {url:zeroUrl, bookmark_count:0, like_count:0, has_article:false, review_type:'教程指南', text:'已有摘录'});
+  const zeroApproved = await (await decide(env, {url:zeroUrl, status:'approved'})).json();
+  const zeroAgain = await (await submit(env, {
+    url:zeroUrl, bookmark_count:500, like_count:8, has_article:true, review_type:'文章', text:'新摘录',
+  })).json();
+  assert.equal(zeroAgain.bookmark_count, 0);
+  assert.equal(zeroAgain.like_count, 0);
+  assert.equal(zeroAgain.has_article, false);
+  assert.equal(zeroAgain.review_type, '教程指南');
+  assert.equal(zeroAgain.text, '已有摘录');
+  assert.equal(zeroAgain.reviewed_at, zeroApproved.reviewed_at);
+  const zeroItem = env.PUBLIC_FEED.json().items.find(item => item.original_url === zeroUrl);
+  assert.equal(zeroItem.bookmark_count, 0);
+  assert.equal(zeroItem.like_count, 0);
+  assert.equal(zeroItem.has_article, false);
+  assert.equal(zeroItem.review_type, '教程指南');
+  assert.equal(zeroItem.source_item_time, zeroApproved.reviewed_at);
+
+  const rejectedUrl = 'https://x.com/example/status/2108148604447884304';
+  const rejectedCreated = await (await submit(env, {url:rejectedUrl, note:'略过'})).json();
+  const rejected = await (await decide(env, {url:rejectedUrl, status:'rejected'})).json();
+  const rejectedKey = `${DOT_PENDING_PREFIX}${rejectedCreated.key}`;
+  const rejectedRaw = env.DOT_INBOX.values.get(rejectedKey).raw;
+  const againRejected = await (await submit(env, {
+    url:rejectedUrl, bookmark_count:300, review_type:'文章', has_article:true, published_at:'2026-10-08T04:00:00.000Z', text:'不应写回',
+  })).json();
+  assert.equal(againRejected.status, 'rejected');
+  assert.equal(againRejected.reviewed_at, rejected.reviewed_at);
+  assert.equal(Object.hasOwn(againRejected, 'bookmark_count'), false);
+  assert.equal(env.DOT_INBOX.values.get(rejectedKey).raw, rejectedRaw);
+  assert.equal(env.PUBLIC_FEED.json().items.some(item => item.original_url === rejectedUrl), false);
+
+  const pendingUrl = 'https://x.com/example/status/2108148604447884305';
+  const pendingCreated = await (await submit(env, {url:pendingUrl})).json();
+  assert.equal(pendingCreated.review_type, '短帖');
+  const pendingWrites = env.PUBLIC_FEED.writes.length;
+  const pendingFilled = await (await submit(env, {
+    url:pendingUrl, bookmark_count:180, like_count:2, has_article:true, review_type:'教程指南', text:'待筛选也能补热度',
+  })).json();
+  assert.equal(pendingFilled.status, 'pending');
+  assert.equal(pendingFilled.published, false);
+  assert.equal(pendingFilled.bookmark_count, 180);
+  assert.equal(pendingFilled.like_count, 2);
+  assert.equal(pendingFilled.has_article, true);
+  assert.equal(pendingFilled.text, '待筛选也能补热度');
+  assert.equal(pendingFilled.review_type, '短帖');
+  assert.equal(env.PUBLIC_FEED.writes.length, pendingWrites);
+  assert.equal(env.PUBLIC_FEED.json().items.some(item => item.original_url === pendingUrl), false);
+});
+
+test('a pool re-delivery fills a missing bookmark_count onto the public item for 七日精选', async () => {
+  const env = await environment();
+  const poolHandle = KOSX_POOL_HANDLES[0];
+  const url = `https://x.com/${poolHandle}/status/2108148604447884306`;
+  const created = await (await submit(env, {url, review_type:'文章', note:'池内文章，热度后补'})).json();
+  assert.equal(created.status, 'approved');
+  assert.equal(created.approval, 'pool');
+  assert.equal(Object.hasOwn(created, 'bookmark_count'), false);
+  const before = env.PUBLIC_FEED.json().items.find(item => item.original_url === url);
+  assert.equal(Object.hasOwn(before, 'bookmark_count'), false);
+  assert.equal(before.review_type, '文章');
+  const homeBefore = showcase(env.PUBLIC_FEED.json());
+  assert.equal(homeBefore.week.some(entry => entry.post.item.bookmark_count >= HOME_WEEK_BOOKMARK_MIN && entry.post.originalUrl === url), false);
+
+  const posted = '2026-10-08T04:00:00.000Z';
+  const again = await (await submit(env, {
+    url, bookmark_count:260, like_count:4, review_type:'短帖', has_article:false, published_at:posted, created_at:'2026-10-01T00:00:00.000Z',
+  })).json();
+  assert.equal(again.existing, true);
+  assert.equal(again.status, 'approved');
+  assert.equal(again.reviewed_at, created.reviewed_at);
+  assert.equal(again.bookmark_count, 260);
+  assert.equal(again.like_count, 4);
+  assert.equal(again.review_type, '文章');
+  assert.equal(again.has_article, false);
+  assert.equal(again.published_at, posted);
+  assert.equal(again.created_at, '2026-10-01T00:00:00.000Z');
+  const after = env.PUBLIC_FEED.json().items.find(item => item.original_url === url);
+  assert.equal(after.bookmark_count, 260);
+  assert.equal(after.like_count, 4);
+  assert.equal(after.review_type, '文章');
+  assert.equal(after.has_article, false);
+  assert.equal(after.published_at, posted);
+  assert.notEqual(after.published_at, before.published_at);
+  assert.equal(after.source_item_time, created.reviewed_at);
+  assert.equal(after.captured_at, created.reviewed_at);
+  const home = showcase(env.PUBLIC_FEED.json());
+  assert.equal(home.weekRule, 'bookmarks');
+  assert.equal(home.week.some(entry => entry.post.originalUrl === url && entry.post.item.bookmark_count === 260), true);
 });
 
 test('worker public feed reads do not grow an underrated pin just because a candidate flag exists', async () => {
