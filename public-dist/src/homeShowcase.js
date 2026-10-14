@@ -91,12 +91,18 @@ function keptShelf(state) {
   return {featured, saved:saved.filter(item => !featuredIds.has(item.id) && !featuredIds.has(item.canonical_url) && !featuredIds.has(item.original_url)), archivedCount:[...archived].length};
 }
 
+const UNDERRATED_HUMAN = '昨日最被低估必须人工过审，账号池自动放上首页的帖不进入这一栏。';
+
 function underratedNote(rule, unit) {
   const unitLabel = unit === 'exposure_per_hour' ? '曝光/小时' : unit === 'views' ? '次浏览' : '来源热度';
-  if (rule === 'heat') return `在昨日公开帖里，按来源标注的「${unitLabel}」从低到高取 2 条，并避开已经出现在最新 18 条里的帖。按现有公开指标粗排，未实测。这不是低估模型，也没有核对原帖。`;
-  if (rule === 'rank') return '昨日帖里，同一类可解析的来源热度不足 2 条，改为按来源榜单位置靠后粗排。按现有公开指标粗排，未实测。榜位靠后不等于内容被低估。';
-  if (rule === 'mixed-heat') return '来源热度的单位不一致，没有互相换算；只在能解析出数字的昨日帖里按数字从小到大粗排。按现有公开指标粗排，未实测。';
-  return '昨日公开帖没有可解析的来源热度或榜位。下面改为昨日里发布时间最早的帖，并标明这不是热度结论。按现有公开指标粗排，未实测。';
+  const body = rule === 'heat'
+    ? `在昨日公开帖里，按来源标注的「${unitLabel}」从低到高取 2 条，并避开已经出现在最新 18 条里的帖。按现有公开指标粗排，未实测。这不是低估模型，也没有核对原帖。`
+    : rule === 'rank'
+      ? '昨日帖里，同一类可解析的来源热度不足 2 条，改为按来源榜单位置靠后粗排。按现有公开指标粗排，未实测。榜位靠后不等于内容被低估。'
+      : rule === 'mixed-heat'
+        ? '来源热度的单位不一致，没有互相换算；只在能解析出数字的昨日帖里按数字从小到大粗排。按现有公开指标粗排，未实测。'
+        : '昨日公开帖没有可解析的来源热度或榜位。下面改为昨日里发布时间最早的帖，并标明这不是热度结论。按现有公开指标粗排，未实测。';
+  return `${body}${UNDERRATED_HUMAN}`;
 }
 
 function pickUnderrated(yesterday, latestIds) {
@@ -140,7 +146,9 @@ export function selectHomeShowcase(state, {now} = {}) {
   const yesterdayEntries = dated.filter(entry => onDay(entry, yesterday));
   const weekEntries = dated.filter(entry => weekKeys.includes(beijingDateKey(entry.time.ms)));
   const latest = dated.slice(0, HOME_LATEST_LIMIT);
-  const under = pickUnderrated(yesterdayEntries, new Set(latest.map(entry => entry.post.item.id)));
+  // Pool auto-publish can stay on the chronological cover. It never feeds this shelf.
+  const underratedCandidates = yesterdayEntries.filter(entry => entry.post?.item?.kosx_review !== 'pool');
+  const under = pickUnderrated(underratedCandidates, new Set(latest.map(entry => entry.post.item.id)));
   const kept = keptShelf(state);
   if (before !== state) throw Error('首页筛选不应替换资料对象。');
   return {
@@ -150,6 +158,15 @@ export function selectHomeShowcase(state, {now} = {}) {
     weekRest:weekEntries.filter(entry => !entry.post.instruction?.eligible),
     underrated:under.entries, underratedRule:under.rule, underratedNote:under.note, kept,
   };
+}
+
+// True when publishing this id now would place it in yesterday's underrated logic.
+// Pool-tagged items are already excluded from that shelf, so they do not count.
+export function wouldEnterUnderrated(state, itemId) {
+  if (typeof itemId !== 'string' || !itemId) return true;
+  const selection = selectHomeShowcase(state || {});
+  if (selection.underrated.some(entry => entry.post?.item?.id === itemId)) return true;
+  return selection.yesterday.some(entry => entry.post?.item?.id === itemId && entry.post.item?.kosx_review !== 'pool');
 }
 
 export function homeViewName(value) {

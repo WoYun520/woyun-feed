@@ -1,6 +1,14 @@
 # 待筛选进料口
 
-公开首页的「贴链接」和 Overheard 都把一条 X 精华帖交给这个接口。服务只把它记为 `pending`，按帖子编号去重，写在私有 KV `DOT_INBOX` 的 `pending:` 前缀下。这个 POST 本身不过审，也不改写 `PUBLIC_FEED`。要把一条已经在队列里的链接放上公开首页，用接收码调用 [待筛选过审](pending-review.md)。
+公开首页的「贴链接」和 Overheard 都把一条 X 精华帖交给这个接口。服务按帖子编号去重，写在私有 KV `DOT_INBOX` 的 `pending:` 前缀下。
+
+两条路：
+
+- **首页贴链接**，以及 **不在 KOSX 账号池里** 的投递：只记 `pending`。这个 POST 不改写 `PUBLIC_FEED`。要上公开首页，用接收码调用 [待筛选过审](pending-review.md)。
+- **投递密钥**送来的帖，作者账号在 KOSX 账号池里，并且按当前首页规则 **不会进入「昨日最被低估」**：写入队列后立刻标成 `approved`，并写入 `PUBLIC_FEED`。这是账号池资格，不是粉丝数。不按万粉或粉丝数排序，也不给粉丝多的人靠前。
+- 同一条如果 **会进入「昨日最被低估」**（落在首页用来计算该栏的「昨日」里）：保持 `pending`，不自动放上首页。昨日最被低估必须人工过审。
+
+已经 `rejected` 的链接不会被重新打开。已经 `approved` 的链接不改原来的过审时间。首页先贴过的同一条，来源记为 `homepage`，之后即使用投递密钥再送一次，也不会自动过审。
 
 **当前仓库改动还没有部署。** 下面的地址要等有人在仓库根目录执行 `npx wrangler deploy` 之后才会出现在预览 Worker `woyun-feed-preview` 上。不要把这次部署打到名为 `woyun` 的 Worker。部署前，对现网地址发 POST 不会进入这套待筛选。
 
@@ -25,15 +33,19 @@ curl -sS -X POST 'https://woyun-feed-preview.hhzovo66.workers.dev/api/dot/pendin
   -d '{"items":[{"url":"https://x.com/name/status/123","note":"可选"},{"url":"https://x.com/name/status/456"}]}'
 ```
 
-新链接返回 `201`。整批都已经在队列里时返回 `200`。批量正文的形状是：
+新链接返回 `201`。整批都已经在队列里、而且状态没有从待筛选改成过审时返回 `200`。批量正文的形状是：
 
 ```json
-{"status":"pending","results":[{"id":"kosx-123","key":"x:123","url":"https://x.com/name/status/123","author_handle":"name","status":"pending","submitted_at":"2026-10-13T00:00:00.000Z","note":"可选","source":"delivery","existing":false}]}
+{"status":"partial","results":[{"id":"kosx-123","key":"x:123","url":"https://x.com/name/status/123","author_handle":"name","status":"approved","submitted_at":"2026-10-13T00:00:00.000Z","reviewed_at":"2026-10-14T01:00:00.000Z","approval":"pool","note":"可选","source":"delivery","existing":false,"pool":true,"published":true,"message":"账号池成员的精华帖已按时间放上公开首页，不进入昨日最被低估。"},{"id":"kosx-456","key":"x:456","url":"https://x.com/name/status/456","author_handle":"name","status":"pending","submitted_at":"2026-10-13T00:00:00.000Z","note":"","source":"delivery","existing":false,"pool":true,"published":false,"message":"这条会进入昨日最被低估，保持待筛选，需接收码人工过审。"}]}
 ```
 
-单条正文则直接返回上面 `results` 里的那一个对象，不包在 `results` 里。`existing: true` 表示这条帖子已经在待筛选里；服务不改原来的提交时间、备注和状态。`status` 在这一阶段只会是 `pending`。这不表示帖子已经出现在公开首页。
+单条正文则直接返回上面 `results` 里的那一个对象，不包在 `results` 里。批量的 `status` 是 `approved`（全部已上首页）、`partial`（有的上了、有的还在待筛选）或 `pending`（都还在待筛选）。
 
-队列最多 300 条。再加新链接时返回 `409`，正文是「待筛选已满，请先处理已有链接。」已在队列里的重复链接仍返回 `200`。这些记录不设过期时间，会留到后面的审核步骤处理。
+`published: true` 才表示这条已经写入公开首页。`approval: "pool"` 表示账号池自动过审；`pool: false` 表示作者不在账号池。`existing: true` 表示队列里本来就有这条；服务不改原来的提交时间、备注，也不把 `rejected` 改回去。已经在首页上的重复投递仍返回「这条已经在公开首页。」，过审时间不变。
+
+账号池自动上首页的帖按过审时间进入最新封面，和别的已过审封面帖同一套时间顺序。首页计算「昨日最被低估」时会跳过 `approval: "pool"` 的帖。接收码后来再标一次 `approved`，会把 `approval` 改成 `review`，过审时间不变，这条才可以进入昨日最被低估。
+
+队列最多 300 条。再加新链接时返回 `409`，正文是「待筛选已满，请先处理已有链接。」状态没有变化的重复链接返回 `200`。原本在待筛选、这次由账号池放上首页的，返回 `201`。这些记录不设过期时间。
 
 `401`：投递密钥不对，或用了接收码来提交。`400` / `413` / `415`：修正链接、备注或 JSON 后再试。`503`：预览 Worker 还没配好两把密钥哈希，或存储暂时不可用；不要把这次失败说成已经进入待筛选。
 
@@ -47,6 +59,27 @@ curl -sS 'https://woyun-feed-preview.hhzovo66.workers.dev/api/dot/pending' \
 ```
 
 返回 `{items, next_cursor}`，每页最多 50 条。下一批把上一页的 `next_cursor` 放在 `?cursor=`。每条含 `note` 和 `source`（`homepage` 或 `delivery`）。没有其他查询参数；不要把密钥放进网址。
+
+## 账号池从哪里来
+
+账号池是 [https://impact.kosx.ai/api/members](https://impact.kosx.ai/api/members) 的公开 `members[].handle`。Worker 不在每次请求时访问这个地址，也只保存账号，不保存粉丝数、显示名或其他字段。名单在 `frontend/kosx-pool.js`。更新时在仓库根目录执行：
+
+```sh
+node frontend/refresh-kosx-pool.mjs
+```
+
+脚本只写入小写 handle。确认 diff 里没有粉丝数之后再提交。预览 Worker 要等这次提交部署之后才会用新名单。部署步骤见 [预览部署](preview-deploy.md)。不要部署名为 `woyun` 的 Worker。
+
+## 给 Overheard 的结果怎么读
+
+继续用投递密钥 POST 到 `/api/dot/pending`。不要改用接收码，接收码不能提交。
+
+- `published: true` 且 `approval: "pool"`：作者在账号池里，这条最新精华帖已经在公开首页。不要再等人工过审，也不要按粉丝数决定送不送。
+- `status: "pending"` 且说明里写昨日最被低估：作者虽在池内，但这条会进入该栏，必须等接收码人工过审。不要把它说成已经上首页。
+- `pool: false`：作者不在账号池，仍是待筛选，和以前一样等接收码。
+- `status: "rejected"`：这条已经被略过，重复 POST 不会把它放回首页。
+
+首页「贴链接」没有这些字段。它只进入待筛选。
 
 ## 首页贴链接
 

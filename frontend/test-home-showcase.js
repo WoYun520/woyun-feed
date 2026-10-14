@@ -105,6 +105,7 @@ test('default homepage renders cover cards, signature, navigation labels and no 
   assert.match(html, /id="home-underrated"/);
   assert.match(html, /最新精华帖/);
   assert.match(html, /昨日最被低估精华帖/);
+  assert.match(html, /昨日最被低估必须人工过审，账号池自动放上首页的帖不进入这一栏/);
   assert.match(html, /按现有公开指标粗排，未实测/);
   assert.match(html, /class="cover-grid"/);
   assert.match(html, /综合推文榜/);
