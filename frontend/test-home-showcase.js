@@ -6,6 +6,7 @@ import { FeedDataAdapter } from './src/dataAdapter.js';
 import { KOSX_EMOJI_ALT, KOSX_EMOJI_FRAMES, KOSX_EMOJI_INTERVAL_MS, mountKosxEmoji, renderHomeShowcase, resetKosxEmoji } from './src/homeShowcaseView.js';
 import { renderWorkspaceNavigation } from './src/workspaceShell.js';
 import { KOSX_POOL_HANDLES } from './kosx-pool.js';
+import { PUBLIC_FILES } from './public-build.mjs';
 
 const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 const app = (homeView = 'latest') => ({homeView, escapeHtml:escape, safeUrl:value => {
@@ -313,6 +314,24 @@ test('default homepage renders cover cards, signature, navigation labels and no 
   const page = readFileSync(new URL('./index.html', import.meta.url), 'utf8');
   assert.match(page, /rel="icon" href="\.\/assets\/kosx\/favicon\.svg" type="image\/svg\+xml"/);
   assert.match(page, /rel="apple-touch-icon" href="\.\/assets\/kosx\/apple-touch-icon\.png"/);
+  const cardImage = 'https://woyun-feed-preview.hhzovo66.workers.dev/assets/kosx/symbol-ink.png';
+  const cardDescription = '精选的 X 精华帖。昨日全部、七日精选、卧云精选，按原帖时间排列。';
+  assert.equal(page.includes('property="og:type" content="website"'), true);
+  assert.equal(page.includes('property="og:title" content="卧云信息流"'), true);
+  assert.equal(page.includes(`property="og:description" content="${cardDescription}"`), true);
+  assert.equal(page.includes(`property="og:image" content="${cardImage}"`), true);
+  assert.equal(page.includes('property="og:image:alt" content="KOSX 四瓣标志"'), true);
+  assert.equal(page.includes('name="twitter:card" content="summary_large_image"'), true);
+  assert.equal(page.includes('name="twitter:title" content="卧云信息流"'), true);
+  assert.equal(page.includes(`name="twitter:description" content="${cardDescription}"`), true);
+  assert.equal(page.includes(`name="twitter:image" content="${cardImage}"`), true);
+  assert.equal(PUBLIC_FILES.includes('assets/kosx/symbol-ink.png'), true);
+  const published = readFileSync(new URL('../public-dist/index.html', import.meta.url), 'utf8');
+  assert.match(published, /<title>我的信息流 · 公开预览<\/title>/);
+  assert.equal(published.includes('property="og:title" content="卧云信息流"'), true);
+  assert.equal(published.includes('name="twitter:card" content="summary_large_image"'), true);
+  assert.equal(published.includes(`property="og:image" content="${cardImage}"`), true);
+  assert.match(published, /rel="apple-touch-icon" href="\.\/assets\/kosx\/apple-touch-icon\.png"/);
   assert.match(css, /\.kosx-hint\s*\{[^}]*font-size:\s*13px/);
   assert.match(css, /\.kosx-hint\s*\{[^}]*color:\s*#62675d/);
   assert.match(css, /\.kosx-panel\s*\{[^}]*border-radius:\s*16px/);
