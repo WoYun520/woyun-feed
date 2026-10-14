@@ -44,7 +44,6 @@ export function renderWorkspaceResume(state,formatTime) {
 }
 
 export function renderWorkspaceStorageNotice(state, options={}) {
-  if(!state.publicPreview)return '';
-  if(options.audience==='visitor') return `<p class="home-local-note">收藏和手动精选只留在这个浏览器，不会自动出现在公开首页。换设备前请自行备份。</p>`;
+  if(!state.publicPreview || options.audience==='visitor') return '';
   return `<details class="workspace-storage-note"><summary>本浏览器保存 · 重要材料请备份</summary><aside class="public-preview-note" aria-label="公开预览说明"><span>收藏、主题和筛选结果只存在当前浏览器。Dot、feedgrab 可投递到私人云端接收箱；精选仍由你选，不会自动公开。清理浏览器或换设备前，请到主题工作台备份。</span><a href="/about.html" target="_blank" rel="noopener">关于这个预览</a></aside></details>`;
 }
