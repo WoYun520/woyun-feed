@@ -205,7 +205,7 @@ function renderSignature() {
 
 function yesterdayNote(selection) {
   const day = selection.reference.yesterday || '未能确定';
-  return `昨日全部是整理日的前一个北京时间自然日（${day}）里、通过现有质量规则的公开帖，按发布时间从新到旧。已收起抽奖或推广信号 ${selection.counts.folded} 条。未核对原帖，未实测。`;
+  return `昨日全部是整理日的前一个北京时间自然日（${day}）里、已经放上公开首页的精华帖，按原帖发布时间从新到旧。包括过审写入公开首页的帖，以及账号池自动放上首页的帖。信息流里其他带日期的帖不放进来。已收起抽奖或推广信号 ${selection.counts.folded} 条。未核对原帖，未实测。`;
 }
 
 function latestNote(selection) {
@@ -229,7 +229,7 @@ function renderSlogan(e) {
 
 function renderList(app, state, entries, {id, title, note}) {
   const e = value => app.escapeHtml(value);
-  return `<section class="home-band" id="${e(id)}" aria-labelledby="${e(id)}-title"><header class="home-band-heading"><h2 id="${e(id)}-title">${e(title)} <small>${entries.length}</small></h2><p class="home-rule">${e(note)}</p></header>${entries.length ? renderCards(app, state, entries, id) : '<p class="home-empty">这个范围里没有通过现有质量规则的公开帖。没有补假帖。</p>'}</section>`;
+  return `<section class="home-band" id="${e(id)}" aria-labelledby="${e(id)}-title"><header class="home-band-heading"><h2 id="${e(id)}-title">${e(title)} <small>${entries.length}</small></h2><p class="home-rule">${e(note)}</p></header>${entries.length ? renderCards(app, state, entries, id) : '<p class="home-empty">这一日没有放上公开首页的精华帖。没有把信息流里其他帖补进来。</p>'}</section>`;
 }
 
 function renderWeek(app, state, selection) {

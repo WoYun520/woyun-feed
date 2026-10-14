@@ -58,12 +58,6 @@ export function parsePublicHeat(label) {
   return unit ? {value, unit, label:label.trim()} : null;
 }
 
-function sourceRank(item) {
-  const values = [item?.source_rank, ...(Array.isArray(item?.source_links) ? item.source_links.map(link => link?.source_rank) : [])];
-  const ranks = values.filter(rank => Number.isInteger(rank) && rank > 0);
-  return ranks.length ? Math.min(...ranks) : null;
-}
-
 export function referenceClock(state, now = Date.now()) {
   const generated = Date.parse(state?.generated_at || '');
   if (Number.isFinite(generated)) return {ms:generated, iso:new Date(generated).toISOString(), source:'generated_at'};
@@ -92,21 +86,20 @@ function keptShelf(state) {
 }
 
 const UNDERRATED_HUMAN = '昨日最被低估必须人工过审，账号池自动放上首页的帖不进入这一栏。';
-
-function underratedNote(rule, unit) {
-  const unitLabel = unit === 'exposure_per_hour' ? '曝光/小时' : unit === 'views' ? '次浏览' : '来源热度';
-  const body = rule === 'heat'
-    ? `在昨日公开帖里，按来源标注的「${unitLabel}」从低到高取 2 条，并避开已经出现在最新 18 条里的帖。按现有公开指标粗排，未实测。这不是低估模型，也没有核对原帖。`
-    : rule === 'rank'
-      ? '昨日帖里，同一类可解析的来源热度不足 2 条，改为按来源榜单位置靠后粗排。按现有公开指标粗排，未实测。榜位靠后不等于内容被低估。'
-      : rule === 'mixed-heat'
-        ? '来源热度的单位不一致，没有互相换算；只在能解析出数字的昨日帖里按数字从小到大粗排。按现有公开指标粗排，未实测。'
-        : '昨日公开帖没有可解析的来源热度或榜位。下面改为昨日里发布时间最早的帖，并标明这不是热度结论。按现有公开指标粗排，未实测。';
-  return `${body}${UNDERRATED_HUMAN}`;
-}
+const KOSX_PUBLIC_SOURCE_ID = 'sopilot-kosx';
 
 function pinnedNote() {
-  return `这一栏按人工钉选的顺序显示昨日公开帖，最多 ${HOME_UNDERSTATED_LIMIT} 条。没有能对上的钉选时，才改用来源热度粗排。钉选不表示已核对原帖。`;
+  return `这一栏只显示人工从「昨日全部」钉选的帖，按钉选顺序，最多 ${HOME_UNDERSTATED_LIMIT} 条。没有对上的钉选时留空，不按来源热度、榜位或发布时间补。钉选不表示已核对原帖。${UNDERRATED_HUMAN}`;
+}
+
+// Homepage essence is the curated public line that approved pending rows and
+// pool auto-approvals join (same flags as isKosxPublicItem). A dated SoPilot
+// stream post that never took that path is not essence.
+function isHomepageEssence(item) {
+  if (!item || typeof item !== 'object') return false;
+  if (item.origin === 'kosx_approved') return true;
+  const refs = item.source_refs;
+  return Array.isArray(refs) && refs.length === 1 && refs[0] === KOSX_PUBLIC_SOURCE_ID;
 }
 
 function statusKey(item) {
@@ -135,11 +128,15 @@ function normalizePins(value) {
   return pins;
 }
 
-// Human pins replace the heat ranking only when at least one pin lands on a
-// yesterday public post. Pool auto-approvals stay out of both paths.
+function emptyUnderrated() {
+  return {entries:[], rule:'empty', unit:'', note:pinnedNote()};
+}
+
+// The band is human pins that land on 「昨日全部」. Pool auto-approvals stay
+// out. Nothing fills the gap from heat, rank, or age.
 function pickPinnedUnderrated(yesterday, pins, yesterdayKey) {
   const wanted = normalizePins(pins).filter(pin => pin.day === yesterdayKey);
-  if (!wanted.length) return null;
+  if (!wanted.length) return emptyUnderrated();
   const byKey = new Map();
   for (const entry of yesterday) {
     if (entry.post.item?.kosx_review === 'pool') continue;
@@ -154,36 +151,8 @@ function pickPinnedUnderrated(yesterday, pins, yesterdayKey) {
     chosen.push(entry);
     if (chosen.length >= HOME_UNDERSTATED_LIMIT) break;
   }
-  if (!chosen.length) return null;
+  if (!chosen.length) return emptyUnderrated();
   return {entries:chosen, rule:'pinned', unit:'', note:pinnedNote()};
-}
-
-function pickUnderrated(yesterday, latestIds) {
-  const rows = yesterday.map(entry => ({...entry, heat:parsePublicHeat(entry.post.item.heat_label), rank:sourceRank(entry.post.item)}));
-  const counts = new Map();
-  for (const row of rows) if (row.heat) counts.set(row.heat.unit, (counts.get(row.heat.unit) || 0) + 1);
-  let unit = '', best = 0;
-  for (const [name, count] of counts) if (count > best) { best = count; unit = name; }
-  let pool = unit && best >= 2 ? rows.filter(row => row.heat?.unit === unit) : [];
-  let rule = 'heat';
-  if (pool.length < 2) {
-    const ranked = rows.filter(row => row.rank != null);
-    if (ranked.length >= 2) { pool = ranked; rule = 'rank'; }
-    else {
-      pool = rows.filter(row => row.heat);
-      rule = pool.length ? 'mixed-heat' : 'oldest';
-      if (rule === 'oldest') pool = rows;
-    }
-  }
-  const fresh = pool.filter(row => !latestIds.has(row.post.item.id));
-  const chosenPool = fresh.length >= Math.min(HOME_UNDERSTATED_LIMIT, pool.length) ? fresh : pool;
-  chosenPool.sort((a, b) => {
-    if (rule === 'rank') return (b.rank - a.rank) || compareId(a.post.item.id, b.post.item.id);
-    if (rule === 'oldest') return a.time.ms - b.time.ms || compareId(a.post.item.id, b.post.item.id);
-    const delta = (a.heat?.value ?? Infinity) - (b.heat?.value ?? Infinity);
-    return delta || (b.rank ?? -1) - (a.rank ?? -1) || compareId(a.post.item.id, b.post.item.id);
-  });
-  return {entries:chosenPool.slice(0, HOME_UNDERSTATED_LIMIT), rule, unit:rule === 'heat' ? unit : '', note:underratedNote(rule, unit)};
 }
 
 export function selectHomeShowcase(state, {now} = {}) {
@@ -196,13 +165,14 @@ export function selectHomeShowcase(state, {now} = {}) {
   const yesterday = dateKey ? addCalendarDays(dateKey, -1) : '';
   const weekKeys = dateKey ? Array.from({length:7}, (_, index) => addCalendarDays(dateKey, -index)) : [];
   const onDay = (entry, key) => key && beijingDateKey(entry.time.ms) === key;
-  const yesterdayEntries = dated.filter(entry => onDay(entry, yesterday));
+  // 「昨日全部」is homepage essence whose original-post Beijing date is yesterday.
+  // Quality folds are already out of `dated`. Pool auto-approvals stay on this
+  // list and on the chronological cover; underrated screening reads this list,
+  // so a stream post that never joined the essence line cannot enter it.
+  const yesterdayEntries = dated.filter(entry => onDay(entry, yesterday) && isHomepageEssence(entry.post.item));
   const weekEntries = dated.filter(entry => weekKeys.includes(beijingDateKey(entry.time.ms)));
   const latest = dated.slice(0, HOME_LATEST_LIMIT);
-  // Pool auto-publish can stay on the chronological cover. It never feeds this shelf.
-  const eligibleYesterday = yesterdayEntries.filter(entry => entry.post?.item?.kosx_review !== 'pool');
-  const under = pickPinnedUnderrated(yesterdayEntries, state?.underratedPins ?? state?.underrated_pins, yesterday)
-    || pickUnderrated(eligibleYesterday, new Set(latest.map(entry => entry.post.item.id)));
+  const under = pickPinnedUnderrated(yesterdayEntries, state?.underratedPins ?? state?.underrated_pins, yesterday);
   const kept = keptShelf(state);
   if (before !== state) throw Error('首页筛选不应替换资料对象。');
   return {
@@ -214,8 +184,8 @@ export function selectHomeShowcase(state, {now} = {}) {
   };
 }
 
-// True when publishing this id now would place it in yesterday's underrated logic.
-// Pool-tagged items are already excluded from that shelf, so they do not count.
+// Pool release holds a post when it would sit on yesterday's essence line and
+// is not a pool auto-approval. The underrated band still shows pins only.
 export function wouldEnterUnderrated(state, itemId) {
   if (typeof itemId !== 'string' || !itemId) return true;
   const selection = selectHomeShowcase(state || {});
