@@ -234,9 +234,8 @@ function renderList(app, state, entries, {id, title, note}) {
 
 function renderWeek(app, state, selection) {
   const e = value => app.escapeHtml(value);
-  const span = selection.reference.weekStart && selection.reference.weekEnd ? `${selection.reference.weekStart} 至 ${selection.reference.weekEnd}` : '日期未能确定';
-  const note = `七日是整理日往前共 7 个北京时间自然日（${span}，含整理日）。先列出摘录里有操作线索的帖，这是现有推文初筛；同窗口其余公开帖按发布时间附在后面。未实测。`;
-  return `<section class="home-band" id="home-week" aria-labelledby="home-week-title"><header class="home-band-heading"><h2 id="home-week-title">七日精选精华帖 <small>${selection.weekLeads.length + selection.weekRest.length}</small></h2><p class="home-rule">${e(note)}</p></header><h3 class="home-subhead">摘录含操作线索 <small>${selection.weekLeads.length}</small></h3>${selection.weekLeads.length ? renderCards(app, state, selection.weekLeads, 'week-lead') : '<p class="home-empty">这七日的摘录里没有认出命令或操作步骤。没有用其他帖冒充教程。</p>'}<h3 class="home-subhead">同七日其余公开帖 <small>${selection.weekRest.length}</small></h3><p class="home-rule">按发布时间排列，不是另一套精选算法。</p>${selection.weekRest.length ? renderCards(app, state, selection.weekRest, 'week-rest') : '<p class="home-empty">这一窗口没有其余公开帖。</p>'}</section>`;
+  const entries = selection.week;
+  return `<section class="home-band" id="home-week" aria-labelledby="home-week-title" data-week-rule="${e(selection.weekRule)}"><header class="home-band-heading"><h2 id="home-week-title">七日精选精华帖 <small>${entries.length}</small></h2><p class="home-rule">${e(selection.weekNote)}</p></header>${entries.length ? renderCards(app, state, entries, 'week') : '<p class="home-empty">这七日没有留下精华文章。没有把其余公开帖补进来。</p>'}</section>`;
 }
 
 function renderKept(app, state, selection) {
