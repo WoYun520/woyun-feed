@@ -149,7 +149,7 @@ function isKosxCard(item) {
 }
 
 // Article-class KOSX cards use a delivered cover when one was stored.
-// Anything else keeps the existing frame, including the text fallback.
+// Anything else stays on the text card: a quote, or title and meta.
 function articleCover(item) {
   if (!isKosxCard(item) || !isArticleClassItem(item)) return null;
   const url = normalizeCoverUrl(item?.cover_url);
@@ -306,25 +306,51 @@ function renderCards(app, state, entries, group) {
   return `<div class="cover-grid">${entries.map(entry => renderPostCard(app, state, entry, group)).join('')}</div>`;
 }
 
+const hasClock = value => typeof value === 'string' && Number.isFinite(Date.parse(value));
+
+// The shelf clock already prefers published_at. created_at is the intake
+// fallback when that field was never stored on the public row.
+function cardClock(item, fallback) {
+  if (fallback?.key === 'published' && fallback.iso) return {iso:fallback.iso, label:fallback.label};
+  if (hasClock(item?.published_at)) return {iso:item.published_at, label:'原帖发布时间'};
+  if (hasClock(item?.created_at)) return {iso:item.created_at, label:'原帖发布时间'};
+  if (fallback?.iso) return {iso:fallback.iso, label:fallback.label || '时间未提供'};
+  if (hasClock(item?.source_item_time)) return {iso:item.source_item_time, label:'榜单条目时间'};
+  if (hasClock(item?.captured_at)) return {iso:item.captured_at, label:'采集或阅读时间'};
+  return {iso:'', label:fallback?.label || '时间未提供'};
+}
+
+function authorCue(item) {
+  const handle = itemAuthorHandle(item);
+  const name = typeof item?.author_name === 'string' ? item.author_name.trim() : '';
+  if (handle && name && name.toLowerCase() !== handle.toLowerCase()) return `${name} · @${handle}`;
+  if (handle) return `@${handle}`;
+  return postAuthorLabel(item);
+}
+
+function bookmarkCount(item) {
+  const value = item?.bookmark_count;
+  return Number.isSafeInteger(value) && value >= 0 && value <= 1_000_000_000 ? value : null;
+}
+
+function quoteText(excerpt) {
+  const lines = excerpt.split(/\n+/).map(line => line.replace(/\s+/g, ' ').trim()).filter(Boolean);
+  if (lines.length > 1) return lines.slice(0, 2).join(' ');
+  return excerpt.replace(/\s+/g, ' ').trim();
+}
+
 function renderPostCard(app, state, entry, group) {
   const post = entry.post, item = post.item, e = value => app.escapeHtml(value);
   const title = item.title || '来源未提供标题';
   const excerpt = coverExcerpt(item.summary);
   const image = articleCover(item) || coverImage(post);
-  const collection = collectionFor(state, post);
-  const id = e(item.id);
-  const names = sourceNames(entry, state).join('、');
-  const author = postAuthorLabel(item);
   const heat = typeof item.heat_label === 'string' && item.heat_label.trim() ? item.heat_label.trim() : '';
-  const when = entry.time.iso ? `<time datetime="${e(entry.time.iso)}">${e(app.formatTime ? app.formatTime(entry.time.iso) : entry.time.iso)}</time>` : '时间未提供';
-  return `<article class="cover-card shape-card" id="home-card-${e(group)}-${id}" data-shape="card" data-home-card="${id}" data-home-group="${e(group)}">
-    ${renderCover(app, item, title, image, post.originalUrl, `${group}:${item.id}`)}
-    <div class="cover-body"><p class="cover-meta">${kosxPoolBadge(item)}<span>${e(names)}</span>${author ? `<span>${e(author)}</span>` : ''}<span>${e(entry.time.label)} ${when}</span></p>
-      <h3><a href="${e(app.safeUrl(post.originalUrl))}" target="_blank" rel="noopener noreferrer">${e(title)}</a></h3>
-      <p class="cover-excerpt">${e(shorten(excerpt, 96) || '来源未提供摘录，请打开原帖。')}</p>
-      <details class="cover-evidence"><summary>摘录与时间依据</summary><p>${e(excerpt || '来源未提供摘录。')}</p>${heat ? `<p>来源标注：${e(heat)}。未核对。</p>` : '<p>来源没有给出可展示的热度文字。</p>'}<p>${e(entry.time.label)}。未核对原帖，未实测。</p>${post.instruction?.eligible ? `<p>${e(post.instruction.label)}。这是摘录里的线索，不是实测。</p>` : ''}</details>
-      <div class="cover-actions"><a class="shape-pill-solid" href="${e(app.safeUrl(post.originalUrl))}" target="_blank" rel="noopener noreferrer">打开原帖</a>${saveButton(e, collection, `home-save-${group}-${item.id}`, title)}</div>
-    </div></article>`;
+  const evidence = `<details class="cover-evidence"><summary>摘录与时间依据</summary><p>${e(excerpt || '来源未提供摘录。')}</p>${heat ? `<p>来源标注：${e(heat)}。未核对。</p>` : '<p>来源没有给出可展示的热度文字。</p>'}<p>${e(entry.time.label)}。未核对原帖，未实测。</p>${post.instruction?.eligible ? `<p>${e(post.instruction.label)}。这是摘录里的线索，不是实测。</p>` : ''}</details>`;
+  return renderShowcaseCard(app, {
+    group, item, title, excerpt, image, originalUrl:post.originalUrl, mediaKey:`${group}:${item.id}`,
+    collection:collectionFor(state, post), names:sourceNames(entry, state).join('、'),
+    clock:cardClock(item, entry.time), saveId:`home-save-${group}-${item.id}`, evidence,
+  });
 }
 
 function renderItemCards(app, state, items, group) {
@@ -332,36 +358,60 @@ function renderItemCards(app, state, items, group) {
 }
 
 function renderKeptCard(app, state, item, group) {
-  const e = value => app.escapeHtml(value), title = item.title || '已保存的材料';
+  const title = item.title || '已保存的材料';
   const excerpt = coverExcerpt(item.summary);
   const image = articleCover(item) || itemCover(item);
-  const time = [item.published_at, item.source_item_time, item.captured_at].find(value => typeof value === 'string' && Number.isFinite(Date.parse(value)));
-  const label = item.published_at === time ? '原帖发布时间' : item.source_item_time === time ? '榜单条目时间' : time ? '采集或阅读时间' : '时间未提供';
   const names = (item.source_refs || []).map(id => homepageSourceLabel(state.sources?.find(source => source.id === id)?.name) || (item.origin === 'dot_import' ? '手动精选' : homepageSourceLabel(id)));
   const archived = state.archivedItemIds?.has?.(item.id);
   const saved = !archived && (group === 'kept-saved' || state.savedItemIds?.has?.(item.id));
-  const collection = {saved, archived, itemId:item.id};
+  return renderShowcaseCard(app, {
+    group, item, title, excerpt, image, originalUrl:item.original_url, mediaKey:`${group}:${item.id}`,
+    collection:{saved, archived, itemId:item.id}, names:names.filter(Boolean).join('、') || '来源未提供',
+    clock:cardClock(item), saveId:`home-save-${group}-${item.id}`, evidence:'',
+  });
+}
+
+function renderShowcaseCard(app, spec) {
+  const e = value => app.escapeHtml(value);
+  const {group, item, title, excerpt, image, originalUrl, mediaKey, collection, names, clock, saveId, evidence} = spec;
+  const mode = image ? 'media' : excerpt ? 'quote' : 'plain';
   const id = e(item.id);
-  return `<article class="cover-card shape-card" id="home-card-${e(group)}-${id}" data-shape="card" data-home-card="${id}" data-home-group="${e(group)}">
-    ${renderCover(app, item, title, image, item.original_url, `${group}:${item.id}`)}
-    <div class="cover-body"><p class="cover-meta">${kosxPoolBadge(item)}<span>${e(names.filter(Boolean).join('、') || '来源未提供')}</span><span>${e(label)}${time ? ` <time datetime="${e(time)}">${e(app.formatTime ? app.formatTime(time) : time)}</time>` : ''}</span></p>
-      <h3><a href="${e(app.safeUrl(item.original_url))}" target="_blank" rel="noopener noreferrer">${e(title)}</a></h3>
-      <p class="cover-excerpt">${e(shorten(excerpt, 96) || '没有摘录。')}</p>
-      <div class="cover-actions"><a class="shape-pill-solid" href="${e(app.safeUrl(item.original_url))}" target="_blank" rel="noopener noreferrer">打开原帖</a>${saveButton(e, collection, `home-save-${group}-${item.id}`, title)}</div>
+  const quote = quoteText(excerpt);
+  const shown = clock.iso ? (app.formatTime ? app.formatTime(clock.iso) : clock.iso) : '';
+  const kind = clock.iso && clock.label && clock.label !== '原帖发布时间' ? `<span class="cover-date-kind">${e(clock.label)}</span>` : '';
+  const date = `<p class="cover-date">${kind}${clock.iso ? `<time datetime="${e(clock.iso)}">${e(shown)}</time>` : e(clock.label || '时间未提供')}</p>`;
+  const quoteBlock = quote ? `<blockquote class="cover-quote">${e(quote)}</blockquote>` : '';
+  const excerptLine = mode === 'media' && excerpt ? `<p class="cover-excerpt">${e(shorten(excerpt, 96))}</p>` : '';
+  const bookmarks = bookmarkCount(item);
+  const author = authorCue(item);
+  const cueBits = [
+    kosxPoolBadge(item),
+    author ? `<span class="cover-author">${e(author)}</span>` : '',
+    bookmarks !== null ? `<span class="cover-bookmarks">收藏 ${e(bookmarks.toLocaleString('zh-CN'))}</span>` : '',
+    names ? `<span>${e(names)}</span>` : '',
+  ].filter(Boolean);
+  return `<article class="cover-card shape-card" id="home-card-${e(group)}-${id}" data-shape="card" data-home-card="${id}" data-home-group="${e(group)}" data-cover="${mode}">
+    ${date}
+    ${quoteBlock}
+    ${renderCover(app, title, image, originalUrl, mediaKey)}
+    <div class="cover-body"><h3><a href="${e(app.safeUrl(originalUrl))}" target="_blank" rel="noopener noreferrer">${e(title)}</a></h3>
+      ${excerptLine}
+      ${cueBits.length ? `<p class="cover-cue">${cueBits.join('')}</p>` : ''}
+      ${evidence}
+      <div class="cover-actions"><a class="shape-pill-solid" href="${e(app.safeUrl(originalUrl))}" target="_blank" rel="noopener noreferrer">打开原帖</a>${saveButton(e, collection, saveId, title)}</div>
     </div></article>`;
 }
 
-function renderCover(app, item, title, image, originalUrl, key) {
+function renderCover(app, title, image, originalUrl, key) {
   const e = value => app.escapeHtml(value);
-  const fallback = `<div class="cover-fallback"${image ? ' aria-hidden="true"' : ''}><p>无来源附图</p><strong>${e(shorten(title, 72))}</strong></div>`;
+  if (!image) return '';
   const hit = `<a class="cover-hit" href="${e(app.safeUrl(originalUrl))}" target="_blank" rel="noopener noreferrer" aria-label="${e(`打开原帖：${title}`)}"></a>`;
-  if (!image) return `<div class="cover-frame">${fallback}${hit}</div>`;
   if (image.kind === 'article_cover') {
     const label = '文章封面，未核对原帖';
-    return `<div class="cover-frame">${fallback}<figure class="cover-photo cover-article" data-post-media><img src="${e(image.url)}" alt="${e(label)}" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-post-media-thumb><figcaption>${e(label)}</figcaption></figure>${hit}</div>`;
+    return `<div class="cover-frame"><figure class="cover-photo cover-article" data-post-media><img src="${e(image.url)}" alt="${e(label)}" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-post-media-thumb><figcaption>${e(label)}</figcaption></figure>${hit}</div>`;
   }
   const kind = image.kind === 'video_poster' ? '视频封面，未播放' : '来源附图，未核对原帖';
-  return `<div class="cover-frame">${fallback}<figure class="cover-photo" data-post-media><img src="${e(image.url)}" alt="${e(kind)}" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-post-media-thumb><button type="button" class="cover-zoom" data-post-media-open data-post-media-key="${e(key)}" data-post-media-url="${e(image.url)}" data-post-media-kind="${e(image.kind)}" data-post-media-source="${e(image.source_url)}" data-post-media-original="${e(originalUrl)}" aria-label="${e(`放大${kind}：${title}`)}">放大</button><figcaption>${e(kind)}</figcaption></figure>${hit}</div>`;
+  return `<div class="cover-frame"><figure class="cover-photo" data-post-media><img src="${e(image.url)}" alt="${e(kind)}" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-post-media-thumb><button type="button" class="cover-zoom" data-post-media-open data-post-media-key="${e(key)}" data-post-media-url="${e(image.url)}" data-post-media-kind="${e(image.kind)}" data-post-media-source="${e(image.source_url)}" data-post-media-original="${e(originalUrl)}" aria-label="${e(`放大${kind}：${title}`)}">放大</button><figcaption>${e(kind)}</figcaption></figure>${hit}</div>`;
 }
 
 function saveButton(e, collection, id, title) {
