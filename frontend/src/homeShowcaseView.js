@@ -224,10 +224,10 @@ function yesterdayNote(selection) {
 }
 
 function latestNote(selection) {
-  const short = selection.latest.length < 18 ? `符合条件的公开帖只有 ${selection.latest.length} 条，没有用假帖补满 18 条。` : '这里是最近 18 条，不是热度榜。';
+  const short = selection.latest.length < 18 ? `符合条件的精华帖只有 ${selection.latest.length} 条，没有用假帖或其他公开帖补满 18 条。` : '这里是最近 18 条，不是热度榜。';
   const folded = selection.counts.folded ? `现有质量规则收起了 ${selection.counts.folded} 条抽奖或推广信号。` : '现有质量规则没有收起抽奖或推广信号。';
   const undated = selection.counts.undated ? `另有 ${selection.counts.undated} 条没有可用时间，没有放进最新、昨日或七日。` : '';
-  return `最新精华按原帖发布时间排列；没有发布时间时用榜单条目时间，再没有则用采集时间。${short}${folded}摘录里能认出操作步骤的帖不足 18 条，所以没有把“教程精选”冒充成这 18 条。未核对原帖，未实测。${undated}`;
+  return `最新精华是已经放上公开首页的精华帖，按原帖发布时间从新到旧。包括过审写入公开首页的帖，以及账号池自动放上首页的帖。没有发布时间时用榜单条目时间，再没有则用采集时间。信息流里其他带日期的帖不放进来。${short}${folded}未核对原帖，未实测。${undated}`;
 }
 
 function renderLatest(app, state, selection) {

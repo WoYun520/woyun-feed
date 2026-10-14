@@ -244,7 +244,9 @@ export function selectHomeShowcase(state, {now} = {}) {
   const yesterdayEntries = dated.filter(entry => onDay(entry, yesterday) && isHomepageEssence(entry.post.item));
   const weekEntries = dated.filter(entry => weekKeys.includes(beijingDateKey(entry.time.ms)) && isHomepageEssence(entry.post.item));
   const week = pickWeek(weekEntries);
-  const latest = dated.slice(0, HOME_LATEST_LIMIT);
+  // 「最新精华」uses the same homepage-essence line as 「昨日全部」, newest first.
+  // A short list stays short: public-stream heat posts do not fill the cap.
+  const latest = dated.filter(entry => isHomepageEssence(entry.post.item)).slice(0, HOME_LATEST_LIMIT);
   const under = pickPinnedUnderrated(yesterdayEntries, state?.underratedPins ?? state?.underrated_pins, yesterday);
   const kept = keptShelf(state);
   if (before !== state) throw Error('首页筛选不应替换资料对象。');

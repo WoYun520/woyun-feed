@@ -92,21 +92,36 @@ test('beijing yesterday is the calendar day before the published snapshot', () =
   assert.equal(parsePublicHeat('没有数字'), null);
 });
 
-test('latest keeps 18 real posts by publication time and does not invent rows', () => {
-  const items = [
-    ...Array.from({length:20}, (_, index) => post(String(200000 + index), `2026-10-10T${String(index).padStart(2,'0')}:00:00.000Z`)),
-    post('199001', '2026-10-09T02:00:00.000Z', {heat:'100 曝光/小时'}),
-    post('199002', '2026-10-09T03:00:00.000Z', {heat:'5.1万 曝光/小时'}),
-    post('188001', '2026-10-09T01:00:00.000Z', {summary:'转发抽一名，送周边礼品，关注后参与。'}),
-  ];
-  const input = state(items), before = structuredClone(input);
+test('latest keeps 18 homepage essence posts by publication time and does not fill with the public stream', () => {
+  const essence = Array.from({length:20}, (_, index) => post(String(200000 + index), `2026-10-10T${String(index).padStart(2,'0')}:00:00.000Z`, {origin:'kosx_approved'}));
+  const hot = post('199001', '2026-10-10T23:30:00.000Z', {heat:'5.1万 曝光/小时', title:'2027年或成史上最热一年'});
+  const mixed = post('199002', '2026-10-10T23:00:00.000Z', {heat:'100 曝光/小时', source_refs:['sopilot-kosx', 'sopilot-all'], title:'多来源热榜'});
+  const sourced = post('199003', '2026-10-10T22:30:00.000Z', {source_refs:['sopilot-kosx'], title:'来源即精华'});
+  const folded = post('188001', '2026-10-09T01:00:00.000Z', {origin:'kosx_approved', summary:'转发抽一名，送周边礼品，关注后参与。'});
+  const items = [...essence, hot, mixed, sourced, folded];
+  const input = state(items);
+  input.sources = [source, {id:'sopilot-kosx', name:'KOSX 过审', group:'posts', link_kind:'post', status:'ok', enabled:true}];
+  const before = structuredClone(input);
   const selected = selectHomeShowcase(input);
   assert.equal(selected.latest.length, 18);
-  assert.deepEqual(selected.latest.map(entry => entry.post.item.id), items.slice(2, 20).map(item => item.id).reverse());
+  assert.deepEqual(selected.latest.map(entry => entry.post.item.id), [sourced.id, ...essence.slice(3).map(item => item.id).reverse()]);
+  assert.equal(selected.latest.some(entry => entry.post.item.id === hot.id), false);
+  assert.equal(selected.latest.some(entry => entry.post.item.id === mixed.id), false);
   assert.ok(selected.latest.every(entry => input.allItems.some(item => item.id === entry.post.item.id)));
   assert.equal(selected.counts.folded, 1);
   assert.ok(!selected.yesterday.some(entry => entry.post.item.id === '188001'));
   assert.deepEqual(input, before);
+  const sparseItems = [
+    post('230001', '2026-10-10T08:00:00.000Z', {origin:'kosx_approved', title:'一条精华'}),
+    post('230002', '2026-10-10T09:00:00.000Z', {title:'热榜水文', heat:'9万 曝光/小时'}),
+  ];
+  const sparse = selectHomeShowcase(state(sparseItems));
+  assert.deepEqual(sparse.latest.map(entry => entry.post.item.id), ['230001']);
+  const note = renderHomeShowcase(app(), state(sparseItems));
+  assert.match(note, /已经放上公开首页的精华帖/);
+  assert.match(note, /信息流里其他带日期的帖不放进来/);
+  assert.match(note, /符合条件的精华帖只有 1 条，没有用假帖或其他公开帖补满 18 条/);
+  assert.doesNotMatch(note, /热榜水文|教程精选/);
 });
 
 test('昨日全部 is homepage essence for that Beijing day, and underrated is pins only', () => {
@@ -128,8 +143,8 @@ test('昨日全部 is homepage essence for that Beijing day, and underrated is p
   assert.match(selected.underratedNote, /昨日全部/);
   assert.match(selected.underratedNote, /不按来源热度/);
   assert.match(selected.underratedNote, /昨日最被低估必须人工过审/);
-  assert.equal(selected.latest.some(entry => entry.post.item.id === stream.id), true);
-  assert.equal(selected.latest.some(entry => entry.post.item.id === today.id), true);
+  assert.deepEqual(selected.latest.map(entry => entry.post.item.id), [today.id, sourced.id, human.id, pooled.id, otherDay.id]);
+  assert.equal(selected.latest.some(entry => entry.post.item.id === stream.id), false);
   assert.equal(wouldEnterUnderrated(input, stream.id), false);
   assert.equal(wouldEnterUnderrated(input, human.id), true);
   assert.equal(wouldEnterUnderrated(input, pooled.id), false);
@@ -222,10 +237,10 @@ test('an empty underrated band is omitted and a pinned band stays on the homepag
 
 test('cover cards show a quiet KOSX badge only for account-pool authors', () => {
   const member = KOSX_POOL_HANDLES[0];
-  const pooled = post('210201', '2026-10-10T09:00:00.000Z', {title:'账号池封面', author_handle:member.toUpperCase(), url:`https://x.com/${member}/status/210201`});
-  const flagged = post('210202', '2026-10-10T08:00:00.000Z', {title:'过审池帖', author_handle:'former_pool', kosx_review:'pool', url:'https://x.com/former_pool/status/210202'});
-  const linked = post('210203', '2026-10-10T07:00:00.000Z', {title:'链接里的池成员', url:`https://twitter.com/${member}/status/210203`});
-  const outsider = post('210204', '2026-10-10T06:00:00.000Z', {title:'站外作者', author_handle:'not_in_pool', url:'https://x.com/not_in_pool/status/210204'});
+  const pooled = post('210201', '2026-10-10T09:00:00.000Z', {title:'账号池封面', author_handle:member.toUpperCase(), url:`https://x.com/${member}/status/210201`, origin:'kosx_approved'});
+  const flagged = post('210202', '2026-10-10T08:00:00.000Z', {title:'过审池帖', author_handle:'former_pool', kosx_review:'pool', url:'https://x.com/former_pool/status/210202', origin:'kosx_approved'});
+  const linked = post('210203', '2026-10-10T07:00:00.000Z', {title:'链接里的池成员', url:`https://twitter.com/${member}/status/210203`, origin:'kosx_approved'});
+  const outsider = post('210204', '2026-10-10T06:00:00.000Z', {title:'站外作者', author_handle:'not_in_pool', url:'https://x.com/not_in_pool/status/210204', origin:'kosx_approved'});
   const html = renderHomeShowcase(app(), state([pooled, flagged, linked, outsider]));
   for (const item of [pooled, flagged, linked]) assert.match(cardHtml(html, item.id), /<span class="kosx-pool-badge">KOSX<\/span>/);
   assert.doesNotMatch(cardHtml(html, outsider.id), /kosx-pool-badge|KOSX/);
@@ -321,8 +336,9 @@ test('seven-day shelf uses public heat only when bookmark counts are missing, th
 test('default homepage renders cover cards, signature, navigation labels and no saturated specimen fill', () => {
   const image = {kind:'photo', url:'https://pbs.twimg.com/media/AbcdEFG.jpg', source_url:'https://x.com/example/status/210001'};
   const items = [
-    post('210001', '2026-10-10T08:00:00.000Z', {title:'带图原帖 <script>', image, heat:'2万 曝光/小时'}),
-    ...Array.from({length:17}, (_, index) => post(String(220000 + index), `2026-10-10T${String(index).padStart(2, '0')}:10:00.000Z`)),
+    post('210001', '2026-10-10T08:00:00.000Z', {title:'带图原帖 <script>', image, heat:'2万 曝光/小时', origin:'kosx_approved'}),
+    ...Array.from({length:17}, (_, index) => post(String(220000 + index), `2026-10-10T${String(index).padStart(2, '0')}:10:00.000Z`, {origin:'kosx_approved'})),
+    post('210888', '2026-10-10T20:00:00.000Z', {title:'2027年或成史上最热一年', heat:'9万 曝光/小时'}),
     post('20900211', '2026-10-09T02:00:00.000Z', {title:'低热度原帖', heat:'120 曝光/小时', origin:'kosx_approved'}),
     post('20900311', '2026-10-09T03:00:00.000Z', {title:'次低热度', heat:'450 曝光/小时', origin:'kosx_approved'}),
   ];
@@ -338,6 +354,10 @@ test('default homepage renders cover cards, signature, navigation labels and no 
   assert.doesNotMatch(html, /18\+|年满|未满请离开|年龄|home-age|shape-age/);
   assert.match(html, /id="home-underrated"/);
   assert.match(html, /最新精华帖/);
+  assert.match(html, /已经放上公开首页的精华帖/);
+  assert.match(html, /这里是最近 18 条，不是热度榜/);
+  assert.match(html, /信息流里其他带日期的帖不放进来/);
+  assert.doesNotMatch(html, /2027年或成史上最热一年|教程精选/);
   assert.match(html, /昨日最被低估精华帖/);
   assert.doesNotMatch(html, /昨日最被低估必须人工过审，账号池自动放上首页的帖不进入这一栏/);
   assert.doesNotMatch(html, /按现有公开指标粗排，未实测|避开已经出现在最新 18/);
