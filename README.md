@@ -52,7 +52,7 @@ npx wrangler secret put DOT_REVIEW_TOKEN_HASH
 
 原始投递密钥、接收码和 `CLOUDFLARE_API_TOKEN` 只留在本机。`.gitignore` 已忽略 `.env`、`.env.*`、`.dev.vars` 和 `.wrangler/`。不要把它们提交进仓库。
 
-Overheard 用同一把投递密钥把 X 链接送进 `/api/dot/pending`，见 [docs/pending-intake.md](docs/pending-intake.md)。作者在 KOSX 账号池里、且不会进入「昨日最被低估」时，这条会按时间写入公开首页，不按粉丝数排序。首页贴链接、池外作者，以及会进入昨日最被低估的帖，仍只记 pending。过审用接收码，见 [docs/pending-review.md](docs/pending-review.md)。昨日最被低估必须人工过审。
+Overheard 用同一把投递密钥把 X 链接送进 `/api/dot/pending`，见 [docs/pending-intake.md](docs/pending-intake.md)。作者在 KOSX 账号池里、且不会进入「昨日最被低估」时，这条会按时间写入公开首页，不按粉丝数排序。首页贴链接、池外作者，以及会进入昨日最被低估的帖，仍只记 pending。过审用接收码，见 [docs/pending-review.md](docs/pending-review.md)；只有 `approved` 会写入公开首页。昨日最被低估必须人工过审。把已经在公开首页上的帖钉进「昨日最被低估精华帖」也用这把接收码，见 [docs/underrated-upload.md](docs/underrated-upload.md)。投递密钥不能钉选。
 
 更细的预览步骤见 [docs/preview-deploy.md](docs/preview-deploy.md)。
 

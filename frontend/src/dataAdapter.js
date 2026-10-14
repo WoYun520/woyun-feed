@@ -369,6 +369,7 @@ export class FeedDataAdapter {
       loadStatus: {...this.loadStatus},
       publication: this.feedData.publication || null,
       generated_at: this.feedData.generated_at,
+      underratedPins: Array.isArray(this.feedData.underrated_pins) ? this.feedData.underrated_pins : [],
       refresh: this.feedData.refresh || null,
       update_notice: this.feedData.mode === 'live' && practicalCount ? [this.feedData.update_notice, `另附 ${practicalCount} 条官方说明整理，未实测；这些材料不随云端定时更新。`].filter(Boolean).join(' ') : this.feedData.update_notice || null,
       profile,

@@ -38,4 +38,4 @@ npx wrangler secret put DOT_DELIVERY_TOKEN_HASH
 npx wrangler secret put DOT_REVIEW_TOKEN_HASH
 ```
 
-原始投递密钥和接收码只留在维护者本机，不进入公开构建、备份或文档。Overheard 用同一把投递密钥调用待筛选进料口，见 [待筛选进料](pending-intake.md)。账号池名单在 `frontend/kosx-pool.js`，用 `node frontend/refresh-kosx-pool.mjs` 从 impact.kosx.ai 刷新后再部署；请求路径不会当场拉取名单。上面的部署命令只发布 `woyun-feed-preview`，不要部署名为 `woyun` 的 Worker。把进料代码推进仓库不会自动部署。
+原始投递密钥和接收码只留在维护者本机，不进入公开构建、备份或文档。Overheard 用同一把投递密钥调用待筛选进料口，见 [待筛选进料](pending-intake.md)。账号池名单在 `frontend/kosx-pool.js`，用 `node frontend/refresh-kosx-pool.mjs` 从 impact.kosx.ai 刷新后再部署；请求路径不会当场拉取名单。昨日低估栏钉选用同一把接收码，不新增密钥，见 [昨日低估上传](underrated-upload.md)。上面的部署命令只发布 `woyun-feed-preview`，不要部署名为 `woyun` 的 Worker。把进料代码推进仓库不会自动部署。
