@@ -1,3 +1,5 @@
+import { renderReviewQueue, bindReviewQueueEvents } from './reviewQueueView.js';
+
 const VIEW_LABELS = { pending: '待筛选', featured: '我的精选', dismissed: '已略过' };
 const CATEGORY_LABELS = { tutorial: '操作教程', cognition: '思路与经验' };
 const READ_LABELS = { main_post: '只读主帖', full_thread: '记录已读完整线程', search_excerpt: '仅见搜索摘录' };
@@ -168,7 +170,7 @@ function renderFilters(value,busy,shown,total) {
   </section>`;
 }
 
-export function renderDotCandidatesView({ candidates = [], view = 'pending', filters = {}, intakeOpen = false, activeCandidateId = '', selectedIds = [], busy = false, message = '', error = '', inbox = {} } = {}) {
+export function renderDotCandidatesView({ candidates = [], view = 'pending', filters = {}, intakeOpen = false, activeCandidateId = '', selectedIds = [], busy = false, message = '', error = '', inbox = {}, reviewQueue } = {}) {
   const activeView = Object.hasOwn(VIEW_LABELS, view) ? view : 'pending';
   const rows = Array.isArray(candidates) ? candidates.filter(record => record && typeof record.id === 'string' && Object.hasOwn(VIEW_LABELS, record.status)) : [];
   const total=rows.filter(record=>record.status===activeView).length;
@@ -179,6 +181,7 @@ export function renderDotCandidatesView({ candidates = [], view = 'pending', fil
   const disabled = busy ? ' disabled' : '';
   const emptyText = { pending: '连接素材自动接收，或把 Dot / feedgrab 的 JSON 文件选进来。重复的原帖会跳过，看完后再决定哪些值得留下。', featured: '先到待筛选区，选择你觉得有用的材料，再点“选入精选”。', dismissed: '暂不收录的材料放在这里，之后也能退回待筛选。' };
   return `<section id="dot-candidates-page" class="dot-candidates-page${visible.length ? ' has-materials' : ''}" aria-labelledby="dot-candidates-title" aria-busy="${busy}">
+    ${reviewQueue ? renderReviewQueue(reviewQueue) : ''}
     <header class="dot-candidates-heading"><div><h2 id="dot-candidates-title">${VIEW_LABELS[activeView]}</h2><p>先看内容有没有用，再决定留下什么。</p></div>
       <label class="dot-import-button${busy ? ' is-disabled' : ''}" for="dot-candidates-file"><span>${busy ? '正在导入…' : '一键导入素材'}</span><input id="dot-candidates-file" class="dot-import-input" type="file" accept=".json,application/json" aria-label="一键导入 Dot 或 feedgrab 素材，选择 JSON 文件，最大 2 MB"${disabled}></label>
     </header>
@@ -224,7 +227,7 @@ function fitReaderToViewport(root) {
   layout.style.setProperty('--dot-reader-top',`${Math.ceil(documentTop)}px`);
 }
 
-export function bindDotCandidatesEvents(root, { onFile, onView, onSelect, onSelectAll, onSetStatus, onExport, onFilters, onIntakeToggle, onOpenCandidate, onCloseCandidate, ...inboxCallbacks } = {}) {
+export function bindDotCandidatesEvents(root, { onFile, onView, onSelect, onSelectAll, onSetStatus, onExport, onFilters, onIntakeToggle, onOpenCandidate, onCloseCandidate, onReviewDecision, ...inboxCallbacks } = {}) {
   if (!root || typeof root.querySelectorAll !== 'function') return;
   const controls = selector => Array.from(root.querySelectorAll(selector));
   const ids = selector => controls(selector).map(control => control.dataset.dotSelect).filter(Boolean);
@@ -234,6 +237,7 @@ export function bindDotCandidatesEvents(root, { onFile, onView, onSelect, onSele
     readerFitRoots.add(root);globalThis.window.addEventListener('resize',()=>fitReaderToViewport(root));
   }
   bindDotInboxEvents(root, inboxCallbacks);
+  bindReviewQueueEvents(root, {onReviewDecision});
   for (const details of controls('#dot-candidates-intake')) details.addEventListener('toggle',()=>onIntakeToggle?.(Boolean(details.open)));
   bindDotInboxFeedbackEvents(root,{onIntakeOpen:()=>{
     const details=controls('#dot-candidates-intake')[0];

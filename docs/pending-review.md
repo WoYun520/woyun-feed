@@ -19,7 +19,23 @@ curl -sS -X POST 'https://woyun-feed-preview.hhzovo66.workers.dev/api/dot/pendin
   -d '{"url":"https://x.com/name/status/123","status":"approved"}'
 ```
 
-`200` 且 `"published": true` 表示这条已经写进 `PUBLIC_FEED`，公开首页的最新封面可以读到它。`existing: true` 表示它本来就是 `approved`，过审时间不变。重复调用可以补上一次没写成功的首页记录。
+`200` 且 `"published": true` 表示这条已经写进 `PUBLIC_FEED`，公开首页的最新封面可以读到它。`existing: true` 表示它本来就是这个过审状态，过审时间不变。重复调用可以补上一次没写成功的首页记录。
+
+过审时可以多带两个可选字段：
+
+- `review_type`：把类型改成 `文章`、`教程指南`、`避坑`、`短帖`、`产品安利` 之一。
+- `underrated_candidate`：`true` 时在这条过审记录上记下「低估栏候选」，并带 `underrated_candidate_at`。这只是记号。它不会调用 `POST /api/dot/pending` 以外的接口，也不会写昨日低估钉选。之后仍要用接收码单独调用 [昨日低估上传](underrated-upload.md) 的 `POST /api/dot/underrated` 才会钉上。`false` 会清掉记号。不带这个字段时，已有记号保持原样。`rejected` 不能带 `true`。
+
+```sh
+curl -sS -X POST 'https://woyun-feed-preview.hhzovo66.workers.dev/api/dot/pending/decision' \
+  -H 'Authorization: Bearer <接收码>' \
+  -H 'Content-Type: application/json' \
+  -d '{"url":"https://x.com/name/status/123","status":"approved","underrated_candidate":true,"review_type":"教程指南"}'
+```
+
+公开预览的「待筛选」页在连上接收码后会列出待过审链接。每条显示类型、收藏/点赞（或比例）和有没有 X Article 卡。建议先看文章，再看教程指南、避坑，短帖和产品安利靠后。点「过审上首页」时可勾选「进低估栏候选」。勾选只写下上面的记号。没有接收码时，这一栏不显示队列，也不能过审。
+
+接收码读取 `GET /api/dot/pending` 时，每条在原有字段外还会带上已保存的 `review_type`、`bookmark_count`、`like_count`、`has_article`、`text`。有候选记号时带 `underrated_candidate: true` 和 `underrated_candidate_at`。旧记录没有这些字段时，页面会按备注粗分，热度和 Article 卡显示为未知。
 
 从首页撤回：
 
@@ -44,4 +60,4 @@ curl -sS -X POST 'https://woyun-feed-preview.hhzovo66.workers.dev/api/dot/pendin
 
 队列上限仍是 300 条，过审和略过的记录也算在里面。
 
-过审只让链接进入公开首页。要放进「昨日最被低估精华帖」，Levi 再用同一把接收码单独钉选，见 [昨日低估上传](underrated-upload.md)。投递密钥不能钉选。候选池自动过审（`kosx_review` 为 `pool`）也不会进入那一栏。
+过审只让链接进入公开首页。要放进「昨日最被低估精华帖」，Levi 再用同一把接收码单独钉选，见 [昨日低估上传](underrated-upload.md)。投递密钥不能钉选。候选池自动过审（`kosx_review` 为 `pool`）也不会进入那一栏。`underrated_candidate` 不是钉选，首页排序也不读它。

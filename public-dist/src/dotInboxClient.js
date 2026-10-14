@@ -6,6 +6,8 @@ export const DOT_INBOX_SEEN_LIMIT = 1000;
 export const DOT_INBOX_PAGE_LIMIT = 20;
 export const DOT_INBOX_IMPORT_LIMIT = 20;
 const INBOX_PATH = '/api/dot/inbox';
+const PENDING_PATH = '/api/dot/pending';
+const DECISION_PATH = '/api/dot/pending/decision';
 const codeValid = value => typeof value === 'string' && /^[A-Za-z0-9_-]{32,256}$/.test(value);
 const batchIdValid = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
 const cursorValid = value => value === null || (typeof value === 'string' && value.length > 0 && value.length <= 2048 && !/[\u0000-\u001f\u007f]/.test(value));
@@ -199,5 +201,63 @@ export class DotInboxClient {
       this.save({...this.config,scan_cursor:cursor});
     }
     return {...result,checked_at:this.config.last_synced_at,more:true};
+  }
+
+  async reviewRequest(path, {method = 'GET', body} = {}) {
+    this.reload();
+    if (!this.config) throw Error('请先连接接收码，再处理公开待过审。');
+    const code = this.config.review_code;
+    const generation = this.generation;
+    const controller = new AbortController(); this.controllers.add(controller);
+    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    try {
+      const response = await this.fetcher.call(globalThis, path, {
+        method,
+        headers:{Authorization:`Bearer ${code}`, Accept:'application/json', ...(body === undefined ? {} : {'Content-Type':'application/json'})},
+        credentials:'omit', cache:'no-store', redirect:'error', signal:controller.signal,
+        ...(body === undefined ? {} : {body:JSON.stringify(body)}),
+      });
+      this.assertConnection(code, generation);
+      if (response.status === 401 || response.status === 403) fail('unauthorized');
+      let payload = null;
+      try { payload = await readBoundedJson(response); } catch { if (!response.ok) fail('network'); throw Error(messages.format); }
+      if (!response.ok) throw Error(typeof payload?.message === 'string' && payload.message.length <= 200 ? payload.message : messages.network);
+      return payload;
+    } catch (error) {
+      if (error?.message === messages.format) throw Error('公开待过审返回的内容不完整，请稍后重试。');
+      if (error?.message === messages.unauthorized || error?.message === messages.changed) throw error;
+      if (typeof error?.message === 'string' && error.message.length <= 200 && !error.message.includes(code) && !error.message.includes(' at ')) throw error;
+      fail('network');
+    } finally { clearTimeout(timer); this.controllers.delete(controller); }
+  }
+
+  async listPendingQueue() {
+    const items = [];
+    const seen = new Set();
+    const cursors = new Set();
+    let cursor = null;
+    for (let page = 0; page < 8; page += 1) {
+      const list = await this.reviewRequest(PENDING_PATH + (cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''));
+      if (!plain(list) || !Array.isArray(list.items) || list.items.length > 50 || !cursorValid(list.next_cursor)) fail('format');
+      for (const item of list.items) {
+        if (!plain(item) || typeof item.id !== 'string' || typeof item.url !== 'string' || typeof item.status !== 'string' || seen.has(item.id)) fail('format');
+        seen.add(item.id);
+        items.push(item);
+      }
+      if (list.next_cursor === null) return items;
+      if (cursors.has(list.next_cursor)) fail('format');
+      cursors.add(list.next_cursor);
+      cursor = list.next_cursor;
+    }
+    return items;
+  }
+
+  async decidePending({url, status, underrated_candidate = false, review_type} = {}) {
+    const body = {url, status};
+    if (underrated_candidate === true) body.underrated_candidate = true;
+    if (typeof review_type === 'string' && review_type) body.review_type = review_type;
+    const result = await this.reviewRequest(DECISION_PATH, {method:'POST', body});
+    if (!plain(result) || typeof result.url !== 'string' || !['approved', 'rejected'].includes(result.status)) fail('format');
+    return result;
   }
 }

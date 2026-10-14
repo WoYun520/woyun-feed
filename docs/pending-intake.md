@@ -19,8 +19,14 @@
 - 鉴权：`Authorization: Bearer <投递密钥>`。这把密钥与 `POST /api/dot/inbox` 是同一把原始投递密钥，不是哈希。哈希存在 Worker secret `DOT_DELIVERY_TOKEN_HASH`。密钥只能放在这个请求头里，不要放进网址、正文或日志。
 - 请求头还要带 `Content-Type: application/json`。
 - 服务端调用不要带 `Origin`。如果带了，必须等于站点自己的源；其他源返回 `403`。
-- 正文可以是一条：`{"url":"https://x.com/name/status/123","author_handle":"name","note":"可选"}`。`author_handle` 和 `note` 都可以省略。
-- 也可以一次最多 20 条：`{"items":[{"url":"https://x.com/name/status/123","note":"可选"},{"url":"https://x.com/name/status/456"}]}`。
+- 正文可以是一条：`{"url":"https://x.com/name/status/123","author_handle":"name","note":"可选","review_type":"教程指南","bookmark_count":120,"like_count":80,"has_article":true,"text":"可选摘录"}`。除 `url` 外都可以省略。
+- 也可以一次最多 20 条：`{"items":[{"url":"https://x.com/name/status/123","note":"可选","review_type":"避坑","bookmark_count":40,"like_count":20,"has_article":false},{"url":"https://x.com/name/status/456"}]}`。
+- 过审信号（只在带投递密钥时接受；首页贴链接仍只能提交 `url`）：
+  - `review_type`：`文章`、`教程指南`、`避坑`、`短帖`、`产品安利` 之一。省略时，服务按 `note`、`text`、`has_article` 粗分。`note` 写成 `类型：教程指南`，或整段备注就是这五个词之一，也会当作指定类型。
+  - `bookmark_count`、`like_count`：非负整数。省略表示未知，不会用另一个数去补。
+  - `has_article`：`true` 或 `false`，表示这条是不是 X Article 卡。省略表示未知。
+  - `text`：单行摘录，最长 800 字，用来粗分类型。不要放密钥。
+- 这些字段只帮助接收码过审时排序。它们不改变原来的过审规则，也不会把帖钉进昨日低估栏。重复投递不改第一次写下的类型、热度和备注。
 - `url` 必须是 `https://x.com`、`twitter.com` 或 `mobile.twitter.com` 上的 `/{账号}/status/{数字}`。服务收成 `https://x.com/{账号}/status/{数字}`，去重键是状态编号。
 - `author_handle` 如果出现，必须和链接里的账号一致，忽略大小写。
 - `note` 最长 400 字，单行，不能夹带密钥或密码样式的文本。
