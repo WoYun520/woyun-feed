@@ -39,3 +39,5 @@ curl -sS -X POST 'https://woyun-feed-preview.hhzovo66.workers.dev/api/dot/pendin
 每天的公开快照重建之后，仍会按队列里的 `approved` 记录把这些链接接回 `PUBLIC_FEED`。只停在 `pending` 的链接不会被接回去。
 
 队列上限仍是 300 条，过审和略过的记录也算在里面。
+
+过审只让链接进入公开首页。要放进「昨日最被低估精华帖」，Levi 再用同一把接收码单独钉选，见 [昨日低估上传](underrated-upload.md)。投递密钥不能钉选。候选池自动过审（`kosx_review` 为 `pool`）也不会进入那一栏。

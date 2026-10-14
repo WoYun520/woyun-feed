@@ -99,6 +99,59 @@ function underratedNote(rule, unit) {
   return '昨日公开帖没有可解析的来源热度或榜位。下面改为昨日里发布时间最早的帖，并标明这不是热度结论。按现有公开指标粗排，未实测。';
 }
 
+function pinnedNote() {
+  return `这一栏按人工钉选的顺序显示昨日公开帖，最多 ${HOME_UNDERSTATED_LIMIT} 条。没有能对上的钉选时，才改用来源热度粗排。钉选不表示已核对原帖。`;
+}
+
+function statusKey(item) {
+  const values = [item?.original_url, item?.canonical_url, ...(Array.isArray(item?.source_links) ? item.source_links.map(link => link?.url) : [])];
+  for (const value of values) {
+    const key = dotPostKey(value);
+    if (key) return key;
+  }
+  return '';
+}
+
+function normalizePins(value) {
+  const list = Array.isArray(value) ? value : [];
+  const seen = new Set();
+  const pins = [];
+  for (const pin of list) {
+    if (!pin || typeof pin !== 'object') continue;
+    const key = typeof pin.key === 'string' && /^x:[1-9]\d{7,24}$/.test(pin.key) ? pin.key : '';
+    const id = typeof pin.id === 'string' && pin.id ? pin.id : '';
+    const day = typeof pin.day === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(pin.day) ? pin.day : '';
+    const mark = key || id;
+    if (!mark || !day || seen.has(mark)) continue;
+    seen.add(mark);
+    pins.push({key, id, day});
+  }
+  return pins;
+}
+
+// Human pins replace the heat ranking only when at least one pin lands on a
+// yesterday public post. Pool auto-approvals stay out of both paths.
+function pickPinnedUnderrated(yesterday, pins, yesterdayKey) {
+  const wanted = normalizePins(pins).filter(pin => pin.day === yesterdayKey);
+  if (!wanted.length) return null;
+  const byKey = new Map();
+  for (const entry of yesterday) {
+    if (entry.post.item?.kosx_review === 'pool') continue;
+    const key = statusKey(entry.post.item);
+    if (key && !byKey.has(key)) byKey.set(key, entry);
+    if (entry.post.item?.id && !byKey.has(entry.post.item.id)) byKey.set(entry.post.item.id, entry);
+  }
+  const chosen = [];
+  for (const pin of wanted) {
+    const entry = (pin.key && byKey.get(pin.key)) || (pin.id && byKey.get(pin.id));
+    if (!entry || chosen.includes(entry)) continue;
+    chosen.push(entry);
+    if (chosen.length >= HOME_UNDERSTATED_LIMIT) break;
+  }
+  if (!chosen.length) return null;
+  return {entries:chosen, rule:'pinned', unit:'', note:pinnedNote()};
+}
+
 function pickUnderrated(yesterday, latestIds) {
   const rows = yesterday.map(entry => ({...entry, heat:parsePublicHeat(entry.post.item.heat_label), rank:sourceRank(entry.post.item)}));
   const counts = new Map();
@@ -140,7 +193,9 @@ export function selectHomeShowcase(state, {now} = {}) {
   const yesterdayEntries = dated.filter(entry => onDay(entry, yesterday));
   const weekEntries = dated.filter(entry => weekKeys.includes(beijingDateKey(entry.time.ms)));
   const latest = dated.slice(0, HOME_LATEST_LIMIT);
-  const under = pickUnderrated(yesterdayEntries, new Set(latest.map(entry => entry.post.item.id)));
+  const eligibleYesterday = yesterdayEntries.filter(entry => entry.post.item?.kosx_review !== 'pool');
+  const under = pickPinnedUnderrated(yesterdayEntries, state?.underratedPins ?? state?.underrated_pins, yesterday)
+    || pickUnderrated(eligibleYesterday, new Set(latest.map(entry => entry.post.item.id)));
   const kept = keptShelf(state);
   if (before !== state) throw Error('首页筛选不应替换资料对象。');
   return {

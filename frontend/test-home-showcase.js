@@ -19,6 +19,7 @@ const post = (id, published, extra = {}) => ({
   canonical_url:extra.url || `https://x.com/example/status/${id}`,
   published_at:published, source_item_time:published, captured_at:published,
   heat_label:extra.heat || '', source_rank:extra.rank ?? null, post_image:extra.image,
+  ...(extra.kosx_review ? {kosx_review:extra.kosx_review} : {}),
 });
 const state = items => ({
   generated_at:'2026-10-10T13:01:27.954Z', mode:'live', sources:[source], allItems:items,
@@ -49,6 +50,71 @@ test('latest keeps 18 real posts by publication time and does not invent rows', 
   assert.equal(selected.counts.folded, 1);
   assert.ok(!selected.yesterday.some(entry => entry.post.item.id === '188001'));
   assert.deepEqual(input, before);
+});
+
+test('pool auto-approvals stay out of the underrated band', () => {
+  const items = [
+    post('209001', '2026-10-09T01:00:00.000Z', {heat:'9000 曝光/小时'}),
+    post('209010', '2026-10-09T02:00:00.000Z', {heat:'10 曝光/小时', kosx_review:'pool'}),
+    post('209002', '2026-10-09T03:00:00.000Z', {heat:'120 曝光/小时'}),
+    post('209003', '2026-10-09T04:00:00.000Z', {heat:'450 曝光/小时'}),
+  ];
+  const selected = selectHomeShowcase(state(items));
+  assert.deepEqual(selected.underrated.map(entry => entry.post.item.id), ['209002', '209003']);
+  assert.equal(selected.yesterday.some(entry => entry.post.item.id === '209010'), true);
+});
+
+test('yesterday pins replace the heat ranking, in pin order, and do not mix with it', () => {
+  const low = post('20900211', '2026-10-09T02:00:00.000Z', {heat:'120 曝光/小时', title:'低热度原帖'});
+  const mid = post('20900311', '2026-10-09T03:00:00.000Z', {heat:'450 曝光/小时', title:'次低热度'});
+  const pinnedFirst = post('20900411', '2026-10-09T04:00:00.000Z', {heat:'9000 曝光/小时', title:'先钉的帖'});
+  const pinnedSecond = post('20900511', '2026-10-09T05:00:00.000Z', {heat:'8000 曝光/小时', title:'后钉的帖'});
+  const otherDay = post('20900611', '2026-10-08T05:00:00.000Z', {heat:'1 曝光/小时', title:'另一天'});
+  const items = [low, mid, pinnedFirst, pinnedSecond, otherDay];
+  const pin = (item, day) => ({id:item.id, key:`x:${item.id}`, url:item.original_url, day});
+  const pinned = selectHomeShowcase({...state(items), underratedPins:[pin(pinnedSecond, '2026-10-09'), pin(pinnedFirst, '2026-10-09'), pin(otherDay, '2026-10-08')]});
+  assert.equal(pinned.underratedRule, 'pinned');
+  assert.deepEqual(pinned.underrated.map(entry => entry.post.item.id), ['20900511', '20900411']);
+  assert.match(pinned.underratedNote, /人工钉选/);
+  assert.equal(pinned.underrated.some(entry => entry.post.item.id === low.id), false);
+  const one = selectHomeShowcase({...state(items), underratedPins:[pin(pinnedFirst, '2026-10-09')]});
+  assert.deepEqual(one.underrated.map(entry => entry.post.item.id), [pinnedFirst.id]);
+  const fallback = selectHomeShowcase({...state(items), underratedPins:[pin(otherDay, '2026-10-08')]});
+  assert.equal(fallback.underratedRule, 'heat');
+  assert.deepEqual(fallback.underrated.map(entry => entry.post.item.id), [low.id, mid.id]);
+  const pooled = {...pinnedFirst, kosx_review:'pool'};
+  const skipped = selectHomeShowcase({...state([pooled, low, mid]), underratedPins:[pin(pooled, '2026-10-09')]});
+  assert.equal(skipped.underratedRule, 'heat');
+  assert.equal(skipped.underrated.some(entry => entry.post.item.kosx_review === 'pool'), false);
+  const html = renderHomeShowcase(app(), {...state(items), underratedPins:[pin(pinnedFirst, '2026-10-09'), pin(pinnedSecond, '2026-10-09')]});
+  const band = html.slice(html.indexOf('id="home-underrated"'));
+  assert.match(band, /data-underrated-rule="pinned"/);
+  assert.match(band, /人工钉选的顺序/);
+  assert.ok(band.indexOf('先钉的帖') < band.indexOf('后钉的帖'));
+  assert.doesNotMatch(band, /低热度原帖|次低热度/);
+});
+
+test('public feed pins reach the homepage through the adapter', () => {
+  const previous = globalThis.localStorage;
+  const bag = new Map();
+  globalThis.localStorage = {getItem:key => bag.get(key) ?? null, setItem:(key, value) => bag.set(key, value), removeItem:key => bag.delete(key), key:index => [...bag.keys()][index] ?? null, get length() { return bag.size; }};
+  try {
+    const pinned = post('20900411', '2026-10-09T04:00:00.000Z', {heat:'9000 曝光/小时', title:'钉选原帖'});
+    const low = post('20900211', '2026-10-09T02:00:00.000Z', {heat:'120 曝光/小时', title:'低热度原帖'});
+    const adapter = new FeedDataAdapter();
+    adapter.feedData = {
+      mode:'live', schema_version:'0.3', profile:{exclude:''}, sources:[source],
+      items:[pinned, low], sections:{daily:[], discover:[]}, generated_at:'2026-10-10T13:01:27.954Z',
+      underrated_pins:[{id:pinned.id, key:`x:${pinned.id}`, url:pinned.original_url, day:'2026-10-09', pinned_at:'2026-10-10T06:00:00.000Z'}],
+    };
+    const selected = selectHomeShowcase(adapter.getState());
+    assert.deepEqual(adapter.getState().underratedPins.map(pin => pin.id), [pinned.id]);
+    assert.equal(selected.underratedRule, 'pinned');
+    assert.deepEqual(selected.underrated.map(entry => entry.post.item.id), [pinned.id]);
+  } finally {
+    if (previous === undefined) delete globalThis.localStorage;
+    else globalThis.localStorage = previous;
+  }
 });
 
 test('underrated yesterday posts are the lowest same-unit public heat and stay out of the latest 18', () => {
