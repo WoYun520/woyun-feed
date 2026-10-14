@@ -87,7 +87,7 @@ function keptShelf(state) {
   return {featured, saved:saved.filter(item => !featuredIds.has(item.id) && !featuredIds.has(item.canonical_url) && !featuredIds.has(item.original_url)), archivedCount:[...archived].length};
 }
 
-const UNDERRATED_HUMAN = '昨日最被低估必须人工过审，账号池自动放上首页的帖不进入这一栏。';
+const UNDERRATED_HUMAN = '昨日最被低估必须人工过审。已经在昨日全部里的帖可以钉进这一栏，包括账号池自动放上首页的帖。';
 const KOSX_PUBLIC_SOURCE_ID = 'sopilot-kosx';
 
 function pinnedNote() {
@@ -197,14 +197,13 @@ function emptyUnderrated() {
   return {entries:[], rule:'empty', unit:'', note:pinnedNote()};
 }
 
-// The band is human pins that land on 「昨日全部」. Pool auto-approvals stay
-// out. Nothing fills the gap from heat, rank, or age.
+// The band is human pins that land on 「昨日全部」. A pool auto-approval
+// already on that line can be pinned. Nothing fills the gap from heat, rank, or age.
 function pickPinnedUnderrated(yesterday, pins, yesterdayKey) {
   const wanted = normalizePins(pins).filter(pin => pin.day === yesterdayKey);
   if (!wanted.length) return emptyUnderrated();
   const byKey = new Map();
   for (const entry of yesterday) {
-    if (entry.post.item?.kosx_review === 'pool') continue;
     const key = statusKey(entry.post.item);
     if (key && !byKey.has(key)) byKey.set(key, entry);
     if (entry.post.item?.id && !byKey.has(entry.post.item.id)) byKey.set(entry.post.item.id, entry);

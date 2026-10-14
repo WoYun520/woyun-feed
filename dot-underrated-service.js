@@ -204,9 +204,7 @@ function homepageYesterday(feed) {
 function resolvePublic(feed, post) {
   const matches = feed.items.filter(item => underratedStatusKey(item) === post.key);
   if (!matches.length) throw new UnderratedError(404, 'not_public', '这条链接还不在当前公开首页。请先用接收码过审，或等它进入公开快照。钉选不会顺便批准。');
-  const open = matches.filter(item => item?.kosx_review !== 'pool');
-  if (!open.length) throw new UnderratedError(409, 'pool_not_pinnable', '候选池自动过审的帖不能放进昨日低估栏。这一栏要人工钉选，而这条仍标着 pool。');
-  const item = open[0];
+  const item = matches[0];
   const time = postTime(item);
   const day = time.ms ? beijingDateKey(time.ms) : '';
   if (!day) bad('undated', '这条公开帖没有可判断日期的时间，不能钉进昨日低估栏。');

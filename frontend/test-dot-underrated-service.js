@@ -108,7 +108,7 @@ test('review token pins a public post without approving, and delivery token cann
   assert.equal(listed.items[0].note, 'Levi 已看过');
 });
 
-test('a new pin is accepted only from yesterday public non-pool posts', async () => {
+test('a new pin is accepted from yesterday public posts, including pool approvals on that line', async () => {
   const olderId = '2108148604447884011';
   const olderUrl = `https://x.com/example/status/${olderId}`;
   const todayId = '2108148604447884012';
@@ -117,15 +117,12 @@ test('a new pin is accepted only from yesterday public non-pool posts', async ()
   const env = await environment([
     item(postUrl),
     item(otherUrl, {id:'news-pool', kosx_review:'pool'}),
-    item(olderUrl, {published_at:'2026-10-08T02:00:00.000Z'}),
-    item(todayUrl, {published_at:'2026-10-10T02:00:00.000Z'}),
+    item(olderUrl, {published_at:'2026-10-08T02:00:00.000Z', kosx_review:'pool'}),
+    item(todayUrl, {published_at:'2026-10-10T02:00:00.000Z', kosx_review:'pool'}),
   ]);
   const missing = await call(env, 'POST', {url:missingUrl});
   assert.equal(missing.status, 404);
   assert.equal((await missing.json()).error, 'not_public');
-  const pooled = await call(env, 'POST', {url:otherUrl});
-  assert.equal(pooled.status, 409);
-  assert.equal((await pooled.json()).error, 'pool_not_pinnable');
   for (const url of [olderUrl, todayUrl]) {
     const rejected = await call(env, 'POST', {url});
     const body = await rejected.json();
@@ -138,6 +135,13 @@ test('a new pin is accepted only from yesterday public non-pool posts', async ()
   assert.equal(mixed.status, 409);
   assert.equal((await mixed.json()).error, 'not_yesterday');
   assert.equal(env.DOT_INBOX.writes.length, 0);
+  const pooled = await call(env, 'POST', {url:otherUrl, note:'池内昨日'});
+  const poolPin = await pooled.json();
+  assert.equal(pooled.status, 201);
+  assert.equal(poolPin.status, 'pinned');
+  assert.equal(poolPin.day, '2026-10-09');
+  assert.equal(poolPin.id, 'news-pool');
+  assert.equal(poolPin.existing, false);
   const created = await call(env, 'POST', {url:postUrl, note:'昨日全部里的'});
   const pin = await created.json();
   assert.equal(created.status, 201);
@@ -194,19 +198,21 @@ test('without generated_at, yesterday follows the current Asia/Shanghai clock', 
   assert.equal(pin.day, yesterday);
 });
 
-test('a missing, pooled, or undated public post is not pinned and approval does not pin by itself', async () => {
+test('a missing or undated public post is not pinned, a yesterday pool post is, and approval does not pin by itself', async () => {
   const env = await environment([
     item(postUrl, {kosx_review:'pool'}),
     item(otherUrl, {published_at:null}),
   ]);
   assert.equal((await call(env, 'POST', {url:'https://x.com/example/status/2108148604447884002'})).status, 404);
   const pooled = await call(env, 'POST', {url:postUrl});
-  assert.equal(pooled.status, 409);
-  assert.equal((await pooled.json()).error, 'pool_not_pinnable');
+  const poolPin = await pooled.json();
+  assert.equal(pooled.status, 201);
+  assert.equal(poolPin.status, 'pinned');
+  assert.equal(poolPin.day, '2026-10-09');
   const undated = await call(env, 'POST', {url:otherUrl});
   assert.equal(undated.status, 400);
   assert.equal((await undated.json()).error, 'undated');
-  assert.equal(env.DOT_INBOX.writes.length, 0);
+  assert.equal(env.DOT_INBOX.writes.length, 1);
   const pendingEnv = await environment([item(postUrl)]);
   const intake = await handleDotPendingRequest(request('POST', {path:'/api/dot/pending', token:delivery, body:{url:postUrl}}), pendingEnv);
   assert.equal(intake.status, 201);
