@@ -110,7 +110,9 @@ test('pool cover order is chronological and pool posts never enter the underrate
   const humanState = {...state, allItems:[humanOlder, newer]};
   const reviewed = selectHomeShowcase(humanState);
   assert.equal(humanOlder.kosx_review, undefined);
-  assert.equal(reviewed.underrated.some(entry => entry.post.item.id === 'kosx-1'), true);
+  assert.equal(reviewed.yesterday.some(entry => entry.post.item.id === 'kosx-1'), true);
+  assert.equal(reviewed.underrated.some(entry => entry.post.item.id === 'kosx-1'), false);
+  assert.equal(reviewed.underratedRule, 'empty');
   assert.equal(wouldEnterUnderrated(humanState, 'kosx-1'), true);
 });
 
@@ -192,7 +194,8 @@ test('a post that would enter yesterday underrated stays pending until the revie
   const published = env.PUBLIC_FEED.json();
   const item = published.items.find(entry => entry.original_url === poolUrl);
   assert.equal(item.kosx_review, undefined);
-  assert.equal(showcase(published).underrated.some(entry => entry.post.originalUrl === poolUrl), true);
+  assert.equal(showcase(published).yesterday.some(entry => entry.post.originalUrl === poolUrl), true);
+  assert.equal(showcase(published).underrated.some(entry => entry.post.originalUrl === poolUrl), false);
 });
 
 test('pool auto-publish stays off the underrated shelf until a review code marks it reviewed', async () => {
@@ -211,7 +214,9 @@ test('pool auto-publish stays off the underrated shelf until a review code marks
   const after = env.PUBLIC_FEED.json();
   after.generated_at = shifted.generated_at;
   assert.equal(after.items.find(item => item.original_url === poolUrl).kosx_review, undefined);
-  assert.equal(showcase(after).underrated.some(entry => entry.post.originalUrl === poolUrl), true);
+  assert.equal(showcase(after).yesterday.some(entry => entry.post.originalUrl === poolUrl), true);
+  assert.equal(showcase(after).underrated.some(entry => entry.post.originalUrl === poolUrl), false);
+  assert.equal(wouldEnterUnderrated({sources:after.sources, allItems:after.items, profile:after.profile, generated_at:after.generated_at}, after.items.find(item => item.original_url === poolUrl).id), true);
 });
 
 test('a mixed delivery publishes only pool handles and does not rank them', async () => {
