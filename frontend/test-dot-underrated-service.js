@@ -4,6 +4,7 @@ import { webcrypto } from 'node:crypto';
 import { dotInboxHash } from '../dot-inbox-service.js';
 import { DOT_PENDING_DECISION_PATH, handleDotPendingRequest } from '../dot-pending-service.js';
 import { PUBLIC_FEED_KEY } from './cloud-feed-service.js';
+import { addCalendarDays, beijingDateKey } from './src/homeShowcase.js';
 import {
   DOT_UNDERRATED_PATH, UNDERRATED_PIN_KEY, UNDERRATED_PIN_STORE_MAX, UNDERRATED_REVIEWER,
   handleDotUnderratedRequest,
@@ -19,6 +20,8 @@ const postUrl = `https://x.com/example/status/${statusId}`;
 const otherId = '2108148604447884000';
 const otherUrl = `https://x.com/example/status/${otherId}`;
 const when = '2026-10-09T02:00:00.000Z';
+// Beijing 2026-10-10, so the homepage clock's yesterday is 2026-10-09.
+const snapshotAt = '2026-10-10T02:00:00.000Z';
 
 class FakeKV {
   constructor() { this.values = new Map(); this.writes = []; }
@@ -31,7 +34,10 @@ class FakeKV {
 }
 
 class FeedKV {
-  constructor(items) { this.raw = JSON.stringify({schema_version:'0.3', mode:'live', items, sources:[], profile:{}, sections:{daily:[], discover:[]}}); this.writes = []; }
+  constructor(items, generated_at = snapshotAt) {
+    this.raw = JSON.stringify({schema_version:'0.3', mode:'live', generated_at, items, sources:[], profile:{}, sections:{daily:[], discover:[]}});
+    this.writes = [];
+  }
   async get(key) { assert.equal(key, PUBLIC_FEED_KEY); return this.raw; }
   async put(key, raw) { this.writes.push({key, raw}); this.raw = raw; }
 }
@@ -50,9 +56,9 @@ const item = (url, extra = {}) => ({
   ...(extra.kosx_review ? {kosx_review:extra.kosx_review} : {}),
 });
 
-const environment = async (items = [item(postUrl), item(otherUrl, {id:'news-other'})]) => ({
+const environment = async (items = [item(postUrl), item(otherUrl, {id:'news-other'})], {generated_at = snapshotAt} = {}) => ({
   DOT_INBOX:new FakeKV(),
-  PUBLIC_FEED:new FeedKV(items),
+  PUBLIC_FEED:new FeedKV(items, generated_at),
   DOT_DELIVERY_TOKEN_HASH:await dotInboxHash(delivery),
   DOT_REVIEW_TOKEN_HASH:await dotInboxHash(review),
 });
@@ -100,6 +106,92 @@ test('review token pins a public post without approving, and delivery token cann
   assert.equal(listed.store_limit, UNDERRATED_PIN_STORE_MAX);
   assert.equal(listed.items.length, 1);
   assert.equal(listed.items[0].note, 'Levi 已看过');
+});
+
+test('a new pin is accepted only from yesterday public non-pool posts', async () => {
+  const olderId = '2108148604447884011';
+  const olderUrl = `https://x.com/example/status/${olderId}`;
+  const todayId = '2108148604447884012';
+  const todayUrl = `https://x.com/example/status/${todayId}`;
+  const missingUrl = 'https://x.com/example/status/2108148604447884013';
+  const env = await environment([
+    item(postUrl),
+    item(otherUrl, {id:'news-pool', kosx_review:'pool'}),
+    item(olderUrl, {published_at:'2026-10-08T02:00:00.000Z'}),
+    item(todayUrl, {published_at:'2026-10-10T02:00:00.000Z'}),
+  ]);
+  const missing = await call(env, 'POST', {url:missingUrl});
+  assert.equal(missing.status, 404);
+  assert.equal((await missing.json()).error, 'not_public');
+  const pooled = await call(env, 'POST', {url:otherUrl});
+  assert.equal(pooled.status, 409);
+  assert.equal((await pooled.json()).error, 'pool_not_pinnable');
+  for (const url of [olderUrl, todayUrl]) {
+    const rejected = await call(env, 'POST', {url});
+    const body = await rejected.json();
+    assert.equal(rejected.status, 409);
+    assert.equal(body.error, 'not_yesterday');
+    assert.match(body.message, /昨日全部/);
+    assert.match(body.message, /2026-10-09/);
+  }
+  const mixed = await call(env, 'POST', {urls:[postUrl, olderUrl]});
+  assert.equal(mixed.status, 409);
+  assert.equal((await mixed.json()).error, 'not_yesterday');
+  assert.equal(env.DOT_INBOX.writes.length, 0);
+  const created = await call(env, 'POST', {url:postUrl, note:'昨日全部里的'});
+  const pin = await created.json();
+  assert.equal(created.status, 201);
+  assert.equal(pin.status, 'pinned');
+  assert.equal(pin.day, '2026-10-09');
+  assert.equal(pin.existing, false);
+  assert.equal(env.PUBLIC_FEED.writes.length, 0);
+});
+
+test('listing and unpin keep working for a pin that is no longer yesterday', async () => {
+  const staleId = '2108148604447884020';
+  const staleUrl = `https://x.com/example/status/${staleId}`;
+  const env = await environment([item(staleUrl, {published_at:'2026-10-08T02:00:00.000Z'})]);
+  const stale = {
+    id:'news-stale', key:`x:${staleId}`, url:staleUrl, author_handle:'example',
+    day:'2026-10-08', pinned_at:'2026-10-08T03:00:00.000Z', note:'旧钉选', reviewer:UNDERRATED_REVIEWER,
+  };
+  await env.DOT_INBOX.put(UNDERRATED_PIN_KEY, JSON.stringify({items:[stale]}));
+  const listed = await (await call(env, 'GET')).json();
+  assert.equal(listed.items.length, 1);
+  assert.equal(listed.items[0].day, '2026-10-08');
+  assert.equal(listed.items[0].note, '旧钉选');
+  const again = await call(env, 'POST', {url:staleUrl, note:'后来的备注'});
+  const repeat = await again.json();
+  assert.equal(again.status, 200);
+  assert.equal(repeat.existing, true);
+  assert.equal(repeat.note, '旧钉选');
+  const removed = await call(env, 'DELETE', {url:staleUrl});
+  assert.equal(removed.status, 200);
+  assert.equal((await removed.json()).status, 'unpinned');
+  const rejected = await call(env, 'POST', {url:staleUrl});
+  assert.equal(rejected.status, 409);
+  assert.equal((await rejected.json()).error, 'not_yesterday');
+  assert.deepEqual((await (await call(env, 'GET')).json()).items, []);
+});
+
+test('without generated_at, yesterday follows the current Asia/Shanghai clock', async () => {
+  const today = beijingDateKey(Date.now());
+  const yesterday = addCalendarDays(today, -1);
+  const older = addCalendarDays(yesterday, -1);
+  const at = day => `${day}T04:00:00.000Z`;
+  const yesterdayUrl = 'https://x.com/example/status/2108148604447884101';
+  const olderUrl = 'https://x.com/example/status/2108148604447884102';
+  const env = await environment([
+    item(yesterdayUrl, {published_at:at(yesterday)}),
+    item(olderUrl, {published_at:at(older)}),
+  ], {generated_at:null});
+  const rejected = await call(env, 'POST', {url:olderUrl});
+  assert.equal(rejected.status, 409);
+  assert.equal((await rejected.json()).error, 'not_yesterday');
+  const created = await call(env, 'POST', {url:yesterdayUrl});
+  const pin = await created.json();
+  assert.equal(created.status, 201);
+  assert.equal(pin.day, yesterday);
 });
 
 test('a missing, pooled, or undated public post is not pinned and approval does not pin by itself', async () => {
