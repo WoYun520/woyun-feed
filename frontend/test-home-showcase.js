@@ -26,11 +26,62 @@ const post = (id, published, extra = {}) => ({
   ...(extra.bookmark_count !== undefined ? {bookmark_count:extra.bookmark_count} : {}),
   ...(extra.review_type ? {review_type:extra.review_type} : {}),
   ...(extra.has_article !== undefined ? {has_article:extra.has_article} : {}),
+  ...(extra.cover_url !== undefined ? {cover_url:extra.cover_url} : {}),
 });
 const state = items => ({
   generated_at:'2026-10-10T13:01:27.954Z', mode:'live', sources:[source], allItems:items,
   hiddenItemIds:new Set(), savedItemIds:new Set(), archivedItemIds:new Set(), savedItems:[],
   dotFeaturedItems:[], profile:{exclude:''},
+});
+
+test('article-class KOSX cards show a delivered cover and leave a missing cover as the text frame', () => {
+  const articleCover = 'https://cdn.example.com/covers/article-card.jpg?format=jpg&name=large';
+  const tutorialCover = 'https://cdn.example.com/covers/tutorial-card.jpg';
+  const cardCover = 'https://cdn.example.com/covers/x-article-card.jpg';
+  const shortCover = 'https://cdn.example.com/covers/short-card.jpg';
+  const pitfallCover = 'https://cdn.example.com/covers/pitfall-card.jpg';
+  const outsideCover = 'https://cdn.example.com/covers/not-kosx.jpg';
+  const photo = {kind:'photo', url:'https://pbs.twimg.com/media/AbcdEFG.jpg', source_url:'https://x.com/example/status/4401'};
+  const items = [
+    post('4401', '2026-10-10T08:00:00.000Z', {origin:'kosx_approved', review_type:'文章', bookmark_count:240, title:'带封面的文章', cover_url:articleCover, image:photo, url:'https://x.com/example/status/4401'}),
+    post('4402', '2026-10-10T07:00:00.000Z', {origin:'kosx_approved', review_type:'文章', bookmark_count:220, title:'没有封面的文章'}),
+    post('4403', '2026-10-10T06:00:00.000Z', {origin:'kosx_approved', review_type:'教程指南', bookmark_count:210, title:'教程封面', cover_url:tutorialCover}),
+    post('4404', '2026-10-10T05:00:00.000Z', {origin:'kosx_approved', has_article:true, bookmark_count:205, title:'Article 卡封面', cover_url:cardCover}),
+    post('4405', '2026-10-10T04:00:00.000Z', {origin:'kosx_approved', review_type:'短帖', title:'短帖不显示封面', cover_url:shortCover}),
+    post('4406', '2026-10-10T03:00:00.000Z', {origin:'kosx_approved', review_type:'避坑', has_article:true, bookmark_count:900, title:'避坑不显示封面', cover_url:pitfallCover}),
+    post('4407', '2026-10-10T02:00:00.000Z', {review_type:'文章', bookmark_count:900, title:'非精华不显示封面', cover_url:outsideCover}),
+    post('4408', '2026-10-10T01:00:00.000Z', {origin:'kosx_approved', review_type:'文章', bookmark_count:230, title:'坏地址不显示', cover_url:'http://cdn.example.com/covers/nope.jpg'}),
+  ];
+  const input = state(items);
+  const card = (html, group, id) => {
+    const start = html.indexOf(`id="home-card-${group}-${id}"`);
+    assert.notEqual(start, -1, `${group}:${id}`);
+    return html.slice(start, html.indexOf('</article>', start));
+  };
+  const latest = renderHomeShowcase(app(), input);
+  const week = renderHomeShowcase(app('week'), input);
+  const shown = card(latest, 'latest', '4401');
+  assert.match(shown, /src="https:\/\/cdn\.example\.com\/covers\/article-card\.jpg\?format=jpg&amp;name=large"/);
+  assert.match(shown, /class="cover-photo cover-article"/);
+  assert.match(shown, /文章封面，未核对原帖/);
+  assert.match(shown, /referrerpolicy="no-referrer"/);
+  assert.doesNotMatch(shown, /cover-zoom|pbs\.twimg\.com/);
+  const bare = card(latest, 'latest', '4402');
+  assert.match(bare, /无来源附图/);
+  assert.doesNotMatch(bare, /<img|src=/);
+  assert.match(card(latest, 'latest', '4403'), /src="https:\/\/cdn\.example\.com\/covers\/tutorial-card\.jpg"/);
+  assert.match(card(latest, 'latest', '4404'), /src="https:\/\/cdn\.example\.com\/covers\/x-article-card\.jpg"/);
+  assert.match(card(latest, 'latest', '4405'), /无来源附图/);
+  assert.doesNotMatch(card(latest, 'latest', '4405'), /short-card/);
+  assert.doesNotMatch(card(latest, 'latest', '4406'), /pitfall-card/);
+  assert.doesNotMatch(latest, /not-kosx|covers\/nope/);
+  assert.match(card(week, 'week', '4401'), /article-card\.jpg/);
+  assert.match(card(week, 'week', '4402'), /无来源附图/);
+  assert.doesNotMatch(card(week, 'week', '4402'), /<img/);
+  assert.match(card(week, 'week', '4403'), /tutorial-card\.jpg/);
+  assert.doesNotMatch(week, /short-card|pitfall-card|not-kosx|covers\/nope/);
+  const css = readFileSync(new URL('./src/homeShowcase.css', import.meta.url), 'utf8');
+  assert.match(css, /\.cover-photo\.cover-article figcaption/);
 });
 
 test('beijing yesterday is the calendar day before the published snapshot', () => {
