@@ -316,6 +316,19 @@ function copySignals(stored, record) {
   return record;
 }
 
+// A later delivery may fill in the original post time. Notes, heat, and the
+// review clock stay as first written. Rejected rows are left untouched.
+function mergeIntakeTimes(stored, post) {
+  let changed = false;
+  const next = {...stored};
+  for (const field of timeFields) {
+    if (!timestamp(post[field]) || next[field] === post[field]) continue;
+    next[field] = post[field];
+    changed = true;
+  }
+  return changed ? next : null;
+}
+
 // candidate: true sets the flag, false clears it, null keeps the previous flag.
 // The flag never writes the underrated pin list.
 function decidedRecord(stored, status, reviewed_at, approval, {candidate = null, review_type, candidateAt} = {}) {
@@ -348,13 +361,13 @@ function canRelease(item) {
 async function applyPoolRelease(env, posts, existing, delivery) {
   const held = new Set();
   const promoted = new Set();
-  if (!delivery) return {held, promoted};
+  if (!delivery) return {held, promoted, published:false};
   const pendingPool = posts.map(post => existing.get(post.key)).filter(record => record?.source === 'delivery' && record.status === 'pending' && isKosxPoolHandle(record.author_handle));
   const repair = posts.some(post => {
     const record = existing.get(post.key);
     return record?.source === 'delivery' && record.status === 'approved' && record.approval === 'pool';
   });
-  if (!pendingPool.length && !repair) return {held, promoted};
+  if (!pendingPool.length && !repair) return {held, promoted, published:false};
   if (typeof env?.PUBLIC_FEED?.get !== 'function' || typeof env?.PUBLIC_FEED?.put !== 'function') unavailable();
   const reviewed_at = new Date().toISOString();
   const base = await readPublicFeed(env);
@@ -376,8 +389,9 @@ async function applyPoolRelease(env, posts, existing, delivery) {
     accepted.push(next);
     promoted.add(record.key);
   }
-  if (accepted.length !== approved.length || repair) await publishApproved(env);
-  return {held, promoted};
+  const published = accepted.length !== approved.length || repair;
+  if (published) await publishApproved(env);
+  return {held, promoted, published};
 }
 
 function queryCursor(url, isRead) {
@@ -519,7 +533,21 @@ export async function handleDotPendingRequest(request, env) {
       });
       existing.set(post.key, record);
     }
-    const {held, promoted} = await applyPoolRelease(env, posts, existing, delivery);
+    const timed = [];
+    for (const post of posts) {
+      if (created.includes(post)) continue;
+      const stored = existing.get(post.key);
+      if (!stored || stored.status === 'rejected') continue;
+      const next = mergeIntakeTimes(stored, post);
+      if (!next) continue;
+      await env.DOT_INBOX.put(`${DOT_PENDING_PREFIX}${next.key}`, JSON.stringify(next), {
+        metadata:{id:next.id, key:next.key, status:next.status, submitted_at:next.submitted_at, ...(next.reviewed_at ? {reviewed_at:next.reviewed_at} : {}), ...(next.approval ? {approval:next.approval} : {})},
+      });
+      existing.set(post.key, next);
+      if (next.status === 'approved') timed.push(next.key);
+    }
+    const {held, promoted, published} = await applyPoolRelease(env, posts, existing, delivery);
+    if (timed.length && !published) await publishApproved(env);
     const results = posts.map(post => intakeView(existing.get(post.key), {includeNote:delivery, existing:!created.includes(post), held:held.has(post.key)}));
     const changed = created.length || promoted.size;
     if (!batched) return json(results[0], changed ? 201 : 200);

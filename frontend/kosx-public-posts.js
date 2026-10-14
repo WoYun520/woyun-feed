@@ -35,11 +35,39 @@ function publicCount(value) {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 && value <= REVIEW_COUNT_MAX ? value : null;
 }
 
-// Intake may already carry the X post time from the pending URL fetch.
-// published_at wins, then created_at. A missing or unusable value stays empty
-// so the caller can keep the review clock instead of guessing from the status id.
+// Twitter snowflake epoch, 2010-11-04T01:42:54.657Z. Status ids are wider than
+// 32 bits, and often wider than 53, so the shift has to stay on BigInt.
+export const X_SNOWFLAKE_EPOCH_MS = 1288834974657;
+const X_HOSTS = new Set(['x.com', 'www.x.com', 'twitter.com', 'www.twitter.com', 'mobile.twitter.com']);
+
+function xStatusId(record) {
+  const keyed = typeof record?.key === 'string' ? /^x:([1-9]\d{7,24})$/.exec(record.key) : null;
+  if (keyed) return keyed[1];
+  for (const value of [record?.url, record?.original_url, record?.canonical_url]) {
+    if (typeof value !== 'string' || value.length > 2000) continue;
+    let url;
+    try { url = new URL(value); } catch { continue; }
+    if (url.protocol !== 'https:' || !X_HOSTS.has(url.hostname)) continue;
+    const match = url.pathname.match(/^\/[A-Za-z0-9_]{1,15}\/status\/([1-9]\d{7,24})\/?$/);
+    if (match) return match[1];
+  }
+  return '';
+}
+
+function snowflakeInstant(id) {
+  if (!/^[1-9]\d{7,24}$/.test(id)) return '';
+  const ms = (BigInt(id) >> 22n) + BigInt(X_SNOWFLAKE_EPOCH_MS);
+  if (ms < BigInt(X_SNOWFLAKE_EPOCH_MS) || ms > 4102444800000n) return '';
+  const numeric = Number(ms);
+  if (!Number.isSafeInteger(numeric)) return '';
+  return new Date(numeric).toISOString();
+}
+
+// Intake published_at wins, then created_at. When both are missing, an X
+// status id supplies the post instant. Anything else stays blank: a review
+// clock is not a publication time, and non-X links are not given one.
 export function originalPostInstant(record) {
-  return knownInstant(record?.published_at) || knownInstant(record?.created_at) || '';
+  return knownInstant(record?.published_at) || knownInstant(record?.created_at) || snowflakeInstant(xStatusId(record));
 }
 
 export function kosxPublicItem(record) {
@@ -47,6 +75,9 @@ export function kosxPublicItem(record) {
   const note = typeof record.note === 'string' ? record.note.trim() : '';
   const reviewed = new Date(record.reviewed_at).toISOString();
   const posted = originalPostInstant(record);
+  // published_at is the original post. source_item_time and captured_at stay
+  // on the review clock. The review clock fills published_at only when the
+  // row is not an X status and intake did not supply a time.
   const pool = record.approval === 'pool';
   const title = (note || `@${record.author_handle} 的精华帖`).slice(0, 500);
   const summary = (pool
