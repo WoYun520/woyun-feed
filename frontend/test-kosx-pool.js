@@ -6,7 +6,8 @@ import { dotInboxHash } from '../dot-inbox-service.js';
 import { DOT_PENDING_DECISION_PATH, DOT_PENDING_PATH, handleDotPendingRequest } from '../dot-pending-service.js';
 import { handlesFromRoster, renderPoolModule } from './refresh-kosx-pool.mjs';
 import { isKosxPoolHandle, KOSX_POOL_HANDLES } from './kosx-pool.js';
-import { kosxPublicItem, kosxPublicSource } from './kosx-public-posts.js';
+import { kosxPublicItem, kosxPublicSource, originalPostInstant, X_SNOWFLAKE_EPOCH_MS } from './kosx-public-posts.js';
+import { DOT_UNDERRATED_PATH, handleDotUnderratedRequest } from '../dot-underrated-service.js';
 import { makePublicFeed } from './public-feed-data.js';
 import { normalizeRepositories } from './repository-normalize.js';
 import { validCachedFeed } from './src/feedCache.js';
@@ -18,7 +19,9 @@ const review = 'test-review-credential-0987654321';
 const base = 'https://feed.example.test';
 const poolHandle = KOSX_POOL_HANDLES[0];
 const otherPoolHandle = KOSX_POOL_HANDLES[1];
-const poolUrl = `https://x.com/${poolHandle}/status/2108148604447883555`;
+const poolStatusId = '2108148604447883555';
+const poolUrl = `https://x.com/${poolHandle}/status/${poolStatusId}`;
+const snowflakeAt = new Date(Number((BigInt(poolStatusId) >> 22n) + BigInt(X_SNOWFLAKE_EPOCH_MS))).toISOString();
 const secondPoolUrl = `https://x.com/${otherPoolHandle}/status/2108148604447883556`;
 const outsiderUrl = 'https://x.com/example/status/2108148604447883666';
 const when = '2026-10-10T13:01:27.954Z';
@@ -131,7 +134,10 @@ test('a pool delivery publishes onto the homepage and a repeat keeps the same ti
   assert.equal(validCachedFeed(feed), true);
   const item = feed.items.find(entry => entry.original_url.toLowerCase() === poolUrl);
   assert.equal(item.kosx_review, 'pool');
-  assert.equal(item.published_at, body.reviewed_at);
+  assert.equal(item.published_at, snowflakeAt);
+  assert.notEqual(item.published_at, body.reviewed_at);
+  assert.equal(item.source_item_time, body.reviewed_at);
+  assert.equal(item.captured_at, body.reviewed_at);
   assert.equal(Object.hasOwn(item, 'latest_followers'), false);
   assert.equal(feed.sources.find(source => source.id === 'sopilot-kosx').ranked, false);
   assert.equal(showcase(feed).latest.some(entry => entry.post.originalUrl.toLowerCase() === poolUrl), true);
@@ -139,7 +145,7 @@ test('a pool delivery publishes onto the homepage and a repeat keeps the same ti
   assert.equal(again.existing, true);
   assert.equal(again.status, 'approved');
   assert.equal(again.reviewed_at, body.reviewed_at);
-  assert.equal(env.PUBLIC_FEED.json().items.find(entry => entry.original_url.toLowerCase() === poolUrl).published_at, body.reviewed_at);
+  assert.equal(env.PUBLIC_FEED.json().items.find(entry => entry.original_url.toLowerCase() === poolUrl).published_at, snowflakeAt);
 });
 
 test('homepage paste and outsiders stay pending, and a rejected pool post stays rejected', async () => {
@@ -174,7 +180,9 @@ test('homepage paste and outsiders stay pending, and a rejected pool post stays 
 
 test('a post that would enter yesterday underrated stays pending until the review code', async () => {
   const feed = baseFeed();
-  feed.generated_at = nextBeijingInstant();
+  // Snapshot day is the Beijing day after the status snowflake, while the
+  // review clock is "now". Only the snowflake puts this post on yesterday.
+  feed.generated_at = '2026-10-09T04:00:00.000Z';
   const env = await environment(feed);
   const held = await submit(env, {url:poolUrl, note:'昨天这条'}, {token:delivery});
   const body = await held.json();
@@ -194,6 +202,9 @@ test('a post that would enter yesterday underrated stays pending until the revie
   const published = env.PUBLIC_FEED.json();
   const item = published.items.find(entry => entry.original_url === poolUrl);
   assert.equal(item.kosx_review, undefined);
+  assert.equal(item.published_at, snowflakeAt);
+  assert.equal(item.source_item_time, decision.reviewed_at);
+  assert.equal(beijingDateKey(Date.parse(item.published_at)), '2026-10-08');
   assert.equal(showcase(published).yesterday.some(entry => entry.post.originalUrl === poolUrl), true);
   assert.equal(showcase(published).underrated.some(entry => entry.post.originalUrl === poolUrl), false);
 });
@@ -203,7 +214,8 @@ test('pool auto-publish stays off the underrated shelf until a review code marks
   const created = await (await submit(env, {url:poolUrl}, {token:delivery})).json();
   assert.equal(created.approval, 'pool');
   const shifted = env.PUBLIC_FEED.json();
-  shifted.generated_at = nextBeijingInstant(Date.parse(created.reviewed_at));
+  const posted = shifted.items.find(entry => entry.original_url === poolUrl);
+  shifted.generated_at = nextBeijingInstant(Date.parse(posted.published_at));
   const blocked = showcase(shifted);
   assert.equal(blocked.yesterday.some(entry => entry.post.originalUrl === poolUrl), true);
   assert.equal(blocked.underrated.some(entry => entry.post.originalUrl === poolUrl), false);
@@ -238,5 +250,81 @@ test('a mixed delivery publishes only pool handles and does not rank them', asyn
   const second = feed.items.find(item => item.original_url === secondPoolUrl);
   assert.ok(ids.indexOf(first.id) >= 0 && ids.indexOf(second.id) >= 0);
   assert.equal(first.published_at, second.published_at);
+  assert.equal(first.published_at, snowflakeAt);
   assert.equal(feed.items.filter(item => item.kosx_review === 'pool').length, 2);
+});
+
+test('original post time prefers intake published_at, then created_at, then the X snowflake', () => {
+  const reviewed_at = '2026-10-14T01:00:00.000Z';
+  const base = {id:`kosx-${poolStatusId}`, key:`x:${poolStatusId}`, url:poolUrl, author_handle:'aaa', note:'', status:'approved', reviewed_at, source:'delivery', submitted_at:when};
+  const fromSnowflake = kosxPublicItem(base);
+  assert.equal(originalPostInstant(base), snowflakeAt);
+  assert.equal(fromSnowflake.published_at, snowflakeAt);
+  assert.equal(fromSnowflake.source_item_time, reviewed_at);
+  assert.equal(fromSnowflake.captured_at, reviewed_at);
+  const intake = '2026-10-13T03:00:00.000Z';
+  const created = '2026-10-12T03:00:00.000Z';
+  const preferred = kosxPublicItem({...base, published_at:intake, created_at:created});
+  assert.equal(preferred.published_at, intake);
+  assert.equal(preferred.source_item_time, reviewed_at);
+  const fromCreated = kosxPublicItem({...base, created_at:created});
+  assert.equal(fromCreated.published_at, created);
+  assert.equal(originalPostInstant({url:'https://github.com/example/tool', published_at:'', created_at:null}), '');
+  assert.equal(originalPostInstant({key:'x:1', url:'https://x.com/aaa/status/1'}), '');
+  const short = kosxPublicItem({...base, id:'kosx-1', key:'x:1', url:'https://x.com/aaa/status/1'});
+  assert.equal(short.published_at, reviewed_at);
+  assert.notEqual(short.published_at, '2010-11-04T01:42:54.657Z');
+});
+
+test('re-delivery with published_at overwrites PUBLIC_FEED and the pin day follows it', async () => {
+  const feed = baseFeed();
+  feed.generated_at = '2026-10-14T04:00:00.000Z';
+  const env = await environment(feed);
+  await submit(env, {url:outsiderUrl, note:'圈外'}, {token:delivery});
+  const approved = await (await decide(env, {url:outsiderUrl, status:'approved'})).json();
+  const before = env.PUBLIC_FEED.json().items.find(entry => entry.original_url === outsiderUrl);
+  assert.equal(before.published_at, snowflakeAt);
+  assert.equal(before.source_item_time, approved.reviewed_at);
+  assert.equal(before.captured_at, approved.reviewed_at);
+  const early = await handleDotUnderratedRequest(new Request(`${base}${DOT_UNDERRATED_PATH}`, {
+    method:'POST',
+    headers:{Authorization:`Bearer ${review}`, 'Content-Type':'application/json'},
+    body:JSON.stringify({url:outsiderUrl}),
+  }), env);
+  assert.equal(early.status, 409);
+  assert.equal((await early.json()).error, 'not_yesterday');
+  const intake = '2026-10-13T03:00:00.000Z';
+  const createdAt = '2026-10-12T03:00:00.000Z';
+  const again = await submit(env, {url:outsiderUrl, published_at:intake, created_at:createdAt}, {token:delivery});
+  const body = await again.json();
+  assert.equal(again.status, 200);
+  assert.equal(body.existing, true);
+  assert.equal(body.reviewed_at, approved.reviewed_at);
+  assert.equal(body.published_at, intake);
+  assert.equal(body.created_at, createdAt);
+  const stored = JSON.parse(env.DOT_INBOX.values.get(`pending:${body.key}`).raw);
+  assert.equal(stored.published_at, intake);
+  assert.equal(stored.created_at, createdAt);
+  assert.equal(stored.reviewed_at, approved.reviewed_at);
+  const after = env.PUBLIC_FEED.json().items.find(entry => entry.original_url === outsiderUrl);
+  assert.equal(after.published_at, intake);
+  assert.equal(after.source_item_time, approved.reviewed_at);
+  assert.equal(after.captured_at, approved.reviewed_at);
+  const rebuilt = await (await decide(env, {url:outsiderUrl, status:'approved', review_type:'教程指南'})).json();
+  assert.equal(rebuilt.existing, true);
+  assert.equal(rebuilt.reviewed_at, approved.reviewed_at);
+  assert.equal(rebuilt.published_at, intake);
+  const republished = env.PUBLIC_FEED.json().items.find(entry => entry.original_url === outsiderUrl);
+  assert.equal(republished.published_at, intake);
+  assert.equal(republished.review_type, '教程指南');
+  assert.equal(republished.source_item_time, approved.reviewed_at);
+  const pinned = await handleDotUnderratedRequest(new Request(`${base}${DOT_UNDERRATED_PATH}`, {
+    method:'POST',
+    headers:{Authorization:`Bearer ${review}`, 'Content-Type':'application/json'},
+    body:JSON.stringify({url:outsiderUrl, note:'Levi 已看过'}),
+  }), env);
+  const pin = await pinned.json();
+  assert.equal(pinned.status, 201);
+  assert.equal(pin.day, '2026-10-13');
+  assert.equal(pin.status, 'pinned');
 });

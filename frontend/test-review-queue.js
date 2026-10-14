@@ -296,8 +296,10 @@ test('approved public items keep intake signals and the original post time for t
     url:'https://x.com/example/status/2108148604447884104', note:'',
     bookmark_count:'200', review_type:'不是类型', has_article:'yes',
   });
-  assert.equal(fallback.published_at, '2026-10-14T01:00:00.000Z');
-  assert.notEqual(fallback.published_at, new Date(Number(BigInt('2108148604447884104') >> 22n) + 1288834974657).toISOString());
+  const snowflake = new Date(Number((BigInt('2108148604447884104') >> 22n) + 1288834974657n)).toISOString();
+  assert.equal(fallback.published_at, snowflake);
+  assert.equal(fallback.source_item_time, '2026-10-14T01:00:00.000Z');
+  assert.equal(fallback.captured_at, '2026-10-14T01:00:00.000Z');
   assert.equal(Object.hasOwn(fallback, 'bookmark_count'), false);
   assert.equal(Object.hasOwn(fallback, 'review_type'), false);
   assert.equal(Object.hasOwn(fallback, 'has_article'), false);
@@ -343,11 +345,13 @@ test('approved public items keep intake signals and the original post time for t
   await submit(env, {url:bareUrl, review_type:'文章', bookmark_count:900, has_article:false});
   const bareDecision = await (await decide(env, {url:bareUrl, status:'approved'})).json();
   const bare = env.PUBLIC_FEED.json().items.find(item => item.original_url === bareUrl);
-  assert.equal(bare.published_at, bareDecision.reviewed_at);
+  const bareSnowflake = new Date(Number((BigInt('2108148604447884104') >> 22n) + 1288834974657n)).toISOString();
+  assert.equal(bare.published_at, bareSnowflake);
+  assert.equal(bare.source_item_time, bareDecision.reviewed_at);
+  assert.notEqual(bare.published_at, bareDecision.reviewed_at);
   assert.equal(bare.bookmark_count, 900);
   assert.equal(bare.has_article, false);
   assert.equal(Object.hasOwn(bare, 'like_count'), false);
-  assert.notEqual(bare.published_at, new Date(Number(BigInt('2108148604447884104') >> 22n) + 1288834974657).toISOString());
 
   const pooled = await (await submit(env, {url:poolPost, review_type:'教程指南', bookmark_count:320, like_count:11, has_article:false, published_at:posted})).json();
   assert.equal(pooled.status, 'approved');
@@ -381,9 +385,10 @@ test('approved public items keep intake signals and the original post time for t
   assert.equal(home.week.some(entry => entry.post.item.bookmark_count < HOME_WEEK_BOOKMARK_MIN), false);
   assert.equal(home.week.some(entry => entry.post.originalUrl === lowUrl), false);
 
-  const again = await (await submit(env, {url:highUrl, published_at:'2026-10-01T00:00:00.000Z', bookmark_count:1, like_count:99})).json();
+  const corrected = '2026-10-01T00:00:00.000Z';
+  const again = await (await submit(env, {url:highUrl, published_at:corrected, bookmark_count:1, like_count:99})).json();
   assert.equal(again.existing, true);
-  assert.equal(again.published_at, posted);
+  assert.equal(again.published_at, corrected);
   assert.equal(again.bookmark_count, 250);
   assert.equal(again.like_count, 0);
 
@@ -392,7 +397,7 @@ test('approved public items keep intake signals and the original post time for t
   assert.equal((await bad.json()).error, 'invalid_time');
   const pasted = await submit(env, {url:'https://x.com/example/status/2108148604447884108', created_at:posted}, null);
   assert.equal(pasted.status, 401);
-  assert.equal(env.PUBLIC_FEED.json().items.find(item => item.original_url === highUrl).published_at, posted);
+  assert.equal(env.PUBLIC_FEED.json().items.find(item => item.original_url === highUrl).published_at, corrected);
 });
 
 test('worker public feed reads do not grow an underrated pin just because a candidate flag exists', async () => {
