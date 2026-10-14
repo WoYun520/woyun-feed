@@ -7,8 +7,8 @@ export const HOME_BOOST_VISITOR_KEY = 'personal-feed:visitor:v1';
 
 export const HOME_LATEST_LIMIT = 18;
 export const HOME_UNDERSTATED_LIMIT = 2;
-// Same floor as the strictest bookmark gate on the material review filters.
-export const HOME_WEEK_BOOKMARK_MIN = 500;
+// Levi's floor for 「七日精选」. Same number as the 200 bookmark gate on the material review filters.
+export const HOME_WEEK_BOOKMARK_MIN = 200;
 const VIEWS = ['latest', 'yesterday', 'week', 'kept'];
 
 const finite = value => typeof value === 'string' && Number.isFinite(Date.parse(value));

@@ -201,14 +201,14 @@ test('seven-day shelf keeps high-bookmark essence articles and the kept shelf re
   input.savedItemIds = new Set([saved.id, featured.id, hidden.id]);
   input.hiddenItemIds = new Set([hidden.id]);
   const selected = selectHomeShowcase(input);
-  assert.equal(HOME_WEEK_BOOKMARK_MIN, 500);
+  assert.equal(HOME_WEEK_BOOKMARK_MIN, 200);
   assert.equal(selected.weekRule, 'bookmarks');
   assert.deepEqual(selected.week.map(entry => entry.post.item.id), ['207001', '207003']);
   assert.equal(selected.weekLeads, undefined);
   assert.equal(selected.weekRest, undefined);
   assert.match(selected.weekNote, /2026-10-04 至 2026-10-10/);
   assert.match(selected.weekNote, /已经放上公开首页的精华帖/);
-  assert.match(selected.weekNote, /达到 500 才留下/);
+  assert.match(selected.weekNote, /达到 200 才留下/);
   assert.match(selected.weekNote, /点赞和浏览不换算成收藏/);
   assert.match(selected.weekNote, /没有把其余公开帖补进来/);
   assert.equal(selected.week.some(entry => entry.post.item.id === stream.id), false);
@@ -258,7 +258,7 @@ test('seven-day shelf uses public heat only when bookmark counts are missing, th
   assert.deepEqual(quiet.week, []);
   const page = renderHomeShowcase(app('week'), state([plain]));
   assert.match(page, /data-week-rule="empty"/);
-  assert.match(page, /达到 500 才留下/);
+  assert.match(page, /达到 200 才留下/);
   assert.match(page, /这七日没有留下精华文章/);
   assert.doesNotMatch(page, /同七日其余公开帖|摘录含操作线索/);
 });
