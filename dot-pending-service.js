@@ -6,6 +6,7 @@ import { attachKosxApproved, kosxPublicItem } from './frontend/kosx-public-posts
 import { isKosxPoolHandle } from './frontend/kosx-pool.js';
 import { wouldEnterUnderrated } from './frontend/src/homeShowcase.js';
 import { PRIVATE_CONTENT } from './frontend/public-feed-data.js';
+import { REVIEW_COUNT_MAX, REVIEW_TEXT_MAX, REVIEW_TYPES, classifyReviewItem } from './frontend/src/reviewQueue.js';
 
 export const DOT_PENDING_PATH = '/api/dot/pending';
 export const DOT_PENDING_DECISION_PATH = '/api/dot/pending/decision';
@@ -16,6 +17,8 @@ const MAX_NOTE = 400;
 const MAX_BODY = 64 * 1024;
 const recordFields = ['id', 'key', 'url', 'author_handle', 'note', 'status', 'submitted_at', 'source'];
 const decidedFields = [...recordFields, 'reviewed_at'];
+const signalFields = ['review_type', 'bookmark_count', 'like_count', 'has_article', 'text'];
+const intakeFields = ['url', 'author_handle', 'note', 'review_type', 'bookmark_count', 'like_count', 'has_article', 'text'];
 const hashPattern = /^[a-f0-9]{64}$/i;
 
 class PendingError extends Error {
@@ -86,12 +89,38 @@ function cleanNote(value, present) {
   return value.trim();
 }
 
+function cleanCount(value, present, label) {
+  if (!present) return undefined;
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0 || value > REVIEW_COUNT_MAX) bad('invalid_metrics', `${label}需为非负整数。`);
+  return value;
+}
+
+function cleanArticle(value, present) {
+  if (!present) return undefined;
+  if (typeof value !== 'boolean') bad('invalid_article', 'has_article 只能是 true 或 false。');
+  return value;
+}
+
+function cleanType(value, present) {
+  if (!present) return undefined;
+  if (!REVIEW_TYPES.includes(value)) bad('invalid_type', '类型只能是文章、教程指南、避坑、短帖或产品安利。');
+  return value;
+}
+
+function cleanText(value, present) {
+  if (!present) return undefined;
+  if (typeof value !== 'string' || value.length > REVIEW_TEXT_MAX || /[\u0000-\u001f\u007f]/.test(value) || containsCredentialText(value)) bad('invalid_text', '摘录过长或不完整。');
+  const text = value.trim();
+  return text || undefined;
+}
+
 function onePost(value, {allowNote}) {
   if (!plain(value)) bad('invalid_body', '请提交 X 精华帖链接。');
   const keys = Object.keys(value);
-  const allowed = allowNote ? ['url', 'author_handle', 'note'] : ['url'];
+  const allowed = allowNote ? intakeFields : ['url'];
   if (keys.some(key => !allowed.includes(key)) || !keys.includes('url')) {
     if (!allowNote) unauthorized();
+    if (keys.includes('underrated_candidate')) bad('invalid_body', '进料不能标低估栏候选。过审时再用接收码选择。');
     bad('invalid_body', '请提交 X 精华帖链接。');
   }
   const post = canonicalPendingPost(value.url);
@@ -99,7 +128,22 @@ function onePost(value, {allowNote}) {
   if (Object.hasOwn(value, 'author_handle')) {
     if (typeof value.author_handle !== 'string' || value.author_handle.toLowerCase() !== post.author_handle.toLowerCase()) bad('invalid_author', '作者账号与原帖链接不一致。');
   }
-  return {...post, note:cleanNote(value.note, Object.hasOwn(value, 'note'))};
+  const note = cleanNote(value.note, Object.hasOwn(value, 'note'));
+  if (!allowNote) return {...post, note};
+  const review_type = cleanType(value.review_type, Object.hasOwn(value, 'review_type'));
+  const bookmark_count = cleanCount(value.bookmark_count, Object.hasOwn(value, 'bookmark_count'), '收藏数');
+  const like_count = cleanCount(value.like_count, Object.hasOwn(value, 'like_count'), '点赞数');
+  const has_article = cleanArticle(value.has_article, Object.hasOwn(value, 'has_article'));
+  const text = cleanText(value.text, Object.hasOwn(value, 'text'));
+  return {
+    ...post,
+    note,
+    ...(review_type ? {review_type} : {}),
+    ...(bookmark_count !== undefined ? {bookmark_count} : {}),
+    ...(like_count !== undefined ? {like_count} : {}),
+    ...(has_article !== undefined ? {has_article} : {}),
+    ...(text ? {text} : {}),
+  };
 }
 
 function postsFromBody(value, authenticated) {
@@ -147,11 +191,28 @@ async function readBody(request) {
   try { return JSON.parse(text); } catch { bad('invalid_json', '请提交 JSON。'); }
 }
 
+function signalsValid(value) {
+  if (Object.hasOwn(value, 'review_type') && !REVIEW_TYPES.includes(value.review_type)) return false;
+  for (const field of ['bookmark_count', 'like_count']) {
+    if (Object.hasOwn(value, field) && (typeof value[field] !== 'number' || !Number.isSafeInteger(value[field]) || value[field] < 0 || value[field] > REVIEW_COUNT_MAX)) return false;
+  }
+  if (Object.hasOwn(value, 'has_article') && typeof value.has_article !== 'boolean') return false;
+  if (Object.hasOwn(value, 'text') && (typeof value.text !== 'string' || !value.text.trim() || value.text.length > REVIEW_TEXT_MAX || /[\u0000-\u001f\u007f]/.test(value.text) || containsCredentialText(value.text))) return false;
+  const candidate = Object.hasOwn(value, 'underrated_candidate');
+  const candidateAt = Object.hasOwn(value, 'underrated_candidate_at');
+  if (candidate !== candidateAt) return false;
+  if (candidate && (value.status !== 'approved' || value.underrated_candidate !== true || !timestamp(value.underrated_candidate_at))) return false;
+  return true;
+}
+
 function validRecord(value, storageKey) {
   const decided = value?.status === 'approved' || value?.status === 'rejected';
   const fields = decided ? [...decidedFields] : [...recordFields];
   if (value?.status === 'approved' && Object.hasOwn(value, 'approval')) fields.push('approval');
+  for (const field of signalFields) if (Object.hasOwn(value, field)) fields.push(field);
+  if (Object.hasOwn(value, 'underrated_candidate')) fields.push('underrated_candidate', 'underrated_candidate_at');
   if (!plain(value) || Object.keys(value).length !== fields.length || fields.some(field => !Object.hasOwn(value, field))) return false;
+  if (!signalsValid(value)) return false;
   if (Object.hasOwn(value, 'approval') && !['pool', 'review'].includes(value.approval)) return false;
   if (value?.approval === 'pool' && value.source !== 'delivery') return false;
   if (!['pending', 'approved', 'rejected'].includes(value.status) || !['homepage', 'delivery'].includes(value.source)) return false;
@@ -183,13 +244,27 @@ async function pendingCount(env) {
   return page.keys.length;
 }
 
+function signalView(record) {
+  const view = {};
+  if (typeof record.review_type === 'string') view.review_type = record.review_type;
+  if (Object.hasOwn(record, 'bookmark_count')) view.bookmark_count = record.bookmark_count;
+  if (Object.hasOwn(record, 'like_count')) view.like_count = record.like_count;
+  if (Object.hasOwn(record, 'has_article')) view.has_article = record.has_article;
+  if (typeof record.text === 'string' && record.text) view.text = record.text;
+  if (record.underrated_candidate === true) {
+    view.underrated_candidate = true;
+    view.underrated_candidate_at = record.underrated_candidate_at;
+  }
+  return view;
+}
+
 function publicView(record, {includeNote}) {
   return {
     id:record.id, key:record.key, url:record.url, author_handle:record.author_handle, status:record.status,
     submitted_at:record.submitted_at,
     ...(includeNote && record.reviewed_at ? {reviewed_at:record.reviewed_at} : {}),
     ...(includeNote && record.approval ? {approval:record.approval} : {}),
-    ...(includeNote ? {note:record.note, source:record.source} : {}),
+    ...(includeNote ? {note:record.note, source:record.source, ...signalView(record)} : {}),
   };
 }
 
@@ -206,12 +281,39 @@ function intakeView(record, {includeNote, existing, held}) {
   return view;
 }
 
-function decidedRecord(stored, status, reviewed_at, approval) {
+function withReviewSignals(record, post) {
+  const classified = classifyReviewItem({
+    review_type:post.review_type, note:record.note, text:post.text,
+    has_article:post.has_article, bookmark_count:post.bookmark_count, like_count:post.like_count,
+  });
+  const next = {...record, review_type:classified.review_type};
+  if (post.bookmark_count !== undefined) next.bookmark_count = post.bookmark_count;
+  if (post.like_count !== undefined) next.like_count = post.like_count;
+  if (post.has_article !== undefined) next.has_article = post.has_article;
+  if (post.text) next.text = post.text;
+  return next;
+}
+
+function copySignals(stored, record) {
+  for (const field of signalFields) if (Object.hasOwn(stored, field)) record[field] = stored[field];
+  return record;
+}
+
+// candidate: true sets the flag, false clears it, null keeps the previous flag.
+// The flag never writes the underrated pin list.
+function decidedRecord(stored, status, reviewed_at, approval, {candidate = null, review_type, candidateAt} = {}) {
   const record = {
     id:stored.id, key:stored.key, url:stored.url, author_handle:stored.author_handle, note:stored.note,
     status, submitted_at:stored.submitted_at, source:stored.source, reviewed_at,
   };
   if (approval) record.approval = approval;
+  copySignals(stored, record);
+  if (review_type) record.review_type = review_type;
+  const keep = status === 'approved' && (candidate === true || (candidate !== false && stored.underrated_candidate === true));
+  if (keep) {
+    record.underrated_candidate = true;
+    record.underrated_candidate_at = stored.underrated_candidate === true ? stored.underrated_candidate_at : candidateAt;
+  }
   return record;
 }
 
@@ -318,8 +420,12 @@ async function handleDecision(request, env, review) {
   if (request.headers.get('Content-Type')?.split(';')[0].trim().toLowerCase() !== 'application/json') return json({error:'json_required', message:'请使用 application/json 提交。'}, 415);
   if (typeof env?.PUBLIC_FEED?.get !== 'function' || typeof env?.PUBLIC_FEED?.put !== 'function') unavailable();
   const body = await readBody(request);
-  if (!plain(body) || Object.keys(body).length !== 2 || !Object.hasOwn(body, 'url') || !Object.hasOwn(body, 'status')) bad('invalid_body', '请提交要过审的 X 链接和结果。');
+  const decisionFields = ['url', 'status', 'underrated_candidate', 'review_type'];
+  if (!plain(body) || Object.keys(body).some(key => !decisionFields.includes(key)) || !Object.hasOwn(body, 'url') || !Object.hasOwn(body, 'status')) bad('invalid_body', '请提交要过审的 X 链接和结果。');
   if (!['approved', 'rejected'].includes(body.status)) bad('invalid_status', '过审结果只能是 approved 或 rejected。');
+  if (Object.hasOwn(body, 'underrated_candidate') && typeof body.underrated_candidate !== 'boolean') bad('invalid_candidate', '进低估栏候选只能是 true 或 false。');
+  if (body.underrated_candidate === true && body.status !== 'approved') bad('invalid_candidate', '只有过审通过时才能标成低估栏候选。');
+  const reviewType = cleanType(body.review_type, Object.hasOwn(body, 'review_type'));
   const post = canonicalPendingPost(body.url);
   if (!post) bad('invalid_url', '请粘贴有效的 X 链接。');
   const stored = await readStored(env, post.key);
@@ -327,9 +433,15 @@ async function handleDecision(request, env, review) {
   let record = stored;
   const statusChanged = stored.status !== body.status;
   const markReview = body.status === 'approved' && stored.approval === 'pool';
-  if (statusChanged || markReview) {
+  const candidate = Object.hasOwn(body, 'underrated_candidate') ? body.underrated_candidate : null;
+  const candidateChanged = candidate === true ? stored.underrated_candidate !== true : candidate === false && stored.underrated_candidate === true;
+  const typeChanged = !!reviewType && reviewType !== stored.review_type;
+  // A candidate flag stays on this pending row. It does not call /api/dot/underrated.
+  if (statusChanged || markReview || candidateChanged || typeChanged) {
     const reviewed_at = statusChanged ? new Date().toISOString() : stored.reviewed_at;
-    record = decidedRecord(stored, body.status, reviewed_at, body.status === 'approved' ? 'review' : null);
+    record = decidedRecord(stored, body.status, reviewed_at, body.status === 'approved' ? 'review' : null, {
+      candidate, review_type:reviewType, candidateAt:new Date().toISOString(),
+    });
     if (record.status === 'approved' && !canRelease(kosxPublicItem(record))) bad('invalid_note', '这条备注不能放上公开首页。');
     await env.DOT_INBOX.put(`${DOT_PENDING_PREFIX}${record.key}`, JSON.stringify(record), {
       metadata:{id:record.id, key:record.key, status:record.status, submitted_at:record.submitted_at, reviewed_at:record.reviewed_at, ...(record.approval ? {approval:record.approval} : {})},
@@ -384,7 +496,7 @@ export async function handleDotPendingRequest(request, env) {
     const submitted_at = new Date().toISOString();
     const source = delivery ? 'delivery' : 'homepage';
     for (const post of created) {
-      const record = {...post, status:'pending', submitted_at, source};
+      const record = withReviewSignals({...post, status:'pending', submitted_at, source}, post);
       await env.DOT_INBOX.put(`${DOT_PENDING_PREFIX}${post.key}`, JSON.stringify(record), {
         metadata:{id:record.id, key:record.key, status:'pending', submitted_at},
       });

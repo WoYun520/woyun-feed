@@ -49,6 +49,7 @@ class PersonalFeedApp {
     this.dotInboxMessage = '';
     this.dotInboxError = '';
     this.dotInboxPendingNew = 0;
+    this.reviewQueue = {items:[], error:'', loading:false, busy:false};
     this.collectionQuery = '';
     this.feedSearchQuery = '';
     this.feedSearchPurpose = 'all';
@@ -307,14 +308,19 @@ class PersonalFeedApp {
       this.dotInboxMessage='已连接。以后素材投递完成后，打开页面即可自动接收。';
     } catch(error) { this.dotInboxError=error.message;this.dotInboxMessage=''; }
     finally { this.dotInboxBusy=false;this.updateDotInboxPanel(); }
-    if (!this.dotInboxError) await this.syncDotInbox({manual:true});
+    if (!this.dotInboxError) {
+      await this.syncDotInbox({manual:true});
+      await this.loadReviewQueue();
+    }
   }
 
   disconnectDotInbox() {
     try {
       this.dotInbox.disconnect();this.dotInboxError='';this.dotInboxMessage='已断开自动接收。浏览器里已经保存的材料保留。';
     } catch(error) { this.dotInboxError=error.message; }
+    this.reviewQueue = {items:[], error:'', loading:false, busy:false};
     this.updateDotInboxPanel();
+    this.refreshCandidates();
   }
 
   renderWorkspaceResume(state) { return renderWorkspaceResume(state,value=>this.formatTime(value)); }
@@ -504,7 +510,49 @@ class PersonalFeedApp {
     this.currentTab = tab;
     window.scrollTo({ top: 0, behavior: 'smooth' });
     this.render();
+    if (tab === 'candidates') this.loadReviewQueue();
     document.getElementById('workspace-main')?.focus({ preventScroll: true });
+  }
+
+  refreshCandidates() {
+    if (document.getElementById('dot-candidates-page')) this.renderDotInboxResults();
+    else if (this.currentTab === 'candidates') this.render();
+  }
+
+  async loadReviewQueue() {
+    if (this.reviewQueue.busy || this.reviewQueue.loading || !this.dotInbox.getState().connected) return;
+    this.reviewQueue.loading = true;
+    this.reviewQueue.error = '';
+    this.refreshCandidates();
+    try {
+      this.reviewQueue.items = await this.dotInbox.listPendingQueue();
+    } catch (error) {
+      this.reviewQueue.items = [];
+      this.reviewQueue.error = this.dotInbox.getState().connected ? (error?.message || '暂时无法读取公开待过审。') : '';
+    } finally {
+      this.reviewQueue.loading = false;
+      this.refreshCandidates();
+    }
+  }
+
+  async decideReviewItem({url, status, underrated_candidate = false, review_type} = {}) {
+    if (this.reviewQueue.busy || !url || !['approved', 'rejected'].includes(status)) return;
+    this.reviewQueue.busy = true;
+    this.reviewQueue.error = '';
+    this.refreshCandidates();
+    try {
+      const result = await this.dotInbox.decidePending({url, status, underrated_candidate, review_type});
+      this.reviewQueue.items = this.reviewQueue.items.map(item => item.url === result.url || item.key === result.key ? {...item, ...result} : item);
+      this.dotError = '';
+      this.dotMessage = status === 'approved'
+        ? (underrated_candidate ? '已过审上首页，并记为低估栏候选。尚未钉进昨日低估栏。' : '已过审上首页。')
+        : '已略过，不会出现在公开首页。';
+    } catch (error) {
+      this.reviewQueue.error = error?.message || '过审没有完成。';
+    } finally {
+      this.reviewQueue.busy = false;
+      this.refreshCandidates();
+    }
   }
 
   dismissWelcome() {
@@ -727,7 +775,7 @@ class PersonalFeedApp {
   }
 
   renderMainContent(state) {
-    if (this.currentTab === 'candidates') return renderDotCandidatesView({candidates:state.dotCandidates || [],view:this.dotView,filters:this.dotFilters,intakeOpen:this.dotIntakeOpen,activeCandidateId:this.activeCandidateId,selectedIds:[...this.dotSelectedIds],busy:this.dotBusy,message:this.dotMessage,error:this.dotError || state.dotStorageWarning || '',inbox:this.dotInboxState()});
+    if (this.currentTab === 'candidates') return renderDotCandidatesView({candidates:state.dotCandidates || [],view:this.dotView,filters:this.dotFilters,intakeOpen:this.dotIntakeOpen,activeCandidateId:this.activeCandidateId,selectedIds:[...this.dotSelectedIds],busy:this.dotBusy,message:this.dotMessage,error:this.dotError || state.dotStorageWarning || '',inbox:this.dotInboxState(),reviewQueue:{...this.reviewQueue,connected:this.dotInbox.getState().connected}});
     if (this.currentTab === 'tutorials') return renderCreatorPage(this,state);
     if (this.currentTab === 'topics') return renderTopicWorkspace(this,state);
     if (this.currentTab === 'saved') {
@@ -1470,6 +1518,7 @@ class PersonalFeedApp {
         onInboxSync:()=>this.syncDotInbox({manual:true}),
         onInboxDisconnect:()=>this.disconnectDotInbox(),
         onInboxShowNew:()=>{this.dotInboxPendingNew=0;this.renderDotInboxResults();},
+        onReviewDecision:payload=>this.decideReviewItem(payload),
       });
     }
     document.querySelectorAll('[data-dot-open-featured]').forEach(button=>button.addEventListener('click',()=>{this.dotView='featured';this.dotSelectedIds.clear();this.switchTab('candidates');}));

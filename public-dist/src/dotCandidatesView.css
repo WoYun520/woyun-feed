@@ -219,4 +219,21 @@
   .dot-candidates-intake > summary::after { margin-left: auto; }
   .dot-inbox-panel { padding: 15px; }
   .dot-home-heading { align-items: flex-start; flex-direction: column; }
+  .review-queue-actions { align-items: stretch; }
+  .review-queue-actions .btn-primary-action, .review-queue-actions .btn-quiet { min-height: 44px; }
 }
+
+.review-queue { margin: 0 0 28px; padding: 0 0 18px; border-bottom: 1px solid var(--dot-line, #e3e4dd); color: var(--dot-ink, #171917); }
+.review-queue-heading h2 { margin: 0 0 6px; font-size: 22px; letter-spacing: -.03em; }
+.review-queue-heading p, .review-queue-status, .review-queue-hint, .review-queue-excerpt { color: var(--dot-muted, #6a6d65); font-size: 13px; line-height: 1.6; }
+.review-queue-item { padding: 14px 0; border-top: 1px solid var(--dot-line, #e3e4dd); }
+.review-queue-signals { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-bottom: 8px; font-size: 12px; }
+.review-type-tag { display: inline-flex; align-items: center; min-height: 22px; padding: 0 8px; border-radius: 999px; background: #171917; color: #fff; font-size: 12px; font-weight: 650; }
+.review-queue-article, .review-queue-heat { font-variant-numeric: tabular-nums; }
+.review-skip-cue { color: #8a5a12; font-size: 12px; }
+.review-queue-title { margin: 0 0 8px; font-size: 15px; line-height: 1.5; }
+.review-queue-actions { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.review-type-edit, .review-underrated-choice { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+.review-type-edit select { min-height: 36px; border: 1px solid var(--dot-line, #e3e4dd); border-radius: 4px; background: #fff; font: inherit; }
+.review-queue-error { color: #9d2c2c; font-size: 13px; }
+.review-queue-hint { margin: 6px 0 0; }
