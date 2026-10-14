@@ -52,7 +52,7 @@ npx wrangler secret put DOT_REVIEW_TOKEN_HASH
 
 原始投递密钥、接收码和 `CLOUDFLARE_API_TOKEN` 只留在本机。`.gitignore` 已忽略 `.env`、`.env.*`、`.dev.vars` 和 `.wrangler/`。不要把它们提交进仓库。
 
-Overheard 用同一把投递密钥把 X 链接送进待筛选，见 [docs/pending-intake.md](docs/pending-intake.md)。这个入口只记 pending。过审用接收码，见 [docs/pending-review.md](docs/pending-review.md)；只有 `approved` 会写入公开首页。
+Overheard 用同一把投递密钥把 X 链接送进 `/api/dot/pending`，见 [docs/pending-intake.md](docs/pending-intake.md)。作者在 KOSX 账号池里、且不会进入「昨日最被低估」时，这条会按时间写入公开首页，不按粉丝数排序。首页贴链接、池外作者，以及会进入昨日最被低估的帖，仍只记 pending。过审用接收码，见 [docs/pending-review.md](docs/pending-review.md)。昨日最被低估必须人工过审。
 
 更细的预览步骤见 [docs/preview-deploy.md](docs/preview-deploy.md)。
 
@@ -103,6 +103,6 @@ npx wrangler secret put DOT_REVIEW_TOKEN_HASH
 
 Keep the raw delivery token, review code, and `CLOUDFLARE_API_TOKEN` on your machine. `.gitignore` already ignores `.env`, `.env.*`, `.dev.vars`, and `.wrangler/`.
 
-Overheard posts X links into the pending queue with that same delivery token. See [docs/pending-intake.md](docs/pending-intake.md). That route only stores `pending`. Approval uses the review code; see [docs/pending-review.md](docs/pending-review.md). Only `approved` is written to the public homepage.
+Overheard posts X links to `/api/dot/pending` with that same delivery token. See [docs/pending-intake.md](docs/pending-intake.md). A KOSX pool author is published in chronological order when the post would not enter Yesterday's most underrated. Homepage paste, authors outside the pool, and any post that would enter that section stay `pending`. Approval uses the review code; see [docs/pending-review.md](docs/pending-review.md). That underrated section always needs a human review. There is no follower-count ordering.
 
 Preview details: [docs/preview-deploy.md](docs/preview-deploy.md).
