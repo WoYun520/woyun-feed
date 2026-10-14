@@ -1,7 +1,7 @@
 import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { addCalendarDays, beijingDateKey, parsePublicHeat, recordKosxBoost, selectHomeShowcase, wouldEnterUnderrated } from './src/homeShowcase.js';
+import { HOME_WEEK_BOOKMARK_MIN, addCalendarDays, beijingDateKey, parsePublicHeat, recordKosxBoost, selectHomeShowcase, wouldEnterUnderrated } from './src/homeShowcase.js';
 import { FeedDataAdapter } from './src/dataAdapter.js';
 import { KOSX_EMOJI_ALT, KOSX_EMOJI_FRAMES, KOSX_EMOJI_INTERVAL_MS, mountKosxEmoji, renderHomeShowcase, resetKosxEmoji } from './src/homeShowcaseView.js';
 import { renderWorkspaceNavigation } from './src/workspaceShell.js';
@@ -23,6 +23,9 @@ const post = (id, published, extra = {}) => ({
   heat_label:extra.heat || '', source_rank:extra.rank ?? null, post_image:extra.image,
   ...(extra.author_handle ? {author_handle:extra.author_handle} : {}),
   ...(extra.kosx_review ? {kosx_review:extra.kosx_review} : {}),
+  ...(extra.bookmark_count !== undefined ? {bookmark_count:extra.bookmark_count} : {}),
+  ...(extra.review_type ? {review_type:extra.review_type} : {}),
+  ...(extra.has_article !== undefined ? {has_article:extra.has_article} : {}),
 });
 const state = items => ({
   generated_at:'2026-10-10T13:01:27.954Z', mode:'live', sources:[source], allItems:items,
@@ -179,22 +182,85 @@ test('cover cards show a quiet KOSX badge only for account-pool authors', () => 
   assert.doesNotMatch(css, /\.kosx-pool-badge\s*\{[^}]*(?:#171917|#c84924|#EC672B)/);
 });
 
-test('seven-day view leads with existing instruction evidence and kept shelf reads current stores only', () => {
-  const tutorial = post('207001', '2026-10-07T02:00:00.000Z', {title:'给截图加箭头', summary:'教程：打开截图工具，选择图片文件。\n1. 打开截图工具，选择图片文件。\n2. 点击箭头按钮，再导出图片文件。'});
-  const ordinary = post('207002', '2026-10-07T03:00:00.000Z', {summary:'只是一条看法，没有操作步骤。'});
+test('seven-day shelf keeps high-bookmark essence articles and the kept shelf reads current stores only', () => {
+  const steps = '教程：打开截图工具，选择图片文件。\n1. 打开截图工具，选择图片文件。\n2. 点击箭头按钮，再导出图片文件。';
+  const high = post('207001', '2026-10-07T02:00:00.000Z', {origin:'kosx_approved', review_type:'文章', bookmark_count:800, title:'高收藏文章'});
+  const floor = post('207003', '2026-10-08T04:00:00.000Z', {origin:'kosx_approved', has_article:true, bookmark_count:HOME_WEEK_BOOKMARK_MIN, title:'刚好过线'});
+  const low = post('207004', '2026-10-08T03:00:00.000Z', {origin:'kosx_approved', review_type:'教程指南', bookmark_count:HOME_WEEK_BOOKMARK_MIN - 1, title:'差一点'});
+  const shortPost = post('207005', '2026-10-08T05:00:00.000Z', {origin:'kosx_approved', review_type:'短帖', bookmark_count:9000, title:'高收藏短帖'});
+  const promo = post('207007', '2026-10-08T06:00:00.000Z', {origin:'kosx_approved', review_type:'产品安利', bookmark_count:9000, title:'高收藏安利'});
+  const stream = post('207002', '2026-10-07T03:00:00.000Z', {review_type:'文章', bookmark_count:9000, title:'榜单文章', summary:steps});
+  const outside = post('207006', '2026-10-03T03:00:00.000Z', {origin:'kosx_approved', review_type:'文章', bookmark_count:9000, title:'窗口外文章'});
+  const heatOnly = post('207008', '2026-10-09T02:00:00.000Z', {origin:'kosx_approved', review_type:'文章', heat:'9万 曝光/小时', title:'只有热度'});
   const featured = {...post('300001', '2026-10-01T00:00:00.000Z', {title:'我留下的原帖'}), origin:'dot_import'};
   const saved = post('300002', '2026-10-02T00:00:00.000Z', {title:'已收藏原帖'});
   const hidden = post('300003', '2026-10-02T00:00:00.000Z');
-  const input = state([tutorial, ordinary, featured, saved, hidden]);
+  const input = state([high, floor, low, shortPost, promo, stream, outside, heatOnly, featured, saved, hidden]);
   input.dotFeaturedItems = [featured];
   input.savedItems = [saved, featured, hidden];
   input.savedItemIds = new Set([saved.id, featured.id, hidden.id]);
   input.hiddenItemIds = new Set([hidden.id]);
   const selected = selectHomeShowcase(input);
-  assert.deepEqual(selected.weekLeads.map(entry => entry.post.item.id), ['207001']);
-  assert.deepEqual(selected.weekRest.map(entry => entry.post.item.id), ['207002']);
+  assert.equal(HOME_WEEK_BOOKMARK_MIN, 200);
+  assert.equal(selected.weekRule, 'bookmarks');
+  assert.deepEqual(selected.week.map(entry => entry.post.item.id), ['207001', '207003']);
+  assert.equal(selected.weekLeads, undefined);
+  assert.equal(selected.weekRest, undefined);
+  assert.match(selected.weekNote, /2026-10-04 至 2026-10-10/);
+  assert.match(selected.weekNote, /已经放上公开首页的精华帖/);
+  assert.match(selected.weekNote, /达到 200 才留下/);
+  assert.match(selected.weekNote, /点赞和浏览不换算成收藏/);
+  assert.match(selected.weekNote, /没有把其余公开帖补进来/);
+  assert.equal(selected.week.some(entry => entry.post.item.id === stream.id), false);
   assert.deepEqual(selected.kept.featured.map(item => item.id), [featured.id]);
   assert.deepEqual(selected.kept.saved.map(item => item.id), [saved.id]);
+  const html = renderHomeShowcase(app('week'), input);
+  assert.match(html, /id="home-week"/);
+  assert.match(html, /data-week-rule="bookmarks"/);
+  assert.match(html, /七日精选精华帖 <small>2<\/small>/);
+  assert.match(html, /高收藏文章/);
+  assert.match(html, /刚好过线/);
+  assert.ok(html.indexOf('高收藏文章') < html.indexOf('刚好过线'));
+  assert.doesNotMatch(html, /同七日其余公开帖|摘录含操作线索|week-rest|week-lead|差一点|高收藏短帖|高收藏安利|榜单文章|窗口外文章|只有热度/);
+  assert.equal(html.match(/data-home-group="week"/g).length, 2);
+});
+
+test('seven-day shelf uses public heat only when bookmark counts are missing, then excerpt evidence', () => {
+  const steps = '教程：打开截图工具，选择图片文件。\n1. 打开截图工具，选择图片文件。\n2. 点击箭头按钮，再导出图片文件。';
+  const hot = post('217001', '2026-10-06T02:00:00.000Z', {origin:'kosx_approved', review_type:'文章', heat:'9000 曝光/小时', title:'高曝光文章'});
+  const mid = post('217002', '2026-10-07T02:00:00.000Z', {origin:'kosx_approved', review_type:'教程指南', heat:'450 曝光/小时', title:'中等曝光'});
+  const cool = post('217003', '2026-10-08T02:00:00.000Z', {origin:'kosx_approved', has_article:true, heat:'100 曝光/小时', title:'低曝光文章'});
+  const otherUnit = post('217004', '2026-10-08T03:00:00.000Z', {origin:'kosx_approved', review_type:'文章', heat:'40.3万 次浏览', title:'另一种热度'});
+  const opinion = post('217005', '2026-10-08T04:00:00.000Z', {origin:'kosx_approved', heat:'9万 曝光/小时', title:'高曝光看法'});
+  const stream = post('217006', '2026-10-08T05:00:00.000Z', {heat:'9万 曝光/小时', review_type:'文章', title:'榜单高热'});
+  const heated = selectHomeShowcase(state([hot, mid, cool, otherUnit, opinion, stream]));
+  assert.equal(heated.weekRule, 'heat');
+  assert.deepEqual(heated.week.map(entry => entry.post.item.id), ['217001']);
+  assert.match(heated.weekNote, /没有可读的收藏数/);
+  assert.match(heated.weekNote, /曝光\/小时/);
+  assert.match(heated.weekNote, /高于中位数/);
+  const newer = post('217011', '2026-10-09T02:00:00.000Z', {origin:'kosx_approved', title:'较新教程', summary:steps});
+  const older = post('217012', '2026-10-05T02:00:00.000Z', {origin:'kosx_approved', title:'较早教程', summary:steps});
+  const lone = post('217013', '2026-10-08T02:00:00.000Z', {origin:'kosx_approved', review_type:'文章', heat:'9000 曝光/小时', title:'只有一条热度'});
+  const plain = post('217014', '2026-10-08T06:00:00.000Z', {origin:'kosx_approved', title:'没有线索的精华'});
+  const sparse = selectHomeShowcase(state([newer, older, lone, plain, stream]));
+  assert.equal(sparse.weekRule, 'article');
+  assert.deepEqual(sparse.week.map(entry => entry.post.item.id), ['217011', '217013', '217012']);
+  assert.match(sparse.weekNote, /不是收藏榜/);
+  assert.match(sparse.weekNote, /不足 2 条/);
+  const tieA = post('217021', '2026-10-09T01:00:00.000Z', {origin:'kosx_approved', review_type:'文章', heat:'1200 曝光/小时', title:'并列较新'});
+  const tieB = post('217022', '2026-10-06T01:00:00.000Z', {origin:'kosx_approved', review_type:'文章', heat:'1200 曝光/小时', title:'并列较旧'});
+  const tied = selectHomeShowcase(state([tieA, tieB]));
+  assert.equal(tied.weekRule, 'heat');
+  assert.deepEqual(tied.week.map(entry => entry.post.item.id), ['217021', '217022']);
+  const quiet = selectHomeShowcase(state([plain, opinion, stream]));
+  assert.equal(quiet.weekRule, 'empty');
+  assert.deepEqual(quiet.week, []);
+  const page = renderHomeShowcase(app('week'), state([plain]));
+  assert.match(page, /data-week-rule="empty"/);
+  assert.match(page, /达到 200 才留下/);
+  assert.match(page, /这七日没有留下精华文章/);
+  assert.doesNotMatch(page, /同七日其余公开帖|摘录含操作线索/);
 });
 
 test('default homepage renders cover cards, signature, navigation labels and no saturated specimen fill', () => {

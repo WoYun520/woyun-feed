@@ -7,6 +7,8 @@ export const HOME_BOOST_VISITOR_KEY = 'personal-feed:visitor:v1';
 
 export const HOME_LATEST_LIMIT = 18;
 export const HOME_UNDERSTATED_LIMIT = 2;
+// Levi's floor for 「七日精选」. Same number as the 200 bookmark gate on the material review filters.
+export const HOME_WEEK_BOOKMARK_MIN = 200;
 const VIEWS = ['latest', 'yesterday', 'week', 'kept'];
 
 const finite = value => typeof value === 'string' && Number.isFinite(Date.parse(value));
@@ -102,6 +104,69 @@ function isHomepageEssence(item) {
   return Array.isArray(refs) && refs.length === 1 && refs[0] === KOSX_PUBLIC_SOURCE_ID;
 }
 
+const WEEK_ARTICLE_TYPES = new Set(['文章', '教程指南']);
+const WEEK_REJECT_TYPES = new Set(['短帖', '产品安利', '避坑']);
+
+function publicBookmarkCount(item) {
+  const value = item?.bookmark_count;
+  return Number.isSafeInteger(value) && value >= 0 && value <= 1_000_000_000 ? value : null;
+}
+
+// An article is a public field already on the item, or the existing excerpt
+// signal. Short posts, promos, and pitfall notes stay out even with a high count.
+function weekArticle(entry) {
+  const item = entry?.post?.item;
+  const type = typeof item?.review_type === 'string' ? item.review_type : '';
+  if (WEEK_REJECT_TYPES.has(type)) return false;
+  if (WEEK_ARTICLE_TYPES.has(type) || item?.has_article === true) return true;
+  return entry?.post?.instruction?.eligible === true;
+}
+
+function describeWeek(span, rule, unit) {
+  const window = `七日是整理日往前共 7 个北京时间自然日（${span}，含整理日），只看已经放上公开首页的精华帖。信息流里其他带日期的帖不放进来。文章指标明为文章或教程指南、带有 Article 卡，或摘录里已有操作线索的精华帖。短帖、产品安利和避坑不进入。收藏数只读公开条目上的 bookmark_count，达到 ${HOME_WEEK_BOOKMARK_MIN} 才留下，收藏多的在前；点赞和浏览不换算成收藏。`;
+  const tail = '未核对原帖，未实测。没有把其余公开帖补进来。';
+  if (rule === 'bookmarks') return `${window}没有收藏数，或达不到 ${HOME_WEEK_BOOKMARK_MIN}，都不进入这一栏。${tail}`;
+  if (rule === 'heat') {
+    const unitLabel = unit === 'exposure_per_hour' ? '曝光/小时' : '次浏览';
+    return `${window}这七日的精华文章没有可读的收藏数，改用来源标注的「${unitLabel}」。单位不一致的不换算，只比较条数最多的那一种，留下高于中位数的文章；没有更高的则只留并列最高。高的在前。按现有公开指标粗排。${tail}`;
+  }
+  if (rule === 'article') return `${window}公开条目上没有可用的收藏数，同一单位的来源热度也不足 2 条，所以按发布时间从新到旧留下这些文章。这不是收藏榜。${tail}`;
+  return `${window}这七日没有这样的精华文章。${tail}`;
+}
+
+// 「七日精选」 stays on the essence line, then keeps articles only. A known
+// bookmark count uses the strict floor and does not fall through to heat.
+// Heat is the fallback when no article has bookmark_count. Excerpt evidence
+// is the last public field, and it never brings the rest of the window along.
+function pickWeek(entries) {
+  const articles = entries.filter(weekArticle);
+  const counted = articles.filter(entry => publicBookmarkCount(entry.post.item) !== null);
+  if (counted.length) {
+    const kept = counted.filter(entry => publicBookmarkCount(entry.post.item) >= HOME_WEEK_BOOKMARK_MIN);
+    kept.sort((a, b) => publicBookmarkCount(b.post.item) - publicBookmarkCount(a.post.item) || byRecent(a, b));
+    return {entries:kept, rule:'bookmarks', unit:''};
+  }
+  const heated = articles.map(entry => ({entry, heat:parsePublicHeat(entry.post.item.heat_label)})).filter(row => row.heat && row.heat.value > 0);
+  const counts = new Map();
+  for (const row of heated) counts.set(row.heat.unit, (counts.get(row.heat.unit) || 0) + 1);
+  let unit = '', best = 0;
+  for (const [name, count] of counts) if (count > best) { best = count; unit = name; }
+  if (unit && best >= 2) {
+    const pool = heated.filter(row => row.heat.unit === unit);
+    const values = pool.map(row => row.heat.value).sort((a, b) => a - b);
+    const median = values[Math.floor((values.length - 1) / 2)];
+    let chosen = pool.filter(row => row.heat.value > median);
+    if (!chosen.length) {
+      const top = values[values.length - 1];
+      chosen = pool.filter(row => row.heat.value === top);
+    }
+    chosen.sort((a, b) => b.heat.value - a.heat.value || byRecent(a.entry, b.entry));
+    return {entries:chosen.map(row => row.entry), rule:'heat', unit};
+  }
+  if (articles.length) return {entries:articles, rule:'article', unit:''};
+  return {entries:[], rule:'empty', unit:''};
+}
+
 function statusKey(item) {
   const values = [item?.original_url, item?.canonical_url, ...(Array.isArray(item?.source_links) ? item.source_links.map(link => link?.url) : [])];
   for (const value of values) {
@@ -170,16 +235,18 @@ export function selectHomeShowcase(state, {now} = {}) {
   // list and on the chronological cover; underrated screening reads this list,
   // so a stream post that never joined the essence line cannot enter it.
   const yesterdayEntries = dated.filter(entry => onDay(entry, yesterday) && isHomepageEssence(entry.post.item));
-  const weekEntries = dated.filter(entry => weekKeys.includes(beijingDateKey(entry.time.ms)));
+  const weekEntries = dated.filter(entry => weekKeys.includes(beijingDateKey(entry.time.ms)) && isHomepageEssence(entry.post.item));
+  const week = pickWeek(weekEntries);
   const latest = dated.slice(0, HOME_LATEST_LIMIT);
   const under = pickPinnedUnderrated(yesterdayEntries, state?.underratedPins ?? state?.underrated_pins, yesterday);
   const kept = keptShelf(state);
   if (before !== state) throw Error('首页筛选不应替换资料对象。');
+  const weekStart = weekKeys[6] || '', weekEnd = weekKeys[0] || '';
+  const span = weekStart && weekEnd ? `${weekStart} 至 ${weekEnd}` : '日期未能确定';
   return {
-    reference:{...reference, dateKey, yesterday, weekKeys, weekStart:weekKeys[6] || '', weekEnd:weekKeys[0] || ''},
+    reference:{...reference, dateKey, yesterday, weekKeys, weekStart, weekEnd},
     counts:{open:open.length, folded:stream.posts.length - open.length, undated:open.length - dated.length, dated:dated.length},
-    latest, yesterday:yesterdayEntries, weekLeads:weekEntries.filter(entry => entry.post.instruction?.eligible),
-    weekRest:weekEntries.filter(entry => !entry.post.instruction?.eligible),
+    latest, yesterday:yesterdayEntries, week:week.entries, weekRule:week.rule, weekNote:describeWeek(span, week.rule, week.unit),
     underrated:under.entries, underratedRule:under.rule, underratedNote:under.note, kept,
   };
 }
