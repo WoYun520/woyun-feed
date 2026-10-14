@@ -282,6 +282,26 @@ function kosxPoolBadge(item) {
   return '';
 }
 
+// Old pool and review rows stored a process sentence as the excerpt. That
+// sentence is not the post. A real note before it stays; the sentence does not.
+function policyRemainder(rest) {
+  const words = /账号池成员的精华帖|按时间放上首页|过审后放上首页|的 X 链接|尚未读取原文|未核对热度|不进入昨日最被低估/g;
+  return !/[A-Za-z0-9\u4e00-\u9fff]/.test(rest.replace(words, ''));
+}
+
+export function coverExcerpt(summary) {
+  const text = typeof summary === 'string' ? summary.trim() : '';
+  if (!text) return '';
+  const clause = /账号池成员的精华帖，按时间放上首页|过审后放上首页(?:的 X 链接)?|尚未读取原文，未核对热度|不进入昨日最被低估/g;
+  let cut = text.length;
+  for (const match of text.matchAll(clause)) {
+    const index = match.index ?? 0;
+    if (index < cut && policyRemainder(text.slice(index))) cut = index;
+  }
+  if (cut === text.length) return text;
+  return text.slice(0, cut).replace(/[。．\s]+$/u, '').trim();
+}
+
 function renderCards(app, state, entries, group) {
   return `<div class="cover-grid">${entries.map(entry => renderPostCard(app, state, entry, group)).join('')}</div>`;
 }
@@ -289,7 +309,7 @@ function renderCards(app, state, entries, group) {
 function renderPostCard(app, state, entry, group) {
   const post = entry.post, item = post.item, e = value => app.escapeHtml(value);
   const title = item.title || '来源未提供标题';
-  const excerpt = typeof item.summary === 'string' ? item.summary.trim() : '';
+  const excerpt = coverExcerpt(item.summary);
   const image = articleCover(item) || coverImage(post);
   const collection = collectionFor(state, post);
   const id = e(item.id);
@@ -313,7 +333,7 @@ function renderItemCards(app, state, items, group) {
 
 function renderKeptCard(app, state, item, group) {
   const e = value => app.escapeHtml(value), title = item.title || '已保存的材料';
-  const excerpt = typeof item.summary === 'string' ? item.summary.trim() : '';
+  const excerpt = coverExcerpt(item.summary);
   const image = articleCover(item) || itemCover(item);
   const time = [item.published_at, item.source_item_time, item.captured_at].find(value => typeof value === 'string' && Number.isFinite(Date.parse(value)));
   const label = item.published_at === time ? '原帖发布时间' : item.source_item_time === time ? '榜单条目时间' : time ? '采集或阅读时间' : '时间未提供';

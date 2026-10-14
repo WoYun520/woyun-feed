@@ -209,12 +209,36 @@ test('a post that would enter yesterday underrated stays pending until the revie
   assert.equal(showcase(published).underrated.some(entry => entry.post.originalUrl === poolUrl), false);
 });
 
+test('public excerpts use delivered text or note and omit the process sentence', () => {
+  const base = {id:'kosx-1', key:'x:1', url:'https://x.com/aaa/status/1', author_handle:'aaa', status:'approved', reviewed_at:when, source:'delivery', submitted_at:when};
+  const bare = kosxPublicItem({...base, note:'', approval:'pool'});
+  assert.equal(bare.summary, '');
+  assert.equal(bare.title, '@aaa 的精华帖');
+  const noted = kosxPublicItem({...base, note:'三步装好本地字幕', approval:'pool'});
+  assert.equal(noted.title, '三步装好本地字幕');
+  assert.equal(noted.summary, '三步装好本地字幕');
+  const posted = kosxPublicItem({...base, note:'标题备注', text:'原文摘录：第一步打开设置。', approval:'review'});
+  assert.equal(posted.title, '标题备注');
+  assert.equal(posted.summary, '原文摘录：第一步打开设置。');
+  const blankText = kosxPublicItem({...base, note:'只留备注', text:'   ', approval:'review'});
+  assert.equal(blankText.summary, '只留备注');
+  for (const item of [bare, noted, posted, blankText]) {
+    assert.doesNotMatch(item.summary, /不进入昨日最被低估|尚未读取原文|按时间放上首页|过审后放上首页/);
+  }
+  assert.doesNotMatch(kosxPublicSource().reading_note, /不进入那一栏|不进入昨日最被低估/);
+  assert.match(kosxPublicSource().reading_note, /必须人工过审/);
+});
+
 test('pool auto-publish stays off the underrated shelf until a review code marks it reviewed', async () => {
   const env = await environment();
   const created = await (await submit(env, {url:poolUrl}, {token:delivery})).json();
   assert.equal(created.approval, 'pool');
+  assert.equal(created.message, '账号池成员的精华帖已按时间放上公开首页。');
+  assert.doesNotMatch(created.message, /不进入昨日最被低估/);
   const shifted = env.PUBLIC_FEED.json();
   const posted = shifted.items.find(entry => entry.original_url === poolUrl);
+  assert.equal(posted.summary, '');
+  assert.doesNotMatch(posted.summary, /尚未读取原文|不进入昨日最被低估|过审后放上首页|按时间放上首页/);
   shifted.generated_at = nextBeijingInstant(Date.parse(posted.published_at));
   const blocked = showcase(shifted);
   assert.equal(blocked.yesterday.some(entry => entry.post.originalUrl === poolUrl), true);

@@ -18,7 +18,7 @@ export function kosxPublicSource() {
     status:'ok',
     enabled:true,
     message:'账号池成员的最新精华帖按时间放上首页；其余链接经接收码过审。未读取原文，未核对热度。不按粉丝数排序。',
-    reading_note:'这不是 SoPilot 榜单，也不按粉丝数排序。昨日最被低估必须人工过审。账号池自动放上首页的帖不进入那一栏。',
+    reading_note:'这不是 SoPilot 榜单，也不按粉丝数排序。昨日最被低估必须人工过审。',
   };
 }
 
@@ -81,13 +81,10 @@ export function kosxPublicItem(record) {
   // row is not an X status and intake did not supply a time.
   const pool = record.approval === 'pool';
   const title = (note || `@${record.author_handle} 的精华帖`).slice(0, 500);
-  const summary = (pool
-    ? (note
-      ? `${note}。账号池成员的精华帖，按时间放上首页。尚未读取原文，未核对热度。不进入昨日最被低估。`
-      : '账号池成员的精华帖，按时间放上首页。尚未读取原文，未核对热度。不进入昨日最被低估。')
-    : (note
-      ? `${note}。过审后放上首页。尚未读取原文，未核对热度。`
-      : '过审后放上首页的 X 链接。尚未读取原文，未核对热度。')).slice(0, 1000);
+  // The card excerpt is the delivered post text, or the intake note when text
+  // is absent. Process sentences are not an excerpt and are not stored here.
+  const delivered = typeof record.text === 'string' ? record.text.trim() : '';
+  const summary = (delivered || note).slice(0, 1000);
   const bookmark_count = publicCount(record.bookmark_count);
   const like_count = publicCount(record.like_count);
   const review_type = REVIEW_TYPES.includes(record.review_type) ? record.review_type : '';
