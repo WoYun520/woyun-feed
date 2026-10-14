@@ -60,4 +60,4 @@ curl -sS -X POST 'https://woyun-feed-preview.hhzovo66.workers.dev/api/dot/pendin
 
 队列上限仍是 300 条，过审和略过的记录也算在里面。
 
-过审只让链接进入公开首页。要放进「昨日最被低估精华帖」，Levi 再用同一把接收码单独钉选，见 [昨日低估上传](underrated-upload.md)。投递密钥不能钉选。候选池自动过审（`kosx_review` 为 `pool`）也不会进入那一栏。`underrated_candidate` 不是钉选，首页排序也不读它。
+过审只让链接进入公开首页。要放进「昨日最被低估精华帖」，这条还必须已经在「昨日全部」里（公开首页上、原帖北京日期为昨日），Levi 再用同一把接收码单独钉选，见 [昨日低估上传](underrated-upload.md)。别的日期不能新钉。投递密钥不能钉选。候选池自动过审（`kosx_review` 为 `pool`）也不会进入那一栏。`underrated_candidate` 不是钉选，首页排序也不读它。

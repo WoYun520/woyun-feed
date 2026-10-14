@@ -1,6 +1,6 @@
 import { dotPostKey } from './frontend/src/dotCandidates.js';
 import { containsCredentialText } from './frontend/src/contentPrivacy.js';
-import { beijingDateKey, postTime } from './frontend/src/homeShowcase.js';
+import { addCalendarDays, beijingDateKey, postTime, referenceClock } from './frontend/src/homeShowcase.js';
 import { dotInboxHash } from './dot-inbox-service.js';
 import { canonicalPendingPost } from './dot-pending-service.js';
 import { PUBLIC_FEED_KEY } from './frontend/cloud-feed-service.js';
@@ -184,7 +184,7 @@ async function savePins(env, items) {
   });
 }
 
-async function readPublicItems(env) {
+async function readPublicFeed(env) {
   let raw;
   try { raw = await env.PUBLIC_FEED.get(PUBLIC_FEED_KEY); }
   catch { unavailable(); }
@@ -192,11 +192,17 @@ async function readPublicItems(env) {
     try { raw = JSON.parse(raw); } catch { unavailable(); }
   }
   if (!raw || typeof raw !== 'object' || !Array.isArray(raw.items)) unavailable();
-  return raw.items;
+  return raw;
 }
 
-function resolvePublic(items, post) {
-  const matches = items.filter(item => underratedStatusKey(item) === post.key);
+// Same clock as the homepage: feed generated_at when present, otherwise now.
+function homepageYesterday(feed) {
+  const today = beijingDateKey(referenceClock({generated_at:feed?.generated_at}).ms);
+  return today ? addCalendarDays(today, -1) : '';
+}
+
+function resolvePublic(feed, post) {
+  const matches = feed.items.filter(item => underratedStatusKey(item) === post.key);
   if (!matches.length) throw new UnderratedError(404, 'not_public', '这条链接还不在当前公开首页。请先用接收码过审，或等它进入公开快照。钉选不会顺便批准。');
   const open = matches.filter(item => item?.kosx_review !== 'pool');
   if (!open.length) throw new UnderratedError(409, 'pool_not_pinnable', '候选池自动过审的帖不能放进昨日低估栏。这一栏要人工钉选，而这条仍标着 pool。');
@@ -204,6 +210,11 @@ function resolvePublic(items, post) {
   const time = postTime(item);
   const day = time.ms ? beijingDateKey(time.ms) : '';
   if (!day) bad('undated', '这条公开帖没有可判断日期的时间，不能钉进昨日低估栏。');
+  const yesterday = homepageYesterday(feed);
+  if (day !== yesterday) {
+    const target = yesterday ? `当前「昨日全部」是 ${yesterday}（北京时间）` : '当前整理日无法确定「昨日全部」';
+    throw new UnderratedError(409, 'not_yesterday', `这条公开帖的原帖日期是 ${day}（北京时间）。${target}。钉选只接受已经在昨日全部里的帖。`);
+  }
   const id = typeof item.id === 'string' && item.id.length <= 200 && !/[\u0000-\u001f\u007f]/.test(item.id) ? item.id : post.id;
   return {id, key:post.key, url:post.url, author_handle:post.author_handle, day};
 }
@@ -218,8 +229,8 @@ async function pinPosts(env, posts, note, batched) {
   const fresh = posts.filter(post => !items.some(item => item.key === post.key));
   const resolved = new Map();
   if (fresh.length) {
-    const publicItems = await readPublicItems(env);
-    for (const post of fresh) resolved.set(post.key, resolvePublic(publicItems, post));
+    const publicFeed = await readPublicFeed(env);
+    for (const post of fresh) resolved.set(post.key, resolvePublic(publicFeed, post));
   }
   if (items.length + fresh.length > UNDERRATED_PIN_STORE_MAX) {
     return json({error:'pin_full', message:`昨日低估钉选已满（${UNDERRATED_PIN_STORE_MAX} 条）。请先撤下旧钉选。首页这一栏最多仍显示 2 条。`}, 409);
