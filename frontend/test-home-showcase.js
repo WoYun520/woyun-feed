@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { HOME_WEEK_BOOKMARK_MIN, addCalendarDays, beijingDateKey, parsePublicHeat, recordKosxBoost, selectHomeShowcase, wouldEnterUnderrated } from './src/homeShowcase.js';
 import { FeedDataAdapter } from './src/dataAdapter.js';
-import { KOSX_EMOJI_ALT, KOSX_EMOJI_FRAMES, KOSX_EMOJI_INTERVAL_MS, mountKosxEmoji, renderHomeShowcase, resetKosxEmoji } from './src/homeShowcaseView.js';
+import { KOSX_EMOJI_ALT, KOSX_EMOJI_FRAMES, KOSX_EMOJI_INTERVAL_MS, coverExcerpt, mountKosxEmoji, renderHomeShowcase, resetKosxEmoji } from './src/homeShowcaseView.js';
 import { renderWorkspaceNavigation } from './src/workspaceShell.js';
 import { KOSX_POOL_HANDLES } from './kosx-pool.js';
 import { PUBLIC_FILES } from './public-build.mjs';
@@ -486,6 +486,32 @@ test('default homepage renders cover cards, signature, navigation labels and no 
   assert.match(appSource, /已进入待筛选/);
   assert.match(appSource, /这条已在待筛选里/);
   assert.doesNotMatch(appSource, /已放入待筛选|已放回待筛选|这条链接已经收过/);
+});
+
+test('homepage cards hide leftover process excerpts and keep a real note', () => {
+  const pool = '账号池成员的精华帖，按时间放上首页。尚未读取原文，未核对热度。不进入昨日最被低估。';
+  const review = '过审后放上首页的 X 链接。尚未读取原文，未核对热度。';
+  const reviewedNote = '三步装好本地字幕。过审后放上首页。尚未读取原文，未核对热度。';
+  assert.equal(coverExcerpt(pool), '');
+  assert.equal(coverExcerpt(review), '');
+  assert.equal(coverExcerpt(reviewedNote), '三步装好本地字幕');
+  assert.equal(coverExcerpt('热度还没核对，先看这三步安装。'), '热度还没核对，先看这三步安装。');
+  const items = [
+    post('8801', '2026-10-10T08:00:00.000Z', {origin:'kosx_approved', kosx_review:'pool', summary:pool, title:'@aaa 的精华帖'}),
+    post('8802', '2026-10-10T07:00:00.000Z', {origin:'kosx_approved', summary:review, title:'过审帖'}),
+    post('8803', '2026-10-10T06:00:00.000Z', {origin:'kosx_approved', summary:reviewedNote, title:'有备注'}),
+    post('8804', '2026-10-10T05:00:00.000Z', {origin:'kosx_approved', summary:'原文摘录：第一步打开设置。', title:'真实摘录'}),
+  ];
+  const html = renderHomeShowcase(app(), state(items));
+  assert.doesNotMatch(html, /不进入昨日最被低估|尚未读取原文，未核对热度|按时间放上首页|过审后放上首页/);
+  assert.match(html, /来源未提供摘录，请打开原帖。/);
+  assert.match(html, /三步装好本地字幕/);
+  assert.match(html, /原文摘录：第一步打开设置。/);
+  const keptState = state([]);
+  keptState.savedItems = [items[0]];
+  const kept = renderHomeShowcase(app('kept'), keptState);
+  assert.doesNotMatch(kept, /不进入昨日最被低估|尚未读取原文/);
+  assert.match(kept, /没有摘录。/);
 });
 
 test('category views and the masthead keep the three names visible without a second local store', () => {

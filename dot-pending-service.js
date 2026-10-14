@@ -304,7 +304,7 @@ function intakeView(record, {includeNote, existing, held}) {
   if (held) view.message = '这条会进入昨日最被低估，保持待筛选，需接收码人工过审。';
   else if (existing && record.status === 'approved') view.message = '这条已经在公开首页。';
   else if (existing && record.status === 'rejected') view.message = '这条已从待筛选里略过。';
-  else if (includeNote && record.approval === 'pool' && record.status === 'approved') view.message = '账号池成员的精华帖已按时间放上公开首页，不进入昨日最被低估。';
+  else if (includeNote && record.approval === 'pool' && record.status === 'approved') view.message = '账号池成员的精华帖已按时间放上公开首页。';
   return view;
 }
 

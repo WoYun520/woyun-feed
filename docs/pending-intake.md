@@ -44,7 +44,7 @@ curl -sS -X POST 'https://woyun-feed-preview.hhzovo66.workers.dev/api/dot/pendin
 新链接返回 `201`。整批都已经在队列里、而且状态没有从待筛选改成过审时返回 `200`。批量正文的形状是：
 
 ```json
-{"status":"partial","results":[{"id":"kosx-123","key":"x:123","url":"https://x.com/name/status/123","author_handle":"name","status":"approved","submitted_at":"2026-10-13T00:00:00.000Z","reviewed_at":"2026-10-14T01:00:00.000Z","approval":"pool","note":"可选","source":"delivery","existing":false,"pool":true,"published":true,"message":"账号池成员的精华帖已按时间放上公开首页，不进入昨日最被低估。"},{"id":"kosx-456","key":"x:456","url":"https://x.com/name/status/456","author_handle":"name","status":"pending","submitted_at":"2026-10-13T00:00:00.000Z","note":"","source":"delivery","existing":false,"pool":true,"published":false,"message":"这条会进入昨日最被低估，保持待筛选，需接收码人工过审。"}]}
+{"status":"partial","results":[{"id":"kosx-123","key":"x:123","url":"https://x.com/name/status/123","author_handle":"name","status":"approved","submitted_at":"2026-10-13T00:00:00.000Z","reviewed_at":"2026-10-14T01:00:00.000Z","approval":"pool","note":"可选","source":"delivery","existing":false,"pool":true,"published":true,"message":"账号池成员的精华帖已按时间放上公开首页。"},{"id":"kosx-456","key":"x:456","url":"https://x.com/name/status/456","author_handle":"name","status":"pending","submitted_at":"2026-10-13T00:00:00.000Z","note":"","source":"delivery","existing":false,"pool":true,"published":false,"message":"这条会进入昨日最被低估，保持待筛选，需接收码人工过审。"}]}
 ```
 
 单条正文则直接返回上面 `results` 里的那一个对象，不包在 `results` 里。批量的 `status` 是 `approved`（全部已上首页）、`partial`（有的上了、有的还在待筛选）或 `pending`（都还在待筛选）。
