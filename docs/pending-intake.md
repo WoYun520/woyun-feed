@@ -49,7 +49,7 @@ curl -sS -X POST 'https://woyun-feed-preview.hhzovo66.workers.dev/api/dot/pendin
 
 单条正文则直接返回上面 `results` 里的那一个对象，不包在 `results` 里。批量的 `status` 是 `approved`（全部已上首页）、`partial`（有的上了、有的还在待筛选）或 `pending`（都还在待筛选）。
 
-`published: true` 才表示这条已经写入公开首页。`approval: "pool"` 表示账号池自动过审；`pool: false` 表示作者不在账号池。`existing: true` 表示队列里本来就有这条；服务不改原来的提交时间、备注，也不把 `rejected` 改回去。已经在首页上的重复投递仍返回「这条已经在公开首页。」，过审时间不变。若这次带了可用的 `published_at` 或 `created_at`，公开首页上这条的 `published_at` 会改成这次的时间。队列里还没有的收藏数、点赞数、类型、Article 卡、摘录或封面地址，这次带了就会补上，并出现在这条公开条目上。已经有的不改。已经略过的不补封面。公开首页的文章类卡片会显示这张封面；没有封面时仍是「无来源附图」。
+`published: true` 才表示这条已经写入公开首页。`approval: "pool"` 表示账号池自动过审；`pool: false` 表示作者不在账号池。`existing: true` 表示队列里本来就有这条；服务不改原来的提交时间、备注，也不把 `rejected` 改回去。已经在首页上的重复投递仍返回「这条已经在公开首页。」，过审时间不变。若这次带了可用的 `published_at` 或 `created_at`，公开首页上这条的 `published_at` 会改成这次的时间。队列里还没有的收藏数、点赞数、类型、Article 卡、摘录或封面地址，这次带了就会补上，并出现在这条公开条目上。已经有的不改。已经略过的不补封面。公开首页的文章类卡片会显示这张封面。没有封面时不放灰色占位，摘录的前一两行放大成金句；没有摘录就只留标题和来源时间。
 
 账号池自动上首页的帖和接收码过审的帖用同一套时间顺序：有进料原帖时间时用它，否则用 X snowflake，不再把过审时间当作原帖发布时间。不按粉丝数把谁排到前面。接收码后来再标一次 `approved`，会把 `approval` 改成 `review`，过审时间不变。
 

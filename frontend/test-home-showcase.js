@@ -34,7 +34,7 @@ const state = items => ({
   dotFeaturedItems:[], profile:{exclude:''},
 });
 
-test('article-class KOSX cards show a delivered cover and leave a missing cover as the text frame', () => {
+test('article-class KOSX cards show a delivered cover and a quote when the cover is missing', () => {
   const articleCover = 'https://cdn.example.com/covers/article-card.jpg?format=jpg&name=large';
   const tutorialCover = 'https://cdn.example.com/covers/tutorial-card.jpg';
   const cardCover = 'https://cdn.example.com/covers/x-article-card.jpg';
@@ -67,21 +67,79 @@ test('article-class KOSX cards show a delivered cover and leave a missing cover 
   assert.match(shown, /referrerpolicy="no-referrer"/);
   assert.doesNotMatch(shown, /cover-zoom|pbs\.twimg\.com/);
   const bare = card(latest, 'latest', '4402');
-  assert.match(bare, /无来源附图/);
+  assert.match(bare, /data-cover="quote"/);
+  assert.match(bare, /class="cover-quote"/);
+  assert.match(bare, /这是来源摘录 4402，尚未核对。/);
+  assert.doesNotMatch(bare, /无来源附图|cover-fallback/);
   assert.doesNotMatch(bare, /<img|src=/);
   assert.match(card(latest, 'latest', '4403'), /src="https:\/\/cdn\.example\.com\/covers\/tutorial-card\.jpg"/);
   assert.match(card(latest, 'latest', '4404'), /src="https:\/\/cdn\.example\.com\/covers\/x-article-card\.jpg"/);
-  assert.match(card(latest, 'latest', '4405'), /无来源附图/);
-  assert.doesNotMatch(card(latest, 'latest', '4405'), /short-card/);
+  assert.match(card(latest, 'latest', '4405'), /data-cover="quote"/);
+  assert.doesNotMatch(card(latest, 'latest', '4405'), /无来源附图|short-card/);
   assert.doesNotMatch(card(latest, 'latest', '4406'), /pitfall-card/);
-  assert.doesNotMatch(latest, /not-kosx|covers\/nope/);
+  assert.doesNotMatch(latest, /not-kosx|covers\/nope|无来源附图/);
   assert.match(card(week, 'week', '4401'), /article-card\.jpg/);
-  assert.match(card(week, 'week', '4402'), /无来源附图/);
-  assert.doesNotMatch(card(week, 'week', '4402'), /<img/);
+  assert.match(card(week, 'week', '4402'), /data-cover="quote"/);
+  assert.doesNotMatch(card(week, 'week', '4402'), /无来源附图|<img/);
   assert.match(card(week, 'week', '4403'), /tutorial-card\.jpg/);
   assert.doesNotMatch(week, /short-card|pitfall-card|not-kosx|covers\/nope/);
   const css = readFileSync(new URL('./src/homeShowcase.css', import.meta.url), 'utf8');
   assert.match(css, /\.cover-photo\.cover-article figcaption/);
+});
+
+test('homepage essence cards keep a cover image or a quote and never an empty attachment frame', () => {
+  const member = 'ai_suxiaole';
+  const withCover = post('9101', '2026-10-14T12:21:00.000Z', {
+    origin:'kosx_approved', review_type:'文章', bookmark_count:12, kosx_review:'pool',
+    cover_url:'https://cdn.example.com/covers/dense.jpg', author_handle:member,
+    url:`https://x.com/${member}/status/9101`, title:`@${member} 的精华帖`,
+    summary:'超15万人关注的话题。\n原作者已经把仓库开源。',
+  });
+  const quote = post('9102', '2026-10-14T11:00:00.000Z', {
+    origin:'kosx_approved', author_handle:member, bookmark_count:3,
+    url:`https://x.com/${member}/status/9102`, title:`@${member} 的精华帖`,
+    summary:'可玩性已经离开玩具级别了。下一句仍在摘录里。',
+  });
+  const bare = post('9103', '2026-10-14T10:00:00.000Z', {
+    origin:'kosx_approved', author_handle:member, url:`https://x.com/${member}/status/9103`,
+    title:`@${member} 的精华帖`,
+    summary:'账号池成员的精华帖，按时间放上首页。尚未读取原文，未核对热度。不进入昨日最被低估。',
+  });
+  const createdOnly = post('9104', '2026-10-13T01:00:00.000Z', {
+    origin:'kosx_approved', title:'只有创建时间', summary:'金句来自创建时间那条。',
+  });
+  delete createdOnly.published_at;
+  createdOnly.created_at = '2026-10-01T08:30:00.000Z';
+  const html = renderHomeShowcase(app(), state([withCover, quote, bare, createdOnly]));
+  assert.doesNotMatch(html, /无来源附图|cover-fallback|cover-type|data-review-type/);
+  const shown = cardHtml(html, '9101');
+  assert.match(shown, /data-cover="media"/);
+  assert.match(shown, /src="https:\/\/cdn\.example\.com\/covers\/dense\.jpg"/);
+  assert.match(shown, /<time datetime="2026-10-14T12:21:00.000Z">/);
+  assert.match(shown, /超15万人关注的话题/);
+  assert.match(shown, /<span class="kosx-pool-badge">KOSX<\/span>/);
+  assert.match(shown, /@ai_suxiaole 的精华帖/);
+  assert.match(shown, /收藏 12/);
+  assert.match(shown, /打开原帖/);
+  assert.match(shown, />收藏</);
+  const said = cardHtml(html, '9102');
+  assert.match(said, /data-cover="quote"/);
+  assert.match(said, /<blockquote class="cover-quote">可玩性已经离开玩具级别了。下一句仍在摘录里。<\/blockquote>/);
+  assert.match(said, /class="cover-author">@ai_suxiaole</);
+  assert.match(said, /收藏 3/);
+  assert.match(said, /打开原帖/);
+  assert.doesNotMatch(said, /<img|cover-frame|无来源附图/);
+  const empty = cardHtml(html, '9103');
+  assert.match(empty, /data-cover="plain"/);
+  assert.match(empty, /@ai_suxiaole 的精华帖/);
+  assert.match(empty, /打开原帖/);
+  assert.doesNotMatch(empty, /cover-quote|cover-frame|<img|无来源附图|按时间放上首页|来源未提供摘录，请打开原帖/);
+  const created = cardHtml(html, '9104');
+  assert.match(created, /<time datetime="2026-10-01T08:30:00.000Z">/);
+  assert.doesNotMatch(created, /2026-10-13T01:00:00.000Z/);
+  const css = readFileSync(new URL('./src/homeShowcase.css', import.meta.url), 'utf8');
+  assert.match(css, /\.cover-quote\s*\{[^}]*-webkit-line-clamp:\s*2/);
+  assert.match(css, /@media \(max-width: 720px\)[\s\S]*\.cover-quote\s*\{[^}]*font-size:\s*22px/);
 });
 
 test('beijing yesterday is the calendar day before the published snapshot', () => {
@@ -366,7 +424,8 @@ test('default homepage renders cover cards, signature, navigation labels and no 
   assert.match(html, /综合推文榜/);
   assert.doesNotMatch(html, /SoPilot|本浏览器保存|第一次来|展开说明|实用教程|怎么用/);
   assert.match(html, /src="https:\/\/pbs\.twimg\.com\/media\/AbcdEFG\.jpg"/);
-  assert.match(html, /无来源附图/);
+  assert.match(html, /data-cover="quote"/);
+  assert.doesNotMatch(html, /无来源附图|cover-fallback/);
   assert.match(html, /打开原帖/);
   assert.match(html, /data-action="toggle-save"/);
   assert.doesNotMatch(html, /放进主题|data-action="topic-save"|实用教程|收藏与跟进|主题工作台|我的关注|怎么用|待筛选/);
@@ -504,14 +563,16 @@ test('homepage cards hide leftover process excerpts and keep a real note', () =>
   ];
   const html = renderHomeShowcase(app(), state(items));
   assert.doesNotMatch(html, /不进入昨日最被低估|尚未读取原文，未核对热度|按时间放上首页|过审后放上首页/);
-  assert.match(html, /来源未提供摘录，请打开原帖。/);
+  assert.match(html, /来源未提供摘录。/);
+  assert.doesNotMatch(html, /来源未提供摘录，请打开原帖。|无来源附图/);
   assert.match(html, /三步装好本地字幕/);
   assert.match(html, /原文摘录：第一步打开设置。/);
   const keptState = state([]);
   keptState.savedItems = [items[0]];
   const kept = renderHomeShowcase(app('kept'), keptState);
-  assert.doesNotMatch(kept, /不进入昨日最被低估|尚未读取原文/);
-  assert.match(kept, /没有摘录。/);
+  assert.doesNotMatch(kept, /不进入昨日最被低估|尚未读取原文|没有摘录。|无来源附图/);
+  assert.match(kept, /@aaa 的精华帖/);
+  assert.match(kept, /data-cover="plain"/);
 });
 
 test('category views and the masthead keep the three names visible without a second local store', () => {

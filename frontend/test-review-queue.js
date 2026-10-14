@@ -651,8 +651,9 @@ test('delivery stores a cover, copies it onto the public item, and a later deliv
   assert.match(week, new RegExp(shown.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   assert.match(page, /文章封面，未核对原帖/);
   const bareCard = page.slice(page.indexOf(`data-home-card="${bare.id}"`), page.indexOf('</article>', page.indexOf(`data-home-card="${bare.id}"`)));
-  assert.match(bareCard, /无来源附图/);
-  assert.doesNotMatch(bareCard, /<img/);
+  assert.match(bareCard, /data-cover="plain"/);
+  assert.match(bareCard, /打开原帖/);
+  assert.doesNotMatch(bareCard, /无来源附图|<img|cover-quote/);
 
   const other = 'https://cdn.example.com/covers/later.jpg';
   const keptWrites = env.PUBLIC_FEED.writes.length;
