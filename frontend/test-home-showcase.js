@@ -1,7 +1,7 @@
 import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { HOME_WEEK_BOOKMARK_MIN, addCalendarDays, beijingDateKey, parsePublicHeat, recordKosxBoost, selectHomeShowcase, wouldEnterUnderrated } from './src/homeShowcase.js';
+import { HOME_KEPT_BOOKMARK_MIN, HOME_WEEK_BOOKMARK_MIN, addCalendarDays, beijingDateKey, parsePublicHeat, recordKosxBoost, selectHomeShowcase, wouldEnterUnderrated } from './src/homeShowcase.js';
 import { FeedDataAdapter } from './src/dataAdapter.js';
 import { KOSX_EMOJI_ALT, KOSX_EMOJI_FRAMES, KOSX_EMOJI_INTERVAL_MS, coverExcerpt, mountKosxEmoji, renderHomeShowcase, resetKosxEmoji } from './src/homeShowcaseView.js';
 import { renderWorkspaceNavigation } from './src/workspaceShell.js';
@@ -316,7 +316,7 @@ test('cover cards show a quiet KOSX badge only for account-pool authors', () => 
   assert.doesNotMatch(css, /\.kosx-pool-badge\s*\{[^}]*(?:#171917|#c84924|#EC672B)/);
 });
 
-test('seven-day shelf keeps high-bookmark essence articles and the kept shelf reads current stores only', () => {
+test('seven-day shelf keeps high-bookmark essence articles inside the window', () => {
   const steps = '教程：打开截图工具，选择图片文件。\n1. 打开截图工具，选择图片文件。\n2. 点击箭头按钮，再导出图片文件。';
   const high = post('207001', '2026-10-07T02:00:00.000Z', {origin:'kosx_approved', review_type:'文章', bookmark_count:800, title:'高收藏文章'});
   const floor = post('207003', '2026-10-08T04:00:00.000Z', {origin:'kosx_approved', has_article:true, bookmark_count:HOME_WEEK_BOOKMARK_MIN, title:'刚好过线'});
@@ -326,14 +326,7 @@ test('seven-day shelf keeps high-bookmark essence articles and the kept shelf re
   const stream = post('207002', '2026-10-07T03:00:00.000Z', {review_type:'文章', bookmark_count:9000, title:'榜单文章', summary:steps});
   const outside = post('207006', '2026-10-03T03:00:00.000Z', {origin:'kosx_approved', review_type:'文章', bookmark_count:9000, title:'窗口外文章'});
   const heatOnly = post('207008', '2026-10-09T02:00:00.000Z', {origin:'kosx_approved', review_type:'文章', heat:'9万 曝光/小时', title:'只有热度'});
-  const featured = {...post('300001', '2026-10-01T00:00:00.000Z', {title:'我留下的原帖'}), origin:'dot_import'};
-  const saved = post('300002', '2026-10-02T00:00:00.000Z', {title:'已收藏原帖'});
-  const hidden = post('300003', '2026-10-02T00:00:00.000Z');
-  const input = state([high, floor, low, shortPost, promo, stream, outside, heatOnly, featured, saved, hidden]);
-  input.dotFeaturedItems = [featured];
-  input.savedItems = [saved, featured, hidden];
-  input.savedItemIds = new Set([saved.id, featured.id, hidden.id]);
-  input.hiddenItemIds = new Set([hidden.id]);
+  const input = state([high, floor, low, shortPost, promo, stream, outside, heatOnly]);
   const selected = selectHomeShowcase(input);
   assert.equal(HOME_WEEK_BOOKMARK_MIN, 200);
   assert.equal(selected.weekRule, 'bookmarks');
@@ -346,8 +339,6 @@ test('seven-day shelf keeps high-bookmark essence articles and the kept shelf re
   assert.match(selected.weekNote, /点赞和浏览不换算成收藏/);
   assert.match(selected.weekNote, /没有把其余公开帖补进来/);
   assert.equal(selected.week.some(entry => entry.post.item.id === stream.id), false);
-  assert.deepEqual(selected.kept.featured.map(item => item.id), [featured.id]);
-  assert.deepEqual(selected.kept.saved.map(item => item.id), [saved.id]);
   const html = renderHomeShowcase(app('week'), input);
   assert.match(html, /id="home-week"/);
   assert.match(html, /data-week-rule="bookmarks"/);
@@ -357,6 +348,65 @@ test('seven-day shelf keeps high-bookmark essence articles and the kept shelf re
   assert.ok(html.indexOf('高收藏文章') < html.indexOf('刚好过线'));
   assert.doesNotMatch(html, /同七日其余公开帖|摘录含操作线索|week-rest|week-lead|差一点|高收藏短帖|高收藏安利|榜单文章|窗口外文章|只有热度/);
   assert.equal(html.match(/data-home-group="week"/g).length, 2);
+});
+
+test('卧云精选 lists standing homepage essence articles with at least 1000 bookmarks', () => {
+  const steps = '教程：打开截图工具，选择图片文件。\n1. 打开截图工具，选择图片文件。\n2. 点击箭头按钮，再导出图片文件。';
+  const highest = post('307001', '2026-09-01T02:00:00.000Z', {origin:'kosx_approved', review_type:'文章', bookmark_count:4000, title:'窗口外高收藏'});
+  const newerTie = post('307002', '2026-10-09T08:00:00.000Z', {origin:'kosx_approved', review_type:'教程指南', bookmark_count:2500, title:'同收藏较新'});
+  const olderTie = post('307003', '2026-10-02T08:00:00.000Z', {origin:'kosx_approved', has_article:true, bookmark_count:2500, title:'同收藏较旧'});
+  const floor = post('307004', '2026-10-10T08:00:00.000Z', {origin:'kosx_approved', review_type:'文章', bookmark_count:HOME_KEPT_BOOKMARK_MIN, title:'刚好一千'});
+  const low = post('307005', '2026-10-10T07:00:00.000Z', {origin:'kosx_approved', review_type:'文章', bookmark_count:HOME_KEPT_BOOKMARK_MIN - 1, title:'九百九十九'});
+  const weekOnly = post('307006', '2026-10-08T04:00:00.000Z', {origin:'kosx_approved', review_type:'文章', bookmark_count:HOME_WEEK_BOOKMARK_MIN, title:'只够七日'});
+  const shortPost = post('307007', '2026-10-08T05:00:00.000Z', {origin:'kosx_approved', review_type:'短帖', bookmark_count:9000, title:'高收藏短帖'});
+  const promo = post('307008', '2026-10-08T06:00:00.000Z', {origin:'kosx_approved', review_type:'产品安利', bookmark_count:9000, title:'高收藏安利'});
+  const pitfall = post('307009', '2026-10-08T06:30:00.000Z', {origin:'kosx_approved', review_type:'避坑', has_article:true, bookmark_count:9000, title:'高收藏避坑'});
+  const stream = post('307010', '2026-10-08T03:00:00.000Z', {review_type:'文章', bookmark_count:9000, title:'榜单文章'});
+  const clue = post('307011', '2026-10-08T09:00:00.000Z', {origin:'kosx_approved', bookmark_count:2200, title:'只有操作线索', summary:steps});
+  const heatOnly = post('307012', '2026-10-08T01:00:00.000Z', {origin:'kosx_approved', review_type:'文章', heat:'9万 曝光/小时', title:'只有热度'});
+  const sourced = post('307013', '2026-08-15T02:00:00.000Z', {source_refs:['sopilot-kosx'], review_type:'文章', bookmark_count:1800, title:'来源即精华'});
+  const likes = post('307014', '2026-10-08T10:00:00.000Z', {origin:'kosx_approved', review_type:'文章', bookmark_count:12, title:'点赞不能换算'});
+  likes.like_count = 9000;
+  const textCount = post('307015', '2026-10-08T11:00:00.000Z', {origin:'kosx_approved', review_type:'文章', title:'收藏是文字'});
+  textCount.bookmark_count = '1000';
+  const undated = post('307016', '2026-10-08T12:00:00.000Z', {origin:'kosx_approved', review_type:'文章', bookmark_count:3000, title:'没有时间'});
+  delete undated.published_at;
+  delete undated.source_item_time;
+  delete undated.captured_at;
+  const localOnly = {...post('307017', '2026-10-01T00:00:00.000Z', {origin:'kosx_approved', review_type:'文章', bookmark_count:5000, title:'只在浏览器里'}), origin:'dot_import'};
+  const savedOnly = post('307018', '2026-10-02T00:00:00.000Z', {origin:'kosx_approved', review_type:'文章', bookmark_count:5000, title:'只在收藏里'});
+  const items = [highest, newerTie, olderTie, floor, low, weekOnly, shortPost, promo, pitfall, stream, clue, heatOnly, sourced, likes, textCount, undated];
+  const input = state(items);
+  input.sources = [source, {id:'sopilot-kosx', name:'KOSX 过审', group:'posts', link_kind:'post', status:'ok', enabled:true}];
+  input.dotFeaturedItems = [localOnly];
+  input.savedItems = [savedOnly, localOnly];
+  input.savedItemIds = new Set([savedOnly.id, localOnly.id]);
+  const selected = selectHomeShowcase(input);
+  assert.equal(HOME_KEPT_BOOKMARK_MIN, 1000);
+  assert.deepEqual(selected.kept.map(entry => entry.post.item.id), ['307001', '307002', '307003', '307013', '307004']);
+  assert.match(selected.keptNote, /不限日期/);
+  assert.match(selected.keptNote, /达到 1000 才留下/);
+  assert.match(selected.keptNote, /文章或教程指南/);
+  assert.match(selected.keptNote, /短帖、产品安利和避坑不进入/);
+  assert.match(selected.keptNote, /没有可用原帖、榜单或采集时间的不放进来/);
+  assert.match(selected.keptNote, /不读取这个浏览器里的手动精选或收藏/);
+  assert.doesNotMatch(selected.keptNote, /常驻保存|不另建本地库/);
+  const bare = selectHomeShowcase({...input, dotFeaturedItems:[], savedItems:[], savedItemIds:new Set()});
+  assert.deepEqual(bare.kept.map(entry => entry.post.item.id), selected.kept.map(entry => entry.post.item.id));
+  const html = renderHomeShowcase(app('kept'), input);
+  assert.match(html, /id="home-kept"/);
+  assert.match(html, /卧云精选精华帖 <small>5<\/small>/);
+  assert.match(html, /窗口外高收藏/);
+  assert.match(html, /刚好一千/);
+  assert.ok(html.indexOf('窗口外高收藏') < html.indexOf('同收藏较新'));
+  assert.ok(html.indexOf('同收藏较新') < html.indexOf('同收藏较旧'));
+  assert.ok(html.indexOf('同收藏较旧') < html.indexOf('来源即精华'));
+  assert.ok(html.indexOf('来源即精华') < html.indexOf('刚好一千'));
+  assert.doesNotMatch(html, /九百九十九|只够七日|高收藏短帖|高收藏安利|高收藏避坑|榜单文章|只有操作线索|只有热度|点赞不能换算|收藏是文字|没有时间|只在浏览器里|只在收藏里|常驻保存|不另建本地库|我选入的精选/);
+  assert.equal(html.match(/data-home-group="kept"/g).length, 5);
+  const empty = renderHomeShowcase(app('kept'), state([low, shortPost]));
+  assert.match(empty, /还没有收藏数达到 1000 的精华文章/);
+  assert.doesNotMatch(empty, /data-home-group="kept"|九百九十九|高收藏短帖/);
 });
 
 test('seven-day shelf uses public heat only when bookmark counts are missing, then excerpt evidence', () => {
@@ -584,12 +634,18 @@ test('homepage cards hide leftover process excerpts and keep a real note', () =>
     const card = cardHtml(html, id);
     assert.doesNotMatch(card, /摘录与时间依据|未核对原帖，未实测|cover-bookmarks|收藏 \d/);
   }
-  const keptState = state([]);
+  const publicKept = post('8805', '2026-09-02T08:00:00.000Z', {
+    origin:'kosx_approved', review_type:'文章', bookmark_count:1000,
+    summary:'三步装好本地字幕。过审后放上首页。尚未读取原文，未核对热度。',
+    title:'公开精选摘录',
+  });
+  const keptState = state([publicKept]);
   keptState.savedItems = [items[0]];
   const kept = renderHomeShowcase(app('kept'), keptState);
-  assert.doesNotMatch(kept, /不进入昨日最被低估|尚未读取原文|没有摘录。|无来源附图/);
-  assert.match(kept, /@aaa 的精华帖/);
-  assert.match(kept, /data-cover="plain"/);
+  assert.doesNotMatch(kept, /不进入昨日最被低估|尚未读取原文|没有摘录。|无来源附图|@aaa 的精华帖/);
+  assert.match(kept, /公开精选摘录/);
+  assert.match(kept, /三步装好本地字幕/);
+  assert.doesNotMatch(cardHtml(kept, '8805'), /摘录与时间依据|未核对原帖，未实测/);
 });
 
 test('essence cards drop stock evidence and bookmark counts, and keep a longer excerpt', () => {
@@ -624,7 +680,11 @@ test('essence cards drop stock evidence and bookmark counts, and keep a longer e
 
 test('category views and the masthead keep the three names visible without a second local store', () => {
   const featured = {...post('300001', '2026-10-01T00:00:00.000Z', {title:'精选原帖'}), origin:'dot_import'};
-  const input = state([post('20900111', '2026-10-09T02:00:00.000Z', {heat:'120 曝光/小时', origin:'kosx_approved', title:'昨日精华'})]);
+  const standing = post('300010', '2026-09-01T00:00:00.000Z', {origin:'kosx_approved', review_type:'文章', bookmark_count:1000, title:'公开高收藏'});
+  const input = state([
+    post('20900111', '2026-10-09T02:00:00.000Z', {heat:'120 曝光/小时', origin:'kosx_approved', title:'昨日精华'}),
+    standing,
+  ]);
   input.dotFeaturedItems = [featured];
   const yesterday = renderHomeShowcase(app('yesterday'), input);
   const kept = renderHomeShowcase(app('kept'), input);
@@ -640,16 +700,17 @@ test('category views and the masthead keep the three names visible without a sec
   assert.match(yesterday, /已经放上公开首页的精华帖/);
   assert.match(yesterday, /昨日精华/);
   assert.match(yesterday, /2026-10-09/);
-  assert.match(kept, /卧云精选贴（常驻保存）/);
-  assert.match(kept, /精选原帖/);
-  assert.match(kept, /不另建本地库/);
+  assert.match(kept, /卧云精选精华帖/);
+  assert.match(kept, /公开高收藏/);
+  assert.match(kept, /不读取这个浏览器里的手动精选或收藏/);
+  assert.doesNotMatch(kept, /精选原帖|不另建本地库|常驻保存|我选入的精选/);
   assert.doesNotMatch(kept, /data-dot-open-featured|待筛选|收藏页|放进主题/);
   const mast = renderWorkspaceNavigation('today', input, {homeView:'week', menuOpen:false});
   assert.match(mast, /卧云信息流/);
   assert.match(mast, />昨日全部</);
   assert.match(mast, />七日精选</);
   assert.match(mast, />卧云精选</);
-  assert.doesNotMatch(mast, /昨日全部精华帖|七日精选精华帖|卧云精选贴（常驻保存）/);
+  assert.doesNotMatch(mast, /昨日全部精华帖|七日精选精华帖|卧云精选精华帖|常驻保存/);
   assert.match(mast, /data-home-view="week" aria-current="page"/);
   assert.match(mast, /id="home-cats-button"/);
   assert.match(mast, /id="home-cats"/);
