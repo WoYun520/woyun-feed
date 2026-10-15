@@ -25,7 +25,7 @@ import { bindPostMediaEvents } from './postMediaView.js';
 import { DOT_IMPORT_MAX_BYTES } from './dotCandidates.js';
 import { renderDotCandidatesView, bindDotCandidatesEvents, renderDotInboxPanel, bindDotInboxEvents, renderDotInboxFeedback, bindDotInboxFeedbackEvents } from './dotCandidatesView.js';
 import { DotInboxClient, DOT_INBOX_STORAGE_KEY } from './dotInboxClient.js';
-import { renderWorkspaceNavigation, renderWorkspaceResume, renderWorkspaceStorageNotice, reviewRouteRequested } from './workspaceShell.js';
+import { renderWorkspaceNavigation, renderWorkspaceResume, renderWorkspaceStorageNotice } from './workspaceShell.js';
 import { DOT_FILTER_DEFAULTS } from './dotCandidateFilters.js';
 
 class PersonalFeedApp {
@@ -49,7 +49,6 @@ class PersonalFeedApp {
     this.dotInboxMessage = '';
     this.dotInboxError = '';
     this.dotInboxPendingNew = 0;
-    this.reviewQueue = {items:[], error:'', loading:false, busy:false};
     this.collectionQuery = '';
     this.feedSearchQuery = '';
     this.feedSearchPurpose = 'all';
@@ -65,7 +64,6 @@ class PersonalFeedApp {
     this.homeView = 'latest';
     this.homeMenuOpen = false;
     this.catsOpen = false;
-    this.openedFromReviewRoute = false;
     this.kosxOpen = false;
     this.kosxDraft = '';
     this.kosxMessage = '';
@@ -78,13 +76,6 @@ class PersonalFeedApp {
     this.candidateLimit = 10;
     this.selectedTopicId = null;
     this.triggerInfo = null; // 保存触发弹窗的元素及选择器信息，用于精准恢复焦点
-
-    if (typeof reviewRouteRequested === 'function' && reviewRouteRequested(globalThis.location)) {
-      this.currentTab = 'candidates';
-      this.openedFromReviewRoute = true;
-      try { if (!this.dotInbox.getState().connected) this.dotIntakeOpen = true; }
-      catch { /* 存储不可用时仍打开待过审，连接码由页面现有表单收集。 */ }
-    }
 
     this.init();
   }
@@ -137,7 +128,6 @@ class PersonalFeedApp {
   async init() {
     this.bindGlobalEvents();
     await this.loadAndRender();
-    if (this.currentTab === 'candidates') this.loadReviewQueue();
     this.refreshHomeBoost();
     this.startDotInboxReception();
   }
@@ -247,7 +237,7 @@ class PersonalFeedApp {
   }
 
   shouldDeferBackgroundRender() {
-    if (this.dotBusy || this.reviewQueue?.busy) return true;
+    if (this.dotBusy) return true;
     if (document.querySelector?.('.item-full-summary[open]')) return true;
     if (this.currentTab === 'candidates' && (this.dotSelectedIds?.size
       || document.querySelector?.('.dot-candidate-details[open], .dot-candidate-fulltext[open]')
@@ -319,7 +309,6 @@ class PersonalFeedApp {
     finally { this.dotInboxBusy=false;this.updateDotInboxPanel(); }
     if (!this.dotInboxError) {
       await this.syncDotInbox({manual:true});
-      await this.loadReviewQueue();
     }
   }
 
@@ -327,7 +316,6 @@ class PersonalFeedApp {
     try {
       this.dotInbox.disconnect();this.dotInboxError='';this.dotInboxMessage='已断开自动接收。浏览器里已经保存的材料保留。';
     } catch(error) { this.dotInboxError=error.message; }
-    this.reviewQueue = {items:[], error:'', loading:false, busy:false};
     this.updateDotInboxPanel();
     this.refreshCandidates();
   }
@@ -469,8 +457,6 @@ class PersonalFeedApp {
   }
 
   bindGlobalEvents() {
-    window.addEventListener('hashchange', () => this.followReviewRoute());
-    window.addEventListener('popstate', () => this.followReviewRoute());
     // 弹窗键盘无障碍监听：Esc 关闭与 Tab 循环限制 (Focus Trap)
     window.addEventListener('keydown', (e) => {
       if (!this.activeModal) return;
@@ -516,95 +502,17 @@ class PersonalFeedApp {
     return this.currentTab === 'today' && state?.mode === 'live' && this.feedView === 'sources';
   }
 
-  followReviewRoute() {
-    if (typeof reviewRouteRequested !== 'function') return;
-    if (reviewRouteRequested(globalThis.location)) this.openReviewQueue();
-    else if (this.openedFromReviewRoute && this.currentTab === 'candidates') {
-      this.openedFromReviewRoute = false;
-      this.switchTab('today');
-    }
-  }
-
-  openReviewQueue() {
-    this.openedFromReviewRoute = true;
-    try { if (!this.dotInbox?.getState?.().connected) this.dotIntakeOpen = true; }
-    catch { /* 接收码表单打不开时，待过审说明仍然留下。 */ }
-    if (this.currentTab !== 'candidates') this.switchTab('candidates');
-    else this.loadReviewQueue();
-  }
-
-  clearReviewRoute() {
-    const location = globalThis.location;
-    const history = globalThis.history;
-    if (!location || typeof history?.replaceState !== 'function') return;
-    let url;
-    try { url = new URL(location.href); }
-    catch { return; }
-    const hash = url.hash.toLowerCase();
-    let changed = false;
-    if (hash === '#review' || hash === '#/review') { url.hash = ''; changed = true; }
-    if (url.searchParams.has('review')) { url.searchParams.delete('review'); changed = true; }
-    if (!changed) return;
-    history.replaceState(history.state, '', `${url.pathname}${url.search}${url.hash}`);
-  }
-
   switchTab(tab) {
-    const leavingReview = tab !== 'candidates' && this.openedFromReviewRoute && typeof reviewRouteRequested === 'function' && reviewRouteRequested(globalThis.location);
     this.homeMenuOpen = false;
-    if (leavingReview) this.openedFromReviewRoute = false;
     this.currentTab = tab;
-    if (leavingReview) this.clearReviewRoute();
     window.scrollTo({ top: 0, behavior: 'smooth' });
     this.render();
-    if (tab === 'candidates') this.loadReviewQueue();
     document.getElementById('workspace-main')?.focus({ preventScroll: true });
   }
 
   refreshCandidates() {
     if (document.getElementById('dot-candidates-page')) this.renderDotInboxResults();
     else if (this.currentTab === 'candidates') this.render();
-  }
-
-  async loadReviewQueue() {
-    if (this.reviewQueue.busy || this.reviewQueue.loading || !this.dotInbox.getState().connected) return;
-    this.reviewQueue.loading = true;
-    this.reviewQueue.error = '';
-    this.refreshCandidates();
-    try {
-      this.reviewQueue.items = await this.dotInbox.listPendingQueue();
-    } catch (error) {
-      this.reviewQueue.items = [];
-      this.reviewQueue.error = this.dotInbox.getState().connected ? (error?.message || '暂时无法读取公开待过审。') : '';
-    } finally {
-      this.reviewQueue.loading = false;
-      this.refreshCandidates();
-    }
-  }
-
-  async decideReviewItem({url, status, underrated_candidate = false, review_type} = {}) {
-    if (this.reviewQueue.busy || !url || !['approved', 'rejected'].includes(status)) return;
-    this.reviewQueue.busy = true;
-    this.reviewQueue.error = '';
-    this.refreshCandidates();
-    try {
-      const result = await this.dotInbox.decidePending({url, status, underrated_candidate, review_type});
-      this.reviewQueue.items = this.reviewQueue.items.map(item => item.url === result.url || item.key === result.key ? {...item, ...result} : item);
-      this.dotError = '';
-      this.dotMessage = status === 'approved'
-        ? (underrated_candidate ? '已过审上首页，并记为低估栏候选。尚未钉进昨日低估栏。' : '已过审上首页。')
-        : '已略过，不会出现在公开首页。';
-      // The homepage reads PUBLIC_FEED. Reload it before the next 最新精华 paint
-      // so this decision is not stuck on the feed from when the page opened.
-      if (feedAdapter.publicPreview) {
-        try { await feedAdapter.loadFeed(true); }
-        catch { /* The decision is already stored. The next successful read shows it. */ }
-      }
-    } catch (error) {
-      this.reviewQueue.error = error?.message || '过审没有完成。';
-    } finally {
-      this.reviewQueue.busy = false;
-      this.refreshCandidates();
-    }
   }
 
   dismissWelcome() {
@@ -813,15 +721,6 @@ class PersonalFeedApp {
     document.getElementById('nav-topics')?.addEventListener('click', () => { this.selectedTopicId=null; this.switchTab('topics'); });
     document.getElementById('nav-saved')?.addEventListener('click', () => this.switchTab('saved'));
     document.getElementById('nav-profile')?.addEventListener('click', () => this.switchTab('profile'));
-    document.getElementById('home-review')?.addEventListener('click', event => {
-      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button) return;
-      event.preventDefault();
-      const hash = String(globalThis.location?.hash || '').toLowerCase();
-      try {
-        if (hash !== '#review' && hash !== '#/review' && globalThis.location) globalThis.location.hash = 'review';
-      } catch { /* 地址栏写失败时仍打开当前页的待过审。 */ }
-      this.openReviewQueue();
-    });
     document.getElementById('open-guide')?.addEventListener('click', e => this.openGuide(e.currentTarget));
     document.getElementById('welcome-example')?.addEventListener('click', e => this.openGuide(e.currentTarget));
     document.getElementById('welcome-dismiss')?.addEventListener('click', () => { this.dismissWelcome(); document.getElementById('open-guide')?.focus(); });
@@ -836,7 +735,7 @@ class PersonalFeedApp {
   }
 
   renderMainContent(state) {
-    if (this.currentTab === 'candidates') return renderDotCandidatesView({candidates:state.dotCandidates || [],view:this.dotView,filters:this.dotFilters,intakeOpen:this.dotIntakeOpen,activeCandidateId:this.activeCandidateId,selectedIds:[...this.dotSelectedIds],busy:this.dotBusy,message:this.dotMessage,error:this.dotError || state.dotStorageWarning || '',inbox:this.dotInboxState(),reviewQueue:{...this.reviewQueue,connected:this.dotInbox.getState().connected}});
+    if (this.currentTab === 'candidates') return renderDotCandidatesView({candidates:state.dotCandidates || [],view:this.dotView,filters:this.dotFilters,intakeOpen:this.dotIntakeOpen,activeCandidateId:this.activeCandidateId,selectedIds:[...this.dotSelectedIds],busy:this.dotBusy,message:this.dotMessage,error:this.dotError || state.dotStorageWarning || '',inbox:this.dotInboxState()});
     if (this.currentTab === 'tutorials') return renderCreatorPage(this,state);
     if (this.currentTab === 'topics') return renderTopicWorkspace(this,state);
     if (this.currentTab === 'saved') {
@@ -1579,7 +1478,6 @@ class PersonalFeedApp {
         onInboxSync:()=>this.syncDotInbox({manual:true}),
         onInboxDisconnect:()=>this.disconnectDotInbox(),
         onInboxShowNew:()=>{this.dotInboxPendingNew=0;this.renderDotInboxResults();},
-        onReviewDecision:payload=>this.decideReviewItem(payload),
       });
     }
     document.querySelectorAll('[data-dot-open-featured]').forEach(button=>button.addEventListener('click',()=>{this.dotView='featured';this.dotSelectedIds.clear();this.switchTab('candidates');}));

@@ -13,18 +13,6 @@ const paths={
 };
 export const workspaceIcon=name=>`<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.cloud}</svg>`;
 
-export function reviewRouteRequested(source) {
-  if (!source || typeof source !== 'object') return false;
-  const hash = String(source.hash || '').replace(/^#/, '').split(/[?&]/, 1)[0].replace(/^\/+/, '').toLowerCase();
-  if (hash === 'review') return true;
-  let value = '';
-  try {
-    if (source.searchParams && typeof source.searchParams.get === 'function') value = source.searchParams.get('review') || '';
-    else value = new URLSearchParams(String(source.search || '').replace(/^\?/, '')).get('review') || '';
-  } catch { value = ''; }
-  return value === '1';
-}
-
 export function renderWorkspaceNavigation(tab,state,options={}) {
   const nav=(id,label,count=0)=>`<button class="nav-tab ${tab===id?'active':''}" id="nav-${id}"${tab===id?' aria-current="page"':''}>${workspaceIcon(id)}<span>${label}</span>${count>0?`<span class="nav-badge">${count}</span>`:''}</button>`;
   const mode=state.publicPreview?'公开预览':state.mode==='demo'?'示例预览':'本机版';
@@ -33,7 +21,7 @@ export function renderWorkspaceNavigation(tab,state,options={}) {
     const homeView=['latest','yesterday','week','kept'].includes(options.homeView) ? options.homeView : 'latest';
     const catsOpen=options.catsOpen===true;
     const cat=(id,label)=>`<button type="button" class="lift-cat" data-home-view="${id}"${homeView===id?' aria-current="page"':''}>${label}</button>`;
-    return `<a class="workspace-skip" href="#workspace-main">跳到内容</a><header class="site-header lift-header workspace-publication-nav" role="banner"><div class="site-header-inner"><div class="lift-bar"><button type="button" class="lift-pill shape-pill" id="home-brand" data-shape="pill" data-home-view="latest"${homeView==='latest'?' aria-current="page"':''}>Levi flow</button><button type="button" class="lift-cats-button" id="home-cats-button" aria-expanded="${catsOpen?'true':'false'}" aria-controls="home-cats" aria-label="精华帖分类"><span class="lift-menu-icon" aria-hidden="true"><span></span><span></span><span></span></span></button><nav class="lift-cats${catsOpen?' is-open':''}" id="home-cats" aria-label="精华帖分类">${cat('yesterday','昨日全部')}${cat('week','七日精选')}${cat('kept','卧云精选')}</nav><a class="lift-review" id="home-review" href="#review">待过审</a></div></div></header>`;
+    return `<a class="workspace-skip" href="#workspace-main">跳到内容</a><header class="site-header lift-header workspace-publication-nav" role="banner"><div class="site-header-inner"><div class="lift-bar"><button type="button" class="lift-pill shape-pill" id="home-brand" data-shape="pill" data-home-view="latest"${homeView==='latest'?' aria-current="page"':''}>Levi flow</button><button type="button" class="lift-cats-button" id="home-cats-button" aria-expanded="${catsOpen?'true':'false'}" aria-controls="home-cats" aria-label="精华帖分类"><span class="lift-menu-icon" aria-hidden="true"><span></span><span></span><span></span></span></button><nav class="lift-cats${catsOpen?' is-open':''}" id="home-cats" aria-label="精华帖分类">${cat('yesterday','昨日全部')}${cat('week','七日精选')}${cat('kept','卧云精选')}</nav></div></div></header>`;
   }
   return `<a class="workspace-skip" href="#workspace-main">跳到内容</a><header class="site-header workspace-sidebar${publication?' workspace-publication-nav':''}" role="banner"><div class="site-header-inner">
     ${publication?`<div class="publication-topline"><span>卧云 · 给创作者的信息刊物</span><span>${mode}</span></div>`:''}
