@@ -153,6 +153,15 @@ export function reviewListInstant(record) {
     || knownInstant(source.submitted_at);
 }
 
+// Local /review-admin is the desk for pasted links and the scanned queue.
+// Show rows captured today or yesterday in Asia/Shanghai, including an old X
+// post pasted today. Capture time is submitted_at, then created_at.
+// Original post time stays on inPublicReviewWindow / pendingReviewItems.
+export function reviewCaptureInstant(record) {
+  const source = record && typeof record === 'object' ? record : {};
+  return knownInstant(source.submitted_at) || knownInstant(source.created_at);
+}
+
 function clockMs(now) {
   if (now instanceof Date) return now.getTime();
   if (typeof now === 'number') return now;
@@ -160,8 +169,8 @@ function clockMs(now) {
   return Number.NaN;
 }
 
-export function inPublicReviewWindow(record, now = Date.now()) {
-  const posted = Date.parse(reviewListInstant(record));
+function inShanghaiTwoDayWindow(instant, now) {
+  const posted = Date.parse(instant);
   const clock = clockMs(now);
   if (!Number.isFinite(posted) || !Number.isFinite(clock)) return false;
   const postDay = beijingDateKey(posted);
@@ -170,8 +179,20 @@ export function inPublicReviewWindow(record, now = Date.now()) {
   return postDay === today || postDay === addCalendarDays(today, -1);
 }
 
+export function inPublicReviewWindow(record, now = Date.now()) {
+  return inShanghaiTwoDayWindow(reviewListInstant(record), now);
+}
+
+export function inLocalReviewWindow(record, now = Date.now()) {
+  return inShanghaiTwoDayWindow(reviewCaptureInstant(record), now);
+}
+
 export function pendingReviewItems(items, now = Date.now()) {
   return (Array.isArray(items) ? items : []).filter(item => item && item.status === 'pending' && inPublicReviewWindow(item, now));
+}
+
+export function pendingLocalReviewItems(items, now = Date.now()) {
+  return (Array.isArray(items) ? items : []).filter(item => item && item.status === 'pending' && inLocalReviewWindow(item, now));
 }
 
 export function sortReviewQueue(items) {

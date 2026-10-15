@@ -109,7 +109,7 @@ export function decisionBody(input) {
 export async function listPendingForLocalReview({token, origin, fetchImpl}) {
   if (!token) return missingCredential();
   const resolved = reviewOrigin(origin);
-  if (!resolved || typeof fetchImpl !== 'function') return {status:502, body:{error:'review_unavailable', message:'暂时无法读取公开待过审。'}};
+  if (!resolved || typeof fetchImpl !== 'function') return {status:502, body:{error:'review_unavailable', message:'暂时无法读取本机过审。'}};
   const items = [];
   const seen = new Set();
   const cursors = new Set();
@@ -123,26 +123,26 @@ export async function listPendingForLocalReview({token, origin, fetchImpl}) {
       }
       const list = result.payload;
       if (result.status !== 200 || !plain(list) || !Array.isArray(list.items) || list.items.length > 50 || !(list.next_cursor === null || cursorValid(list.next_cursor))) {
-        return {status:502, body:{error:'review_unavailable', message:upstreamMessage(list, token) || '暂时无法读取公开待过审。'}};
+        return {status:502, body:{error:'review_unavailable', message:upstreamMessage(list, token) || '暂时无法读取本机过审。'}};
       }
       for (const item of list.items) {
         if (!plain(item) || typeof item.id !== 'string' || typeof item.url !== 'string' || seen.has(item.id)) {
-          return {status:502, body:{error:'review_unavailable', message:'暂时无法读取公开待过审。'}};
+          return {status:502, body:{error:'review_unavailable', message:'暂时无法读取本机过审。'}};
         }
         const safe = scrub(item, token);
-        if (!safe) return {status:502, body:{error:'review_unavailable', message:'暂时无法读取公开待过审。'}};
+        if (!safe) return {status:502, body:{error:'review_unavailable', message:'暂时无法读取本机过审。'}};
         seen.add(item.id);
         items.push(safe);
         if (items.length > ITEM_LIMIT) return {status:502, body:{error:'review_unavailable', message:'待过审太多，请先处理一部分。'}};
       }
       if (list.next_cursor === null) return {status:200, body:{items}};
-      if (cursors.has(list.next_cursor)) return {status:502, body:{error:'review_unavailable', message:'暂时无法读取公开待过审。'}};
+      if (cursors.has(list.next_cursor)) return {status:502, body:{error:'review_unavailable', message:'暂时无法读取本机过审。'}};
       cursors.add(list.next_cursor);
       cursor = list.next_cursor;
     }
     return {status:200, body:{items}};
   } catch {
-    return {status:502, body:{error:'review_unavailable', message:'暂时无法读取公开待过审。'}};
+    return {status:502, body:{error:'review_unavailable', message:'暂时无法读取本机过审。'}};
   }
 }
 

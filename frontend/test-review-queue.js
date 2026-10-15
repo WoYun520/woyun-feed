@@ -13,7 +13,7 @@ import { kosxPublicItem } from './kosx-public-posts.js';
 import { normalizeCoverUrl } from './src/postMedia.js';
 import { renderHomeShowcase } from './src/homeShowcaseView.js';
 import { DotInboxClient } from './src/dotInboxClient.js';
-import { classifyReviewItem, inPublicReviewWindow, pendingReviewItems, presentReviewItem, reviewListInstant, sortReviewQueue } from './src/reviewQueue.js';
+import { classifyReviewItem, inLocalReviewWindow, inPublicReviewWindow, pendingLocalReviewItems, pendingReviewItems, presentReviewItem, reviewCaptureInstant, reviewListInstant, sortReviewQueue } from './src/reviewQueue.js';
 import { renderReviewQueue, bindReviewQueueEvents } from './src/reviewQueueView.js';
 import { renderDotCandidatesView } from './src/dotCandidatesView.js';
 
@@ -284,10 +284,90 @@ test('public pending review keeps Shanghai today and yesterday, and drops the da
 
   const html = renderReviewQueue({connected:true, now, items:[today, dayBefore, snowToday, approvedToday, blank]});
   assert.match(html, /今天或昨天（北京时间）/);
+  assert.match(html, /只列出原帖日期/);
   assert.match(html, /@today/);
   assert.match(html, /@snowtoday/);
   assert.match(html, /待过审 2 条/);
   assert.doesNotMatch(html, /@older|@approved|@blank/);
+});
+
+test('local review keeps pending captured today or yesterday in Shanghai, including an old post pasted today', () => {
+  const now = '2026-10-15T04:00:00.000Z';
+  const epoch = 1288834974657n;
+  const urlAt = iso => {
+    const id = ((BigInt(Date.parse(iso)) - epoch) << 22n).toString();
+    return `https://x.com/example/status/${id}`;
+  };
+  const pastedOld = {
+    id:'pasted-old', status:'pending', author_handle:'pasted',
+    url:urlAt('2026-09-01T00:00:00.000Z'),
+    published_at:'2026-09-01T00:00:00.000Z',
+    created_at:'2026-09-01T00:00:00.000Z',
+    submitted_at:'2026-10-15T03:00:00.000Z',
+  };
+  const submittedYesterday = {
+    id:'submitted-yesterday', status:'pending', author_handle:'submit-yesterday',
+    url:urlAt('2026-08-01T00:00:00.000Z'),
+    published_at:'2026-08-01T00:00:00.000Z',
+    submitted_at:'2026-10-13T16:00:00.000Z',
+  };
+  const submittedDayBefore = {
+    id:'submitted-older', status:'pending', author_handle:'older-submit',
+    url:urlAt('2026-10-15T01:00:00.000Z'),
+    published_at:'2026-10-15T01:00:00+08:00',
+    submitted_at:'2026-10-13T15:59:59.000Z',
+  };
+  const createdOnly = {
+    id:'created-only', status:'pending', author_handle:'created',
+    url:'https://example.com/not-a-status',
+    published_at:'2026-01-01T00:00:00.000Z',
+    created_at:'2026-10-14T08:00:00+08:00',
+  };
+  const createdOldSubmittedToday = {
+    id:'created-old', status:'pending', author_handle:'createdold',
+    url:'https://example.com/old',
+    created_at:'2026-10-13T10:00:00+08:00',
+    submitted_at:'2026-10-15T01:00:00.000Z',
+  };
+  const approvedToday = {
+    id:'approved', status:'approved', author_handle:'approved',
+    submitted_at:'2026-10-15T01:00:00.000Z',
+    published_at:'2026-10-15T01:00:00+08:00',
+  };
+  const blank = {id:'blank', status:'pending', author_handle:'blank'};
+  const badSubmitted = {
+    id:'bad-submitted', status:'pending', author_handle:'fallback',
+    submitted_at:'not-a-time',
+    created_at:'2026-10-15T02:00:00.000Z',
+    published_at:'2026-01-02T00:00:00.000Z',
+  };
+
+  assert.equal(reviewCaptureInstant(pastedOld), '2026-10-15T03:00:00.000Z');
+  assert.notEqual(reviewCaptureInstant(pastedOld), reviewListInstant(pastedOld));
+  assert.equal(reviewCaptureInstant(createdOnly), new Date('2026-10-14T08:00:00+08:00').toISOString());
+  assert.equal(inPublicReviewWindow(pastedOld, now), false);
+  assert.equal(inLocalReviewWindow(pastedOld, now), true);
+  assert.equal(inLocalReviewWindow(submittedYesterday, now), true);
+  assert.equal(inLocalReviewWindow(submittedDayBefore, now), false);
+  assert.equal(inPublicReviewWindow(submittedDayBefore, now), true);
+  assert.equal(inLocalReviewWindow(blank, now), false);
+  assert.equal(inLocalReviewWindow(approvedToday, now), true);
+  assert.doesNotThrow(() => inLocalReviewWindow({submitted_at:'nope', published_at:'nope', url:'not a url'}, now));
+
+  const kept = pendingLocalReviewItems([
+    pastedOld, submittedYesterday, submittedDayBefore, createdOnly, createdOldSubmittedToday, approvedToday, blank, badSubmitted,
+  ], now).map(item => item.id);
+  assert.deepEqual(kept, ['pasted-old', 'submitted-yesterday', 'created-only', 'created-old', 'bad-submitted']);
+  assert.deepEqual(pendingReviewItems([pastedOld, submittedDayBefore], now).map(item => item.id), ['submitted-older']);
+
+  const html = renderReviewQueue({connected:true, mode:'local', now, items:[pastedOld, submittedDayBefore, approvedToday, blank]});
+  assert.match(html, /aria-label="本机过审"/);
+  assert.match(html, /<h2>本机过审<\/h2>/);
+  assert.match(html, /提交日/);
+  assert.match(html, /北京时间今天或昨天/);
+  assert.match(html, /@pasted/);
+  assert.match(html, /待过审 1 条/);
+  assert.doesNotMatch(html, /只列出原帖日期|公开待过审|@older-submit|@approved|@blank|文章卡|收藏偏低|收藏信号/);
 });
 
 test('approve sends the candidate flag only when the box is checked', () => {
