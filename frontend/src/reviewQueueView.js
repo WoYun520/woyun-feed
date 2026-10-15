@@ -1,4 +1,4 @@
-import { REVIEW_TYPES, isReviewSignalCopy, presentReviewItem, sortReviewQueue } from './reviewQueue.js';
+import { REVIEW_TYPES, isReviewSignalCopy, pendingReviewItems, presentReviewItem, sortReviewQueue } from './reviewQueue.js';
 
 const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[char]));
 
@@ -45,11 +45,11 @@ function renderItem(item, busy) {
   </article>`;
 }
 
-export function renderReviewQueue({connected = false, loading = false, error = '', items = [], busy = false} = {}) {
+export function renderReviewQueue({connected = false, loading = false, error = '', items = [], busy = false, now = Date.now()} = {}) {
   if (!connected) {
     return `<section id="review-queue" class="review-queue" aria-label="公开待过审"><header class="review-queue-heading"><h2>公开待过审</h2><p>连接接收码后，这里按文章、教程指南、避坑、短帖、产品安利排列待过审链接。</p></header></section>`;
   }
-  const pending = sortReviewQueue((Array.isArray(items) ? items : []).filter(item => item && item.status === 'pending'));
+  const pending = sortReviewQueue(pendingReviewItems(items, now));
   const disabled = busy || loading;
   const body = loading && !pending.length
     ? '<p class="review-queue-status" role="status">正在读取公开待过审…</p>'
@@ -57,7 +57,7 @@ export function renderReviewQueue({connected = false, loading = false, error = '
       ? pending.map(item => renderItem(item, disabled)).join('')
       : '<p class="review-queue-status" role="status">现在没有待过审的链接。</p>';
   return `<section id="review-queue" class="review-queue" aria-label="公开待过审" aria-busy="${loading || busy ? 'true' : 'false'}">
-    <header class="review-queue-heading"><h2>公开待过审</h2><p>先看文章、教程指南和避坑。类型是粗分类，可在过审前改。过审后才会出现在公开首页。${pending.length ? `待过审 ${pending.length} 条。` : ''}</p></header>
+    <header class="review-queue-heading"><h2>公开待过审</h2><p>先看文章、教程指南和避坑。类型是粗分类，可在过审前改。过审后才会出现在公开首页。这里只列出原帖日期是今天或昨天（北京时间）的链接。${pending.length ? `待过审 ${pending.length} 条。` : ''}</p></header>
     ${error ? `<p class="review-queue-error" role="alert">${escape(error)}</p>` : ''}
     ${body}
   </section>`;

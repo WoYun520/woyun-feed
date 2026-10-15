@@ -1,3 +1,5 @@
+import { addCalendarDays, beijingDateKey } from './homeShowcase.js';
+
 // Coarse labels for the public pending queue. They suggest a reading order.
 // They do not publish, pin, or verify a post.
 export const REVIEW_TYPES = Object.freeze(['文章', '教程指南', '避坑', '短帖', '产品安利']);
@@ -100,6 +102,76 @@ export function presentReviewItem(input = {}) {
     skip_cue: classified.skip_cue,
     priority: classified.priority,
   };
+}
+
+// Public 待过审 is only for 最新精华 and 昨日被低估栏候选, so the list keeps
+// two Asia/Shanghai calendar days: today and yesterday. Older rows stay in the
+// queue; approve and reject still accept them. Time order is the original post
+// when we have it (intake published_at, else the X snowflake), then the queue
+// created_at, then submitted_at as the capture time.
+const X_SNOWFLAKE_EPOCH_MS = 1288834974657n;
+const X_HOSTS = new Set(['x.com', 'www.x.com', 'twitter.com', 'www.twitter.com', 'mobile.twitter.com']);
+
+function knownInstant(value) {
+  if (typeof value !== 'string' || value.length > 64 || !Number.isFinite(Date.parse(value))) return '';
+  return new Date(value).toISOString();
+}
+
+function statusIdFromUrl(value) {
+  if (typeof value !== 'string' || value.length > 2000) return '';
+  let url;
+  try { url = new URL(value); } catch { return ''; }
+  if (url.protocol !== 'https:' || !X_HOSTS.has(url.hostname)) return '';
+  const match = url.pathname.match(/^\/[A-Za-z0-9_]{1,15}\/status\/([1-9]\d{7,24})\/?$/);
+  return match ? match[1] : '';
+}
+
+function snowflakeId(record) {
+  const keyed = typeof record?.key === 'string' ? /^x:([1-9]\d{7,24})$/.exec(record.key) : null;
+  if (keyed) return keyed[1];
+  const fromUrl = statusIdFromUrl(record?.url);
+  if (fromUrl) return fromUrl;
+  const fromId = typeof record?.id === 'string' ? /^kosx-([1-9]\d{7,24})$/.exec(record.id) : null;
+  return fromId ? fromId[1] : '';
+}
+
+function snowflakeInstant(id) {
+  if (!/^[1-9]\d{7,24}$/.test(id)) return '';
+  let ms;
+  try { ms = (BigInt(id) >> 22n) + X_SNOWFLAKE_EPOCH_MS; } catch { return ''; }
+  if (ms < X_SNOWFLAKE_EPOCH_MS || ms > 4102444800000n) return '';
+  const numeric = Number(ms);
+  if (!Number.isSafeInteger(numeric)) return '';
+  return new Date(numeric).toISOString();
+}
+
+export function reviewListInstant(record) {
+  const source = record && typeof record === 'object' ? record : {};
+  return knownInstant(source.published_at)
+    || snowflakeInstant(snowflakeId(source))
+    || knownInstant(source.created_at)
+    || knownInstant(source.submitted_at);
+}
+
+function clockMs(now) {
+  if (now instanceof Date) return now.getTime();
+  if (typeof now === 'number') return now;
+  if (typeof now === 'string') return Date.parse(now);
+  return Number.NaN;
+}
+
+export function inPublicReviewWindow(record, now = Date.now()) {
+  const posted = Date.parse(reviewListInstant(record));
+  const clock = clockMs(now);
+  if (!Number.isFinite(posted) || !Number.isFinite(clock)) return false;
+  const postDay = beijingDateKey(posted);
+  const today = beijingDateKey(clock);
+  if (!postDay || !today) return false;
+  return postDay === today || postDay === addCalendarDays(today, -1);
+}
+
+export function pendingReviewItems(items, now = Date.now()) {
+  return (Array.isArray(items) ? items : []).filter(item => item && item.status === 'pending' && inPublicReviewWindow(item, now));
 }
 
 export function sortReviewQueue(items) {

@@ -13,7 +13,7 @@ import { kosxPublicItem } from './kosx-public-posts.js';
 import { normalizeCoverUrl } from './src/postMedia.js';
 import { renderHomeShowcase } from './src/homeShowcaseView.js';
 import { DotInboxClient } from './src/dotInboxClient.js';
-import { classifyReviewItem, presentReviewItem, sortReviewQueue } from './src/reviewQueue.js';
+import { classifyReviewItem, inPublicReviewWindow, pendingReviewItems, presentReviewItem, reviewListInstant, sortReviewQueue } from './src/reviewQueue.js';
 import { renderReviewQueue, bindReviewQueueEvents } from './src/reviewQueueView.js';
 import { renderDotCandidatesView } from './src/dotCandidatesView.js';
 
@@ -224,7 +224,7 @@ test('a candidate flag cannot be set while rejecting, and bad signals are refuse
 
 test('the review queue keeps approve and skip, and does not print signal or evidence lines', () => {
   assert.doesNotMatch(renderDotCandidatesView(), /进低估栏候选/);
-  const html = renderReviewQueue({connected:true, items:[
+  const html = renderReviewQueue({connected:true, now:'2026-10-09T03:00:00.000Z', items:[
     {id:'kosx-1', key:'x:1', url:postUrl, author_handle:'example', status:'pending', note:'步骤模板', submitted_at:'2026-10-14T00:00:00.000Z', bookmark_count:12, like_count:4, has_article:true},
     {id:'kosx-2', key:'x:2', url:'https://x.com/example/status/2108148604447884002', status:'approved', review_type:'短帖'},
     {id:'kosx-3', key:'x:3', url:'https://x.com/example/status/2108148604447884003', author_handle:'example', status:'pending', text:'安利一下，限时优惠', submitted_at:'2026-10-14T00:00:01.000Z'},
@@ -244,6 +244,50 @@ test('the review queue keeps approve and skip, and does not print signal or evid
   const disconnected = renderReviewQueue({connected:false, items:[{status:'pending', url:postUrl}]});
   assert.match(disconnected, /连接接收码后/);
   assert.doesNotMatch(disconnected, /进低估栏候选|过审上首页|收藏、点赞|Article 卡/);
+});
+
+test('public pending review keeps Shanghai today and yesterday, and drops the day before', () => {
+  const now = '2026-10-15T04:00:00.000Z';
+  const epoch = 1288834974657n;
+  const urlAt = iso => {
+    const id = ((BigInt(Date.parse(iso)) - epoch) << 22n).toString();
+    return `https://x.com/example/status/${id}`;
+  };
+  const today = {id:'today', status:'pending', author_handle:'today', url:'https://x.com/example/status/20', published_at:'2026-10-15T01:00:00+08:00'};
+  const yesterday = {id:'yesterday', status:'pending', author_handle:'yesterday', url:'https://x.com/example/status/21', published_at:'2026-10-14T23:30:00+08:00'};
+  const yesterdayStart = {id:'yesterday-start', status:'pending', author_handle:'start', url:'https://x.com/example/status/22', published_at:'2026-10-13T16:00:00.000Z'};
+  const dayBefore = {id:'day-before', status:'pending', author_handle:'older', url:'https://x.com/example/status/23', published_at:'2026-10-13T15:59:59.000Z', submitted_at:'2026-10-15T03:00:00.000Z'};
+  const approvedToday = {id:'approved', status:'approved', author_handle:'approved', url:'https://x.com/example/status/24', published_at:'2026-10-15T01:00:00+08:00'};
+  const snowToday = {id:'snow-today', status:'pending', author_handle:'snowtoday', url:urlAt('2026-10-15T02:00:00.000Z')};
+  const snowOld = {id:'snow-old', status:'pending', author_handle:'snowold', url:urlAt('2026-10-13T02:00:00.000Z'), created_at:'2026-10-15T02:00:00.000Z', submitted_at:'2026-10-15T03:00:00.000Z'};
+  const fromKey = {id:'from-key', status:'pending', author_handle:'fromkey', key:`x:${urlAt('2026-10-14T02:00:00.000Z').split('/').pop()}`};
+  const createdFallback = {id:'created', status:'pending', author_handle:'created', url:'https://example.com/not-a-status', created_at:'2026-10-14T08:00:00+08:00'};
+  const captured = {id:'captured', status:'pending', author_handle:'captured', url:'https://example.com/also-not', submitted_at:'2026-10-15T01:00:00.000Z'};
+  const createdOld = {id:'created-old', status:'pending', author_handle:'createdold', url:'https://example.com/old', created_at:'2026-10-13T10:00:00+08:00', submitted_at:'2026-10-15T01:00:00.000Z'};
+  const blank = {id:'blank', status:'pending', author_handle:'blank'};
+  const garbage = {id:'garbage', status:'pending', author_handle:'garbage', published_at:'not-a-time', url:urlAt('2026-10-14T12:00:00+08:00')};
+
+  assert.doesNotThrow(() => inPublicReviewWindow({published_at:'nope', url:'not a url'}, now));
+  assert.equal(inPublicReviewWindow(blank, now), false);
+  assert.equal(inPublicReviewWindow(dayBefore, now), false);
+  assert.equal(inPublicReviewWindow(snowOld, now), false);
+  assert.equal(reviewListInstant(snowOld), new Date(Number((BigInt(urlAt('2026-10-13T02:00:00.000Z').split('/').pop()) >> 22n) + epoch)).toISOString());
+  assert.notEqual(reviewListInstant(snowOld), new Date('2026-10-15T02:00:00.000Z').toISOString());
+  assert.equal(reviewListInstant(createdFallback), new Date('2026-10-14T08:00:00+08:00').toISOString());
+  assert.equal(reviewListInstant(captured), '2026-10-15T01:00:00.000Z');
+  assert.equal(reviewListInstant(garbage), new Date(Number((BigInt(garbage.url.split('/').pop()) >> 22n) + epoch)).toISOString());
+
+  const kept = pendingReviewItems([
+    today, yesterday, yesterdayStart, dayBefore, approvedToday, snowToday, snowOld, fromKey, createdFallback, captured, createdOld, blank, garbage,
+  ], now).map(item => item.id);
+  assert.deepEqual(kept, ['today', 'yesterday', 'yesterday-start', 'snow-today', 'from-key', 'created', 'captured', 'garbage']);
+
+  const html = renderReviewQueue({connected:true, now, items:[today, dayBefore, snowToday, approvedToday, blank]});
+  assert.match(html, /今天或昨天（北京时间）/);
+  assert.match(html, /@today/);
+  assert.match(html, /@snowtoday/);
+  assert.match(html, /待过审 2 条/);
+  assert.doesNotMatch(html, /@older|@approved|@blank/);
 });
 
 test('approve sends the candidate flag only when the box is checked', () => {
