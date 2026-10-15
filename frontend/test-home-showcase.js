@@ -753,13 +753,12 @@ test('category views and the masthead keep the three names visible without a sec
   assert.match(mast, /data-home-view="week" aria-current="page"/);
   assert.match(mast, /id="home-cats-button"/);
   assert.match(mast, /id="home-cats"/);
-  assert.match(mast, /id="home-review" href="#review"/);
-  assert.match(mast, />待过审</);
-  assert.doesNotMatch(mast, /is-open|KOSX|贴链接|id="home-menu"|id="home-menu-button"|实用教程|收藏与跟进|主题工作台|我的关注|怎么用|待筛选|id="nav-/);
+  assert.doesNotMatch(mast, /待过审|待筛选|home-review|lift-review|#review/);
+  assert.doesNotMatch(mast, /is-open|KOSX|贴链接|id="home-menu"|id="home-menu-button"|实用教程|收藏与跟进|主题工作台|我的关注|怎么用|id="nav-/);
   const openCats = renderWorkspaceNavigation('today', input, {homeView:'week', catsOpen:true});
   assert.match(openCats, /id="home-cats" class="lift-cats is-open"|class="lift-cats is-open" id="home-cats"/);
-  assert.match(openCats, /id="home-review" href="#review"/);
-  assert.doesNotMatch(openCats, /实用教程|收藏与跟进|主题工作台|我的关注|怎么用|待筛选|id="nav-/);
+  assert.doesNotMatch(openCats, /待过审|待筛选|home-review|lift-review|#review/);
+  assert.doesNotMatch(openCats, /实用教程|收藏与跟进|主题工作台|我的关注|怎么用|id="nav-/);
   const removed = ['本浏览器保存 · 重要材料请备份', '第一次来？挑材料 → 补想法 → 带给 AI', '展开说明', 'SoPilot · 财经推文榜'];
   for (const label of removed) assert.equal(`${mast}\n${openCats}`.includes(label), false);
   const appSource = readFileSync(new URL('./src/app.js', import.meta.url), 'utf8');

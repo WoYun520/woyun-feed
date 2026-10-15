@@ -1,8 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import vm from 'node:vm';
-import {renderWorkspaceNavigation,renderWorkspaceResume,recentWorkspaceTopic,renderWorkspaceStorageNotice,reviewRouteRequested} from './src/workspaceShell.js';
+import {renderWorkspaceNavigation,renderWorkspaceResume,recentWorkspaceTopic,renderWorkspaceStorageNotice} from './src/workspaceShell.js';
 
 test('navigation preserves existing actions with one explicit current page and real counters',()=>{
   const state={publicPreview:true,mode:'live',savedItems:[{}],followups:[{}],dotPendingCandidates:[{},{}]};
@@ -28,85 +27,28 @@ test('resume uses actual latest unfinished topic without changing source order o
   assert.equal(recentWorkspaceTopic([{id:'done',title:'已做',status:'done'}]).id,'done');
 });
 
-test('public homepage offers a quiet review entry without the workspace sidebar',()=>{
+test('public homepage nav has no pending-review entry',()=>{
   const state={publicPreview:true,mode:'live',savedItems:[],followups:[],dotPendingCandidates:[{},{}]};
   const html=renderWorkspaceNavigation('today',state,{homeView:'latest'});
-  assert.match(html,/id="home-review" href="#review"/);
-  assert.match(html,/>待过审</);
-  assert.doesNotMatch(html,/id="nav-|实用教程|收藏与跟进|主题工作台|我的关注|待筛选|整理/);
+  assert.doesNotMatch(html,/待过审|待筛选|home-review|lift-review|#review|\?review=/);
+  assert.doesNotMatch(html,/id="nav-|实用教程|收藏与跟进|主题工作台|我的关注|整理/);
   const open=renderWorkspaceNavigation('today',state,{homeView:'week',catsOpen:true});
-  assert.match(open,/id="home-review"/);
   assert.match(open,/lift-cats is-open|is-open/);
+  assert.doesNotMatch(open,/待过审|待筛选|home-review|lift-review|#review|\?review=/);
   assert.doesNotMatch(open,/id="nav-|实用教程|收藏与跟进|主题工作台/);
   const sidebar=renderWorkspaceNavigation('candidates',state);
   assert.match(sidebar,/id="nav-candidates"/);
-  assert.match(sidebar,/待筛选/);
-  assert.doesNotMatch(sidebar,/id="home-review"/);
-  assert.equal(reviewRouteRequested({hash:'#review',search:''}),true);
-  assert.equal(reviewRouteRequested({hash:'#Review',search:''}),true);
-  assert.equal(reviewRouteRequested({hash:'#/review',search:''}),true);
-  assert.equal(reviewRouteRequested({hash:'',search:'?review=1'}),true);
-  assert.equal(reviewRouteRequested({hash:'#latest',search:'?review=1&home=week'}),true);
-  assert.equal(reviewRouteRequested({searchParams:{get:key=>key==='review'?'1':null}}),true);
-  assert.equal(reviewRouteRequested({hash:'',search:''}),false);
-  assert.equal(reviewRouteRequested({hash:'#review-queue',search:''}),false);
-  assert.equal(reviewRouteRequested({hash:'',search:'?review=0'}),false);
-  assert.equal(reviewRouteRequested({hash:'',search:'?review=true'}),false);
-  assert.equal(reviewRouteRequested(null),false);
+  assert.doesNotMatch(sidebar,/待过审|home-review|#review|公开待过审/);
 });
 
-test('review route opens the existing queue and still requires a connected review code',async()=>{
-  const source=readFileSync(new URL('./src/app.js',import.meta.url),'utf8').split('// 页面加载完成后启动应用')[0].replace(/^import [^\n]*\n/gm,'')+'\nthis.PersonalFeedApp=PersonalFeedApp;';
-  const calls=[];
-  const location={hash:'',search:'',href:'https://preview.example/',pathname:'/'};
-  const history={state:null,replaceState(_state,_title,next){
-    const url=new URL(next,location.href);
-    location.href=url.href;location.hash=url.hash;location.search=url.search;location.pathname=url.pathname;
-  }};
-  const listeners={};
-  const sandbox={
-    reviewRouteRequested,location,history,URL,
-    document:{getElementById:()=>null,addEventListener(){}},
-    window:{
-      addEventListener(type,handler){(listeners[type] ||= []).push(handler);},
-      scrollTo(){},
-    },
-  };
-  assert.match(source,/getElementById\('home-review'\)/);
-  assert.match(source,/openReviewQueue\(\)/);
-  assert.match(source,/!this\.dotInbox\.getState\(\)\.connected/);
-  vm.runInNewContext(source,sandbox,{filename:'src/app.js'});
-  const app=Object.assign(Object.create(sandbox.PersonalFeedApp.prototype),{
-    currentTab:'today',openedFromReviewRoute:false,dotIntakeOpen:false,homeMenuOpen:false,
-    reviewQueue:{items:[],error:'',loading:false,busy:false},
-    dotInbox:{getState:()=>({connected:false}),listPendingQueue(){calls.push('list');return Promise.resolve([]);},decidePending(){calls.push('decide');}},
-    render(){calls.push(`render:${this.currentTab}`);},
-  });
-  app.bindGlobalEvents();
-  location.hash='#review';
-  for (const handler of listeners.hashchange) handler();
-  assert.equal(app.currentTab,'candidates');
-  assert.equal(app.openedFromReviewRoute,true);
-  assert.equal(app.dotIntakeOpen,true);
-  assert.match(calls.join(','),/render:candidates/);
-  assert.deepEqual(calls.filter(call=>call==='list' || call==='decide'),[]);
-  location.hash='';
-  for (const handler of listeners.hashchange) handler();
-  assert.equal(app.currentTab,'today');
-  assert.equal(app.openedFromReviewRoute,false);
-  location.search='?review=1';
-  location.href='https://preview.example/?review=1';
-  for (const handler of listeners.popstate) handler();
-  assert.equal(app.currentTab,'candidates');
-  app.switchTab('today');
-  assert.equal(app.currentTab,'today');
-  assert.equal(location.search,'');
-  assert.equal(location.hash,'');
-  app.dotInbox.getState=()=>({connected:true});
-  app.currentTab='candidates';
-  await app.loadReviewQueue();
-  assert.deepEqual(calls.filter(call=>call==='list'),['list']);
-  assert.deepEqual(calls.filter(call=>call==='decide'),[]);
+test('public app does not open a review flow from the address bar',()=>{
+  const source=readFileSync(new URL('./src/app.js',import.meta.url),'utf8');
+  const shell=readFileSync(new URL('./src/workspaceShell.js',import.meta.url),'utf8');
+  const candidates=readFileSync(new URL('./src/dotCandidatesView.js',import.meta.url),'utf8');
+  assert.doesNotMatch(source,/home-review|openReviewQueue|reviewRouteRequested|loadReviewQueue|decideReviewItem|#review|hash\s*=\s*'review'/);
+  assert.doesNotMatch(shell,/home-review|reviewRouteRequested|#review|待过审/);
+  assert.doesNotMatch(candidates,/renderReviewQueue|公开待过审|连接接收码后/);
+  assert.doesNotMatch(`${source}\n${shell}`,/review=1/);
 });
 
 test('storage notice states actual local boundary and never auto-publication',()=>{
