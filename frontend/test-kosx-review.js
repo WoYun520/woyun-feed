@@ -52,6 +52,7 @@ const environment = async () => ({
   PUBLIC_FEED:new FeedKV(baseFeed()),
   DOT_DELIVERY_TOKEN_HASH:await dotInboxHash(delivery),
   DOT_REVIEW_TOKEN_HASH:await dotInboxHash(review),
+  kosxPoolFetch:async () => { throw Error('roster offline'); },
 });
 
 function request(method, {token = null, path = DOT_PENDING_PATH, body, headers = {}} = {}) {

@@ -3,6 +3,7 @@ import { FEED_CHANNELS, parseSubscription, normalizeSubscription, mergeSourceIte
 import { normalizeRepositories } from './repository-normalize.js';
 import { makePublicFeed, publicUrl, PRIVATE_CONTENT } from './public-feed-data.js';
 import { attachKosxApproved } from './kosx-public-posts.js';
+import { refreshKosxPoolCache } from './kosx-pool-cache.js';
 import { readHackerNewsApi } from './hackernews-source-reader.js';
 import { readSopilotRank } from './sopilot-source-reader.js';
 import { readSopilotAuthor } from './sopilot-author-reader.js';
@@ -170,6 +171,9 @@ export async function loadPublicSeed(env) {
 }
 
 export async function runScheduledUpdate(env, options) {
+  // Roster refresh must not block the public snapshot. A failed fetch keeps the last cache.
+  try { await refreshKosxPoolCache(env, {fetchImpl:options?.fetchImpl, now:options?.now}); }
+  catch { console.warn(JSON.stringify({event:'kosx-pool-refresh-failed'})); }
   const previous=await env.PUBLIC_FEED.get(PUBLIC_FEED_KEY,'json') || await loadPublicSeed(env);
   const refreshed=await refreshPublicFeed(previous, options);
   let approved=[];

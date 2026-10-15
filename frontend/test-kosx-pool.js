@@ -48,6 +48,7 @@ const environment = async (feed) => ({
   PUBLIC_FEED:new FeedKV(feed || baseFeed()),
   DOT_DELIVERY_TOKEN_HASH:await dotInboxHash(delivery),
   DOT_REVIEW_TOKEN_HASH:await dotInboxHash(review),
+  kosxPoolFetch:async () => { throw Error('roster offline'); },
 });
 
 function baseFeed() {

@@ -34,6 +34,7 @@ const environment = async () => ({
   DOT_DELIVERY_TOKEN_HASH: await dotInboxHash(delivery),
   DOT_REVIEW_TOKEN_HASH: await dotInboxHash(review),
   PUBLIC_FEED: {get() { throw Error('must not read public storage'); }, put() { throw Error('must not write public storage'); }},
+  kosxPoolFetch: async () => { throw Error('roster offline'); },
 });
 
 function request(method = 'POST', {token = null, path = DOT_PENDING_PATH, body, headers = {}} = {}) {
