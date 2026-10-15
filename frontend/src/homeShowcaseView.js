@@ -264,7 +264,7 @@ export function placeCranialCard(card, anchorRect, targetRect, t) {
 }
 
 function renderCranialStage(app, entries, cards) {
-  const art = `<img class="cranial-art" src="${CRANIAL_ART}" width="1200" height="1200" alt="" aria-hidden="true">`;
+  const art = `<img class="cranial-art" src="${CRANIAL_ART}" width="2048" height="2048" alt="" aria-hidden="true">`;
   if (!cards) return `<div class="cranial-stage" data-cranial-stage>${art}</div>`;
   const split = splitCranialEntries(entries);
   return `<div class="cranial-stage" data-cranial-stage>${art}${renderCranialBowl(app, 'left', split.left)}${renderCranialBowl(app, 'right', split.right)}</div>`;

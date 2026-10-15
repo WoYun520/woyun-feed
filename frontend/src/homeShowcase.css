@@ -154,13 +154,13 @@ body:has(.workspace-shell[data-workspace-tab="today"]) { background: var(--home-
   margin: 8px 0 0; color: #62675d; font-size: 11px; font-weight: 650;
   letter-spacing: .28em; line-height: 1;
 }
-/* Bowls are seated on the open ellipses of couple-open-heads.png (1200 square).
-   The stack hangs into each cavity: card bottoms sit below the rim, titles over the opening. */
+/* Bowls sit in the open ellipses of couple-open-heads.png (2048 square).
+   Card bottoms rest on each lower rim; the stack rises through the opening. */
 .cranial-stage { position: relative; width: min(920px, 100%); margin: 0 auto; }
 .cranial-art { display: block; width: 100%; height: auto; }
 .cranial-bowl { position: absolute; height: 28%; pointer-events: none; }
-.cranial-bowl-left { left: 20.2%; width: 19.4%; bottom: 55.6%; }
-.cranial-bowl-right { left: 51.4%; width: 21.2%; bottom: 52.6%; }
+.cranial-bowl-left { left: 23.9%; width: 18.9%; bottom: 66.4%; }
+.cranial-bowl-right { left: 58.2%; width: 18.8%; bottom: 62.6%; }
 .cranial-slot {
   position: absolute; left: 10%; right: 10%; bottom: 0; z-index: calc(4 - var(--stack, 0));
   aspect-ratio: 210 / 297;
