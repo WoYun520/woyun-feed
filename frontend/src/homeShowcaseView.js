@@ -4,7 +4,7 @@ import { normalizeCoverUrl, normalizePostImage } from './postMedia.js';
 import { postStatusId } from './postStream.js';
 import { postAuthorLabel } from './topicWorkspace.js';
 import { isKosxPoolHandle } from '../kosx-pool.js';
-import { homeViewName, isArticleClassItem, readBoostTotal, selectHomeShowcase } from './homeShowcase.js';
+import { HOME_KEPT_BOOKMARK_MIN, homeViewName, isArticleClassItem, readBoostTotal, selectHomeShowcase } from './homeShowcase.js';
 
 export const KOSX_EMOJI_ALT = 'KOSX 精选计划表情';
 export const KOSX_EMOJI_INTERVAL_MS = 600;
@@ -137,10 +137,6 @@ function coverImage(post) {
   return record ? normalizePostImage(record.post_image, post.originalUrl) : null;
 }
 
-function itemCover(item) {
-  return normalizePostImage(item?.post_image, item?.original_url || item?.canonical_url);
-}
-
 function isKosxCard(item) {
   if (!item || typeof item !== 'object') return false;
   if (item.origin === 'kosx_approved') return true;
@@ -255,9 +251,9 @@ function renderWeek(app, state, selection) {
 
 function renderKept(app, state, selection) {
   const e = value => app.escapeHtml(value);
-  const featured = selection.kept.featured, saved = selection.kept.saved;
-  const note = '卧云精选贴读取这个浏览器里已经保存的手动精选和收藏，不另建本地库。手动选入或收藏不等于已实测。换浏览器或清空站点数据后这里会空。';
-  return `<section class="home-band" id="home-kept" aria-labelledby="home-kept-title"><header class="home-band-heading"><h2 id="home-kept-title">卧云精选贴（常驻保存） <small>${featured.length + saved.length}</small></h2><p class="home-rule">${e(note)}</p></header><h3 class="home-subhead">我选入的精选 <small>${featured.length}</small></h3>${featured.length ? renderItemCards(app, state, featured, 'kept-featured') : '<p class="home-empty">这个浏览器还没有选入精选。选入仍由人工决定，不会自动出现在首页。</p>'}<h3 class="home-subhead">已收藏 <small>${saved.length}</small></h3>${saved.length ? renderItemCards(app, state, saved, 'kept-saved') : '<p class="home-empty">还没有收藏。点卡片上的收藏，会写在这个浏览器里。</p>'}${selection.kept.archivedCount ? `<p class="home-rule">另有归档材料留在这个浏览器，不重复列在这里。</p>` : ''}</section>`;
+  const entries = Array.isArray(selection.kept) ? selection.kept : [];
+  const empty = `还没有收藏数达到 ${HOME_KEPT_BOOKMARK_MIN} 的精华文章。没有把其余公开帖补进来。`;
+  return `<section class="home-band" id="home-kept" aria-labelledby="home-kept-title"><header class="home-band-heading"><h2 id="home-kept-title">卧云精选精华帖 <small>${entries.length}</small></h2><p class="home-rule">${e(selection.keptNote || '')}</p></header>${entries.length ? renderCards(app, state, entries, 'kept') : `<p class="home-empty">${e(empty)}</p>`}</section>`;
 }
 
 function itemAuthorHandle(item) {
@@ -354,24 +350,6 @@ function renderPostCard(app, state, entry, group) {
     group, item, title, excerpt, image, originalUrl:post.originalUrl, mediaKey:`${group}:${item.id}`,
     collection:collectionFor(state, post), names:sourceNames(entry, state).join('、'),
     clock:cardClock(item, entry.time), saveId:`home-save-${group}-${item.id}`,
-  });
-}
-
-function renderItemCards(app, state, items, group) {
-  return `<div class="cover-grid">${items.map(item => renderKeptCard(app, state, item, group)).join('')}</div>`;
-}
-
-function renderKeptCard(app, state, item, group) {
-  const title = item.title || '已保存的材料';
-  const excerpt = coverExcerpt(item.summary);
-  const image = articleCover(item) || itemCover(item);
-  const names = (item.source_refs || []).map(id => homepageSourceLabel(state.sources?.find(source => source.id === id)?.name) || (item.origin === 'dot_import' ? '手动精选' : homepageSourceLabel(id)));
-  const archived = state.archivedItemIds?.has?.(item.id);
-  const saved = !archived && (group === 'kept-saved' || state.savedItemIds?.has?.(item.id));
-  return renderShowcaseCard(app, {
-    group, item, title, excerpt, image, originalUrl:item.original_url, mediaKey:`${group}:${item.id}`,
-    collection:{saved, archived, itemId:item.id}, names:names.filter(Boolean).join('、') || '来源未提供',
-    clock:cardClock(item), saveId:`home-save-${group}-${item.id}`,
   });
 }
 

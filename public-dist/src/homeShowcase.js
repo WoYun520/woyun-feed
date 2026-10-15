@@ -9,10 +9,11 @@ export const HOME_LATEST_LIMIT = 18;
 export const HOME_UNDERSTATED_LIMIT = 2;
 // Levi's floor for 「七日精选」. Same number as the 200 bookmark gate on the material review filters.
 export const HOME_WEEK_BOOKMARK_MIN = 200;
+// Levi's floor for 「卧云精选」. Homepage essence articles, no date window.
+export const HOME_KEPT_BOOKMARK_MIN = 1000;
 const VIEWS = ['latest', 'yesterday', 'week', 'kept'];
 
 const finite = value => typeof value === 'string' && Number.isFinite(Date.parse(value));
-const asSet = value => new Set(value instanceof Set || Array.isArray(value) ? value : []);
 
 export function beijingDateKey(ms) {
   if (!Number.isFinite(ms)) return '';
@@ -76,15 +77,21 @@ function byRecent(a, b) {
   return b.time.ms - a.time.ms || compareId(a.post.item.id, b.post.item.id);
 }
 
-function keptShelf(state) {
-  const hidden = asSet(state?.hiddenItemIds);
-  const archived = asSet(state?.archivedItemIds);
-  const visible = item => item && typeof item.id === 'string' && !hidden.has(item.id)
-    && !(item.alias_ids || []).some(id => hidden.has(id));
-  const featured = (Array.isArray(state?.dotFeaturedItems) ? state.dotFeaturedItems : []).filter(visible);
-  const saved = (Array.isArray(state?.savedItems) ? state.savedItems : []).filter(item => visible(item) && !archived.has(item.id));
-  const featuredIds = new Set(featured.flatMap(item => [item.id, item.canonical_url, item.original_url].filter(Boolean)));
-  return {featured, saved:saved.filter(item => !featuredIds.has(item.id) && !featuredIds.has(item.canonical_url) && !featuredIds.has(item.original_url)), archivedCount:[...archived].length};
+function describeKept() {
+  return `卧云精选不限日期，只看已经放上公开首页的精华文章。信息流里其他带日期的帖不放进来。没有可用原帖、榜单或采集时间的不放进来。文章指标明为文章或教程指南、带有 Article 卡。短帖、产品安利和避坑不进入。收藏数只读公开条目上的 bookmark_count，达到 ${HOME_KEPT_BOOKMARK_MIN} 才留下，收藏多的在前，收藏数相同则较新的原帖在前。点赞和浏览不换算成收藏。没有收藏数，或达不到 ${HOME_KEPT_BOOKMARK_MIN}，都不进入这一栏。不读取这个浏览器里的手动精选或收藏。未核对原帖，未实测。没有把其余公开帖补进来。`;
+}
+
+// Standing shelf on the same public stream as 「七日精选」. Article class matches
+// the cover (文章 / 教程指南 / Article card). Excerpt clues stay on the week
+// shelf; local featured and saved rows do not fill this one.
+function pickKept(entries) {
+  const articles = entries.filter(entry => isHomepageEssence(entry.post.item) && isArticleClassItem(entry.post.item));
+  const kept = articles.filter(entry => {
+    const count = publicBookmarkCount(entry.post.item);
+    return count !== null && count >= HOME_KEPT_BOOKMARK_MIN;
+  });
+  kept.sort((a, b) => publicBookmarkCount(b.post.item) - publicBookmarkCount(a.post.item) || byRecent(a, b));
+  return kept;
 }
 
 const UNDERRATED_HUMAN = '昨日最被低估必须人工过审。已经在昨日全部里的帖可以钉进这一栏，包括账号池自动放上首页的帖。';
@@ -248,7 +255,7 @@ export function selectHomeShowcase(state, {now} = {}) {
   // A short list stays short: public-stream heat posts do not fill the cap.
   const latest = dated.filter(entry => isHomepageEssence(entry.post.item)).slice(0, HOME_LATEST_LIMIT);
   const under = pickPinnedUnderrated(yesterdayEntries, state?.underratedPins ?? state?.underrated_pins, yesterday);
-  const kept = keptShelf(state);
+  const kept = pickKept(dated);
   if (before !== state) throw Error('首页筛选不应替换资料对象。');
   const weekStart = weekKeys[6] || '', weekEnd = weekKeys[0] || '';
   const span = weekStart && weekEnd ? `${weekStart} 至 ${weekEnd}` : '日期未能确定';
@@ -256,7 +263,8 @@ export function selectHomeShowcase(state, {now} = {}) {
     reference:{...reference, dateKey, yesterday, weekKeys, weekStart, weekEnd},
     counts:{open:open.length, folded:stream.posts.length - open.length, undated:open.length - dated.length, dated:dated.length},
     latest, yesterday:yesterdayEntries, week:week.entries, weekRule:week.rule, weekNote:describeWeek(span, week.rule, week.unit),
-    underrated:under.entries, underratedRule:under.rule, underratedNote:under.note, kept,
+    underrated:under.entries, underratedRule:under.rule, underratedNote:under.note,
+    kept, keptNote:describeKept(),
   };
 }
 
