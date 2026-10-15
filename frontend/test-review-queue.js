@@ -695,7 +695,9 @@ test('delivery stores a cover, copies it onto the public item, and a later deliv
   const shown = `src="${escapeHtml(storedCover)}"`;
   assert.match(page, new RegExp(shown.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   assert.match(week, new RegExp(shown.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
-  assert.match(page, /文章封面，未核对原帖/);
+  const articleCover = page.slice(page.indexOf('class="cover-photo cover-article"'), page.indexOf('</figure>', page.indexOf('class="cover-photo cover-article"')));
+  assert.match(articleCover, /cover-article/);
+  assert.doesNotMatch(articleCover, /未核对原帖|<figcaption>|文章封面，未核对原帖/);
   const bareCard = page.slice(page.indexOf(`data-home-card="${bare.id}"`), page.indexOf('</article>', page.indexOf(`data-home-card="${bare.id}"`)));
   assert.match(bareCard, /data-cover="plain"/);
   assert.match(bareCard, /打开原帖/);

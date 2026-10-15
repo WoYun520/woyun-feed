@@ -63,7 +63,7 @@ test('article-class KOSX cards show a delivered cover and a quote when the cover
   const shown = card(latest, 'latest', '4401');
   assert.match(shown, /src="https:\/\/cdn\.example\.com\/covers\/article-card\.jpg\?format=jpg&amp;name=large"/);
   assert.match(shown, /class="cover-photo cover-article"/);
-  assert.match(shown, /文章封面，未核对原帖/);
+  assert.doesNotMatch(shown, /未核对原帖|文章封面，未核对原帖|<figcaption>/);
   assert.match(shown, /referrerpolicy="no-referrer"/);
   assert.doesNotMatch(shown, /cover-zoom|pbs\.twimg\.com/);
   const bare = card(latest, 'latest', '4402');
@@ -173,7 +173,7 @@ test('approving an older original still places it on 最新精华 without enteri
   assert.equal(selected.latest.some(entry => entry.post.item.id === hot.id), false);
   assert.equal(selected.kept.some(entry => entry.post.item.id === approved.id), false);
   const note = renderHomeShowcase(app(), input);
-  assert.match(note, /刚过审的帖会进这 18 条/);
+  assert.doesNotMatch(note, /刚过审的帖会进这 18 条|最新精华是已经放上公开首页的精华帖/);
   assert.match(note, /刚过审的旧原帖/);
   assert.doesNotMatch(note, /热榜帖/);
 });
@@ -219,9 +219,10 @@ test('latest keeps 18 homepage essence posts by publication time and does not fi
   const sparse = selectHomeShowcase(state(sparseItems));
   assert.deepEqual(sparse.latest.map(entry => entry.post.item.id), ['230001']);
   const note = renderHomeShowcase(app(), state(sparseItems));
-  assert.match(note, /已经放上公开首页的精华帖/);
-  assert.match(note, /信息流里其他带日期的帖不放进来/);
-  assert.match(note, /符合条件的精华帖只有 1 条，没有用假帖或其他公开帖补满 18 条/);
+  const latestBand = note.slice(note.indexOf('id="home-latest"'), note.indexOf('id="home-marquee"'));
+  assert.match(latestBand, /最新精华帖/);
+  assert.doesNotMatch(latestBand, /<p class="home-rule"/);
+  assert.doesNotMatch(note, /最新精华是已经放上公开首页的精华帖|过审或账号池写入公开首页的时间晚于原帖发布时间|符合条件的精华帖只有 1 条|这里是最近 18 条，不是热度榜|现有质量规则收起了|未核对原帖，未实测/);
   assert.doesNotMatch(note, /热榜水文|教程精选/);
 });
 
@@ -505,9 +506,10 @@ test('default homepage renders cover cards, signature, navigation labels and no 
   assert.doesNotMatch(html, /18\+|年满|未满请离开|年龄|home-age|shape-age/);
   assert.match(html, /id="home-underrated"/);
   assert.match(html, /最新精华帖/);
-  assert.match(html, /已经放上公开首页的精华帖/);
-  assert.match(html, /这里是最近 18 条，不是热度榜/);
-  assert.match(html, /信息流里其他带日期的帖不放进来/);
+  assert.doesNotMatch(html, /最新精华是已经放上公开首页的精华帖/);
+  assert.doesNotMatch(html, /这里是最近 18 条，不是热度榜/);
+  assert.doesNotMatch(html, /过审或账号池写入公开首页的时间晚于原帖发布时间|没有发布时间时用榜单条目时间|现有质量规则收起了|现有质量规则没有收起/);
+  assert.doesNotMatch(html, /未核对原帖/);
   assert.doesNotMatch(html, /2027年或成史上最热一年|教程精选/);
   assert.match(html, /昨日最被低估精华帖/);
   assert.doesNotMatch(html, /昨日最被低估必须人工过审，账号池自动放上首页的帖不进入这一栏/);
@@ -685,6 +687,48 @@ test('homepage cards hide leftover process excerpts and keep a real note', () =>
   assert.match(kept, /公开精选摘录/);
   assert.match(kept, /三步装好本地字幕/);
   assert.doesNotMatch(cardHtml(kept, '8805'), /摘录与时间依据|未核对原帖，未实测/);
+});
+
+test('昨日最被低估 cards use @handle的精华帖 and drop classifier signal copy', () => {
+  const signalTitle = '文章卡·收藏5/点赞18·Levi样例·收藏偏低但类型优先';
+  const signalNote = '教程·可执行提示词·互动尚低';
+  const handle = 'leviflow';
+  const pinned = post('20944111', '2026-10-09T04:00:00.000Z', {
+    origin:'kosx_approved', author_handle:handle,
+    url:`https://x.com/${handle}/status/20944111`,
+    title:signalTitle, summary:signalNote,
+  });
+  const mixed = post('20944112', '2026-10-09T03:00:00.000Z', {
+    origin:'kosx_approved', author_handle:'other_user',
+    url:'https://x.com/other_user/status/20944112',
+    title:signalTitle,
+    summary:`${signalNote}\n原帖里已经写了三步安装。`,
+  });
+  const titled = post('20944113', '2026-10-09T02:00:00.000Z', {
+    origin:'kosx_approved', author_handle:'kept_name',
+    url:'https://x.com/kept_name/status/20944113',
+    title:'过审后的真实标题', summary:'这是原帖摘录，不是分类信号。',
+  });
+  const html = renderHomeShowcase(app(), {...state([pinned, mixed, titled]), underratedPins:[
+    {id:pinned.id, key:`x:${pinned.id}`, day:'2026-10-09'},
+    {id:mixed.id, key:`x:${mixed.id}`, day:'2026-10-09'},
+  ]});
+  const band = html.slice(html.indexOf('id="home-underrated"'));
+  const card = cardHtml(band, pinned.id);
+  assert.match(card, new RegExp(`@${handle} 的精华帖`));
+  assert.match(cardHtml(html, pinned.id), new RegExp(`@${handle} 的精华帖`));
+  assert.doesNotMatch(html, /文章卡|收藏偏低|类型优先|互动尚低|可执行提示词|Levi样例|文章卡·收藏/);
+  assert.doesNotMatch(card, /文章卡|收藏偏低|类型优先|互动尚低|可执行提示词|Levi样例|文章卡·收藏/);
+  const mixedCard = cardHtml(band, mixed.id);
+  assert.match(mixedCard, /@other_user 的精华帖/);
+  assert.match(mixedCard, /原帖里已经写了三步安装。/);
+  assert.doesNotMatch(mixedCard, /文章卡|收藏偏低|类型优先|互动尚低|可执行提示词|Levi样例/);
+  assert.doesNotMatch(band, /文章卡·收藏5|教程·可执行提示词·互动尚低/);
+  const quiet = renderHomeShowcase(app(), {...state([titled]), underratedPins:[{id:titled.id, key:`x:${titled.id}`, day:'2026-10-09'}]});
+  const real = cardHtml(quiet.slice(quiet.indexOf('id="home-underrated"')), titled.id);
+  assert.match(real, /过审后的真实标题/);
+  assert.match(real, /这是原帖摘录，不是分类信号。/);
+  assert.doesNotMatch(real, /@kept_name 的精华帖/);
 });
 
 test('essence cards drop stock evidence and bookmark counts, and keep a longer excerpt', () => {

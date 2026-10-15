@@ -5,6 +5,7 @@ import { postStatusId } from './postStream.js';
 import { postAuthorLabel } from './topicWorkspace.js';
 import { isKosxPoolHandle } from '../kosx-pool.js';
 import { HOME_KEPT_BOOKMARK_MIN, homeViewName, isArticleClassItem, readBoostTotal, selectHomeShowcase } from './homeShowcase.js';
+import { isReviewSignalCopy } from './reviewQueue.js';
 
 export const KOSX_EMOJI_ALT = 'KOSX 精选计划表情';
 export const KOSX_EMOJI_INTERVAL_MS = 600;
@@ -219,19 +220,12 @@ function yesterdayNote(selection) {
   return `昨日全部是整理日的前一个北京时间自然日（${day}）里、已经放上公开首页的精华帖，按原帖发布时间从新到旧。包括过审写入公开首页的帖，以及账号池自动放上首页的帖。信息流里其他带日期的帖不放进来。已收起抽奖或推广信号 ${selection.counts.folded} 条。未核对原帖，未实测。`;
 }
 
-function latestNote(selection) {
-  const short = selection.latest.length < 18 ? `符合条件的精华帖只有 ${selection.latest.length} 条，没有用假帖或其他公开帖补满 18 条。` : '这里是最近 18 条，不是热度榜。';
-  const folded = selection.counts.folded ? `现有质量规则收起了 ${selection.counts.folded} 条抽奖或推广信号。` : '现有质量规则没有收起抽奖或推广信号。';
-  const undated = selection.counts.undated ? `另有 ${selection.counts.undated} 条没有可用时间，没有放进最新、昨日或七日。` : '';
-  return `最新精华是已经放上公开首页的精华帖。过审或账号池写入公开首页的时间晚于原帖发布时间时，按写入时间从新到旧，所以刚过审的帖会进这 18 条；否则按原帖发布时间。没有发布时间时用榜单条目时间，再没有则用采集时间。卡片仍标原帖时间。信息流里其他带日期的帖不放进来。${short}${folded}未核对原帖，未实测。${undated}`;
-}
-
 function renderLatest(app, state, selection) {
   const e = value => app.escapeHtml(value);
   const underrated = selection.underrated.length
     ? `<section class="home-band home-underrated" id="home-underrated" aria-labelledby="home-underrated-title" data-underrated-rule="${e(selection.underratedRule)}"><header class="home-band-heading"><h2 id="home-underrated-title">昨日最被低估精华帖 <small>${selection.underrated.length}</small></h2></header>${renderCards(app, state, selection.underrated, 'under')}</section>`
     : '';
-  return `<section class="home-band" id="home-latest" aria-labelledby="home-latest-title"><header class="home-band-heading"><h2 id="home-latest-title">最新精华帖 <small>${selection.latest.length} / 18</small></h2></header>${renderCards(app, state, selection.latest, 'latest')}<p class="home-rule">${e(latestNote(selection))}</p></section>${renderSlogan(e)}${underrated}`;
+  return `<section class="home-band" id="home-latest" aria-labelledby="home-latest-title"><header class="home-band-heading"><h2 id="home-latest-title">最新精华帖 <small>${selection.latest.length} / 18</small></h2></header>${renderCards(app, state, selection.latest, 'latest')}</section>${renderSlogan(e)}${underrated}`;
 }
 
 function renderSlogan(e) {
@@ -341,10 +335,26 @@ function cardEvidence(e, excerpt, mode) {
   return `<details class="cover-evidence"><summary>摘录与时间依据</summary><p>${e(full)}</p></details>`;
 }
 
+// Classifier blurbs such as「文章卡·收藏5/点赞18·Levi样例·收藏偏低但类型优先」
+// are review evidence. A real title stays. A signal line uses the same
+// @handle 的精华帖 face as other essence cards.
+function homepageCardTitle(item) {
+  const title = typeof item?.title === 'string' ? item.title.trim() : '';
+  if (!isReviewSignalCopy(title)) return title || '来源未提供标题';
+  const handle = itemAuthorHandle(item);
+  return handle ? `@${handle} 的精华帖` : '来源未提供标题';
+}
+
+function homepageCardExcerpt(summary) {
+  const excerpt = coverExcerpt(summary);
+  if (!excerpt) return '';
+  return excerpt.split(/\n+/).map(line => line.trim()).filter(line => line && !isReviewSignalCopy(line)).join('\n');
+}
+
 function renderPostCard(app, state, entry, group) {
   const post = entry.post, item = post.item;
-  const title = item.title || '来源未提供标题';
-  const excerpt = coverExcerpt(item.summary);
+  const title = homepageCardTitle(item);
+  const excerpt = homepageCardExcerpt(item.summary);
   const image = articleCover(item) || coverImage(post);
   return renderShowcaseCard(app, {
     group, item, title, excerpt, image, originalUrl:post.originalUrl, mediaKey:`${group}:${item.id}`,
@@ -388,11 +398,11 @@ function renderCover(app, title, image, originalUrl, key) {
   if (!image) return '';
   const hit = `<a class="cover-hit" href="${e(app.safeUrl(originalUrl))}" target="_blank" rel="noopener noreferrer" aria-label="${e(`打开原帖：${title}`)}"></a>`;
   if (image.kind === 'article_cover') {
-    const label = '文章封面，未核对原帖';
-    return `<div class="cover-frame"><figure class="cover-photo cover-article" data-post-media><img src="${e(image.url)}" alt="${e(label)}" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-post-media-thumb><figcaption>${e(label)}</figcaption></figure>${hit}</div>`;
+    return `<div class="cover-frame"><figure class="cover-photo cover-article" data-post-media><img src="${e(image.url)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-post-media-thumb></figure>${hit}</div>`;
   }
-  const kind = image.kind === 'video_poster' ? '视频封面，未播放' : '来源附图，未核对原帖';
-  return `<div class="cover-frame"><figure class="cover-photo" data-post-media><img src="${e(image.url)}" alt="${e(kind)}" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-post-media-thumb><button type="button" class="cover-zoom" data-post-media-open data-post-media-key="${e(key)}" data-post-media-url="${e(image.url)}" data-post-media-kind="${e(image.kind)}" data-post-media-source="${e(image.source_url)}" data-post-media-original="${e(originalUrl)}" aria-label="${e(`放大${kind}：${title}`)}">放大</button><figcaption>${e(kind)}</figcaption></figure>${hit}</div>`;
+  const kind = image.kind === 'video_poster' ? '视频封面，未播放' : '来源附图';
+  const caption = image.kind === 'video_poster' ? `<figcaption>${e(kind)}</figcaption>` : '';
+  return `<div class="cover-frame"><figure class="cover-photo" data-post-media><img src="${e(image.url)}" alt="${e(kind)}" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-post-media-thumb><button type="button" class="cover-zoom" data-post-media-open data-post-media-key="${e(key)}" data-post-media-url="${e(image.url)}" data-post-media-kind="${e(image.kind)}" data-post-media-source="${e(image.source_url)}" data-post-media-original="${e(originalUrl)}" aria-label="${e(`放大${kind}：${title}`)}">放大</button>${caption}</figure>${hit}</div>`;
 }
 
 function saveButton(e, collection, id, title) {
