@@ -20,7 +20,7 @@ let kosxEmojiRoot = null;
 let kosxEmojiView = null;
 let kosxEmojiMedia = null;
 let kosxEmojiCache = [];
-const cranialState = {phase:'rest', listening:false, view:null};
+const cranialState = {phase:'rest', listening:false, view:null, held:false};
 
 export function kosxEmojiFrame(index, reducedMotion = false) {
   if (reducedMotion) return 0;
@@ -423,8 +423,12 @@ function applyCranialFrame(doc, progress) {
 function finishCranial(doc, {landed} = {}) {
   const stage = doc.querySelector('[data-cranial-stage]');
   const ids = cranialCardNodes(doc, stage).map(card => card.getAttribute('data-cranial-id')).filter(Boolean);
-  doc.getElementById('cranial-flight-root')?.remove();
+  // Park the same essence cards in their slots. is-settled hides the bowls;
+  // deleting the nodes left the heads empty when the reader scrolled back.
+  if (stage) restoreCranialCards(stage);
+  else doc.getElementById('cranial-flight-root')?.remove();
   cranialState.phase = 'done';
+  cranialState.held = false;
   stage?.classList.add('is-settled');
   if (!landed) return;
   for (const id of ids) doc.getElementById(`home-card-latest-${id}`)?.classList.add('is-cranial-landed');
@@ -434,12 +438,49 @@ function cranialCardsLanded(cards, progress) {
   return cards.length > 0 && cards.every(card => cranialFlightT(progress, card.getAttribute('data-cranial-stack')) >= 1);
 }
 
+// The open heads sit in the upper half of the art. The hero is home at the
+// top of the page, or when that half is back on screen. A chin left over
+// from the flight does not count, so the lids can stay shut in the feed.
+function cranialHeroHome(view, stage) {
+  if (cranialProgress(view) <= 0) return true;
+  const rect = stage?.getBoundingClientRect?.();
+  const viewport = Number(view?.innerHeight);
+  if (!rect || !Number.isFinite(rect.top) || !Number.isFinite(rect.height) || rect.height <= 0 || !(viewport > 0)) return false;
+  const bottom = Number.isFinite(rect.bottom) ? rect.bottom : rect.top + rect.height;
+  const visibleHead = Math.min(rect.top + rect.height * 0.55, viewport) - Math.max(rect.top, 0);
+  return visibleHead >= rect.height * 0.3 && rect.top < viewport * 0.45 && bottom > viewport * 0.25;
+}
+
+function showCranialFan(stage) {
+  if (!stage) return;
+  restoreCranialCards(stage);
+  stage.classList.remove('is-settled');
+}
+
 function onCranialScroll() {
   const view = cranialState.view || globalThis;
   const doc = view.document;
-  if (!doc || cranialState.phase === 'done') return;
+  if (!doc) return;
   const stage = doc.querySelector('[data-cranial-stage]');
   if (!stage || stage.dataset.cranialMode === 'reduced') return;
+  const home = cranialHeroHome(view, stage);
+  if (cranialState.phase === 'done') {
+    if (!home) return;
+    showCranialFan(stage);
+    cranialState.phase = 'rest';
+    cranialState.held = true;
+    return;
+  }
+  // After a return, keep the fan while the heads are in view. The next
+  // scroll away from the hero starts the flight from those same cards.
+  if (cranialState.held) {
+    if (home) {
+      showCranialFan(stage);
+      cranialState.phase = 'rest';
+      return;
+    }
+    cranialState.held = false;
+  }
   const cards = cranialCardNodes(doc, stage);
   if (!cards.length) return;
   const progress = cranialProgress(view);
@@ -457,6 +498,7 @@ function onCranialScroll() {
 
 export function resetCranialFlight() {
   cranialState.phase = 'rest';
+  cranialState.held = false;
   const doc = cranialState.view?.document || globalThis.document;
   doc?.getElementById?.('cranial-flight-root')?.remove();
 }
@@ -467,28 +509,29 @@ export function mountCranialFlight(root = globalThis.document) {
   if (!stage) return;
   const view = root.defaultView || globalThis;
   cranialState.view = view;
-  if (cranialState.phase === 'done') {
-    stage.classList.add('is-settled');
-    return;
-  }
   if (cranialReduced(view)) {
     stage.dataset.cranialMode = 'reduced';
-    restoreCranialCards(stage);
+    showCranialFan(stage);
     return;
   }
   const doc = root;
   const progress = cranialProgress(view);
-  const parked = [...(stage.querySelectorAll?.('[data-cranial-card]') || [])];
-  if (cranialCardsLanded(parked, progress)) {
-    finishCranial(doc, {landed:false});
-    return;
-  }
-  if (cranialState.phase === 'scrub' || (parked.length && progress > 0)) {
-    doc.getElementById('cranial-flight-root')?.remove();
-    if (progress <= 0) cranialState.phase = 'rest';
-    else {
-      cranialState.phase = 'scrub';
-      applyCranialFrame(doc, progress);
+  if (cranialState.phase === 'done' && !cranialHeroHome(view, stage)) {
+    stage.classList.add('is-settled');
+  } else if (cranialState.phase === 'done') {
+    showCranialFan(stage);
+    cranialState.phase = 'rest';
+    cranialState.held = true;
+  } else {
+    const parked = [...(stage.querySelectorAll?.('[data-cranial-card]') || [])];
+    if (cranialCardsLanded(parked, progress)) finishCranial(doc, {landed:false});
+    else if (cranialState.phase === 'scrub' || (parked.length && progress > 0)) {
+      doc.getElementById('cranial-flight-root')?.remove();
+      if (progress <= 0) cranialState.phase = 'rest';
+      else {
+        cranialState.phase = 'scrub';
+        applyCranialFrame(doc, progress);
+      }
     }
   }
   if (cranialState.listening) return;

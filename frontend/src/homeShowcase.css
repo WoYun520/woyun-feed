@@ -177,8 +177,8 @@ body:has(.workspace-shell[data-workspace-tab="today"]) { background: var(--home-
 }
 .cranial-title {
   margin: 0; padding: 6px 7px 0; color: #171917;
-  font-size: clamp(8px, 1.15vw, 12px); font-weight: 650; line-height: 1.3; letter-spacing: -.02em;
-  display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden;
+  font-size: clamp(8px, 1.15vw, 12px); font-weight: 650; line-height: 1.25; letter-spacing: -.02em;
+  display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
 .cranial-card:not(:has(.cranial-cover)) .cranial-title {
   padding-top: 10px; font-family: var(--font-serif), "Songti SC", "Noto Serif CJK SC", serif;
