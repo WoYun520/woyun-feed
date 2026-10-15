@@ -222,27 +222,28 @@ test('a candidate flag cannot be set while rejecting, and bad signals are refuse
   assert.equal(env.DOT_INBOX.writes.filter(entry => entry.key.startsWith(DOT_PENDING_PREFIX)).length, 1);
 });
 
-test('the review queue shows type, heat and the article card, and the candidate box starts unchecked', () => {
+test('the review queue keeps approve and skip, and does not print signal or evidence lines', () => {
   assert.doesNotMatch(renderDotCandidatesView(), /进低估栏候选/);
   const html = renderReviewQueue({connected:true, items:[
     {id:'kosx-1', key:'x:1', url:postUrl, author_handle:'example', status:'pending', note:'步骤模板', submitted_at:'2026-10-14T00:00:00.000Z', bookmark_count:12, like_count:4, has_article:true},
     {id:'kosx-2', key:'x:2', url:'https://x.com/example/status/2108148604447884002', status:'approved', review_type:'短帖'},
     {id:'kosx-3', key:'x:3', url:'https://x.com/example/status/2108148604447884003', author_handle:'example', status:'pending', text:'安利一下，限时优惠', submitted_at:'2026-10-14T00:00:01.000Z'},
+    {id:'kosx-4', key:'x:4', url:'https://x.com/example/status/2108148604447884004', author_handle:'levi', status:'pending', note:'文章卡·收藏5/点赞18·Levi样例·收藏偏低但类型优先', text:'教程·可执行提示词·互动尚低', submitted_at:'2026-10-14T00:00:02.000Z'},
   ]});
   assert.match(html, /data-review-type="教程指南"/);
-  assert.match(html, /有 X Article 卡/);
-  assert.match(html, /收藏 12/);
-  assert.match(html, /点赞 4/);
-  assert.match(html, /收藏\/点赞 3\.00/);
-  assert.match(html, /收藏信号强/);
+  assert.match(html, /步骤模板/);
+  assert.match(html, /安利一下，限时优惠/);
   assert.match(html, /产品安利/);
+  assert.match(html, /过审上首页/);
+  assert.match(html, /略过/);
   assert.match(html, /进低估栏候选/);
   assert.doesNotMatch(html, /data-review-underrated[^>]*checked/);
-  assert.deepEqual([...html.matchAll(/data-review-type="([^"]+)"/g)].map(match => match[1]), ['教程指南', '产品安利']);
+  assert.doesNotMatch(html, /有 X Article 卡|收藏 12|点赞 4|收藏\/点赞|收藏信号强|可后看|review-queue-heat|review-queue-article|文章卡|收藏偏低|类型优先|互动尚低|可执行提示词|Levi样例/);
+  assert.deepEqual([...html.matchAll(/data-review-type="([^"]+)"/g)].map(match => match[1]), ['教程指南', '教程指南', '产品安利']);
   assert.doesNotMatch(html, /data-review-url="https:\/\/x.com\/example\/status\/2108148604447884002"/);
   const disconnected = renderReviewQueue({connected:false, items:[{status:'pending', url:postUrl}]});
   assert.match(disconnected, /连接接收码后/);
-  assert.doesNotMatch(disconnected, /进低估栏候选|过审上首页/);
+  assert.doesNotMatch(disconnected, /进低估栏候选|过审上首页|收藏、点赞|Article 卡/);
 });
 
 test('approve sends the candidate flag only when the box is checked', () => {

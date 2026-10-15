@@ -102,6 +102,9 @@ test('allowlist build cannot publish extra project files and a failed audit reta
     assert.equal(files.length,PUBLIC_FILES.length);
     for(const file of files)assert.ok(!(await fs.readFile(path.join(result.directory,file),'utf8')).includes('PRIVATE_CANARY'),file);
     await assert.rejects(fs.stat(path.join(result.directory,'serve.js')));await assert.rejects(fs.stat(path.join(result.directory,'private.txt')));
+    await assert.rejects(fs.stat(path.join(result.directory,'review-admin.html')));
+    await assert.rejects(fs.stat(path.join(result.directory,'local-review.js')));
+    await assert.rejects(fs.stat(path.join(result.directory,'src/reviewAdminPage.js')));
     assert.match(await fs.readFile(path.join(result.directory,'src/siteConfig.js'),'utf8'),/true/);
     const secret=base();secret.items[0].summary='/Users/private/work/secret';await fs.writeFile(path.join(tmp,'data/live-feed.json'),JSON.stringify(secret));
     await assert.rejects(buildPublic({projectRoot:tmp}),/私人路径或疑似凭据/);

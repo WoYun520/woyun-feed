@@ -15,6 +15,8 @@ cd frontend && node serve.js
 
 浏览器打开 `http://127.0.0.1:3000/`。`serve.js` 只监听本机。没有 `data/live-feed.json` 时，公开构建沿用已提交的 `public-dist/data/public-feed.json`，不会重新抓取来源。
 
+本机过审页是 `http://127.0.0.1:3000/review-admin`。双击「打开过审.command」，或先双击「打开 Levi flow.command」再打开这个地址。接收码放在 `.local/dot-review-token`（一行）或环境变量 `DOT_REVIEW_TOKEN`，浏览器里不用粘贴。公开预览没有这一页。说明见 [docs/pending-review.md](docs/pending-review.md)。
+
 ## 预览部署
 
 根目录 `wrangler.jsonc` 指向现有预览 Worker `woyun-feed-preview`（账号 `2406ce3e27726cda95852f23951dfc93`）。静态目录是 `./public-dist`。KV 绑定是 `PUBLIC_FEED` 与 `DOT_INBOX`，命名空间 id 写在该文件里。定时为每天 01:00 与 13:00 UTC（北京时间 09:00、21:00）。
@@ -74,6 +76,8 @@ cd frontend && node serve.js
 ```
 
 Open `http://127.0.0.1:3000/`. `serve.js` listens on localhost only. Without `data/live-feed.json`, the public build reuses the committed `public-dist/data/public-feed.json` and does not refetch sources.
+
+The local review page is `http://127.0.0.1:3000/review-admin`. Double-click `打开过审.command`, or start with `打开 Levi flow.command` and open that address. Put the review code in `.local/dot-review-token` (one line) or `DOT_REVIEW_TOKEN`. The browser does not ask for it. The public preview does not serve this page. See [docs/pending-review.md](docs/pending-review.md).
 
 ## Preview deploy
 

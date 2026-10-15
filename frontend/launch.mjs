@@ -4,6 +4,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { installationId } from './installation.js';
+import { launchOpenPath } from './local-review.js';
 
 const frontendDir = path.dirname(fileURLToPath(import.meta.url));
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -37,11 +38,11 @@ export function openLocalPage(url) {
   });
 }
 
-export async function launchFeed({ directory = frontendDir, port = 3000, timeoutMs = 15000, openPage = openLocalPage } = {}) {
+export async function launchFeed({ directory = frontendDir, port = 3000, timeoutMs = 15000, openPage = openLocalPage, openPath = '/' } = {}) {
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw Error('启动端口无效。');
   if (Number(process.versions.node.split('.')[0]) < 22) throw Error('需要 Node.js 22 或更新版本，请先安装。');
   const expectedId = installationId(directory);
-  const url = `http://127.0.0.1:${port}/`;
+  const url = `http://127.0.0.1:${port}${launchOpenPath(openPath)}`;
   const initial = await checkServer(port, expectedId);
   if (initial === 'occupied') throw Error(`端口 ${port} 正在被其他服务或另一份信息流占用。请先关闭它，再重新打开；不会切换网址或修改已有收藏。`);
   let child, logFile, childError, childExited = false;
@@ -79,7 +80,7 @@ export async function launchFeed({ directory = frontendDir, port = 3000, timeout
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const result = await launchFeed();
+    const result = await launchFeed({openPath:launchOpenPath(process.env.LEVI_OPEN_PATH)});
     console.log(`${result.reused ? '信息流已在运行，已打开页面。' : '信息流已启动，已打开页面。'}\n${result.url}\n可以关闭这个终端窗口，网站会继续在本机运行。`);
   } catch (error) {
     console.error(error.message);
