@@ -53,6 +53,12 @@ body:has(.workspace-shell[data-workspace-tab="today"]) { background: var(--home-
   position: static; left: auto; top: auto; transform: none; margin-left: 0;
   display: flex; flex: 0 1 auto; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 4px 8px; min-width: 0;
 }
+.lift-review {
+  margin-left: auto; display: inline-flex; align-items: center; flex: 0 0 auto;
+  min-height: 36px; padding: 0 2px 0 12px; color: #8b9086;
+  font-size: 12px; font-weight: 500; line-height: 1; text-decoration: none; white-space: nowrap;
+}
+.lift-review:hover, .lift-review:focus-visible { color: #171917; }
 .lift-cat:hover, .lift-pill:hover { color: #171917; }
 .lift-pill[aria-current="page"]:hover, .lift-cat[aria-current="page"]:hover { color: #ffffff; }
 .lift-menu {
@@ -264,6 +270,7 @@ body:has(.workspace-shell[data-workspace-tab="today"]) { background: var(--home-
   .workspace-shell[data-workspace-tab="today"] .page-container { padding-left: 24px; padding-right: 24px; }
   .lift-bar { justify-content: flex-start; flex-wrap: wrap; }
   .lift-cats-button { display: inline-flex; }
+  .lift-review { order: 2; margin-left: 8px; padding-left: 0; }
   .lift-cats { display: none; flex-basis: 100%; order: 3; justify-content: flex-start; gap: 0 8px; }
   .lift-cats.is-open { display: flex; }
   .lift-cat, .lift-pill { font-size: 15px; }
