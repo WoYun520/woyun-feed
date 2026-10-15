@@ -90,8 +90,10 @@ test('the local admin page lists and decides without a browser token, and the pu
   assert.equal(page.status, 200);
   assert.match(page.type, /text\/html/);
   assert.match(page.body, /本机过审/);
+  assert.match(page.body, /提交日/);
+  assert.match(page.body, /北京时间今天或昨天/);
   assert.match(page.body, /\/src\/reviewAdminPage\.js/);
-  assert.doesNotMatch(page.body, /type="password"|文章卡·收藏|互动尚低|DOT_REVIEW_TOKEN/);
+  assert.doesNotMatch(page.body, /type="password"|文章卡·收藏|互动尚低|DOT_REVIEW_TOKEN|只列出原帖日期|正在读取公开待过审/);
   const pending = await request('/api/local-review/pending', 'GET', {Authorization:`Bearer ${'a'.repeat(40)}`});
   assert.equal(pending.status, 200);
   assert.equal(JSON.parse(pending.body).items[0].url, postUrl);
@@ -138,8 +140,11 @@ test('the local admin page lists and decides without a browser token, and the pu
   assert.equal(PUBLIC_FILES.includes('src/reviewAdminPage.js'), false);
   assert.equal(PUBLIC_FILES.includes('local-review.js'), false);
   const adminScript = await fs.readFile(new URL('./src/reviewAdminPage.js', import.meta.url), 'utf8');
-  assert.doesNotMatch(adminScript, /Authorization|Bearer|type="password"/);
+  assert.match(adminScript, /mode:'local'/);
+  assert.doesNotMatch(adminScript, /Authorization|Bearer|type="password"|只列出原帖日期/);
   const publicQueue = await fs.readFile(new URL('./src/reviewQueueView.js', import.meta.url), 'utf8');
   assert.match(publicQueue, /连接接收码后/);
+  assert.match(publicQueue, /pendingReviewItems/);
+  assert.match(publicQueue, /pendingLocalReviewItems/);
   assert.doesNotMatch(publicQueue, /review-queue-heat|收藏信号强|文章卡/);
 });

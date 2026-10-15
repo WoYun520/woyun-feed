@@ -14,7 +14,7 @@ function paint() {
     return;
   }
   root.innerHTML = `${state.message ? `<p class="review-queue-status" role="status">${escapeText(state.message)}</p>` : ''}${renderReviewQueue({
-    connected:true, loading:state.loading, error:state.error, items:state.items, busy:state.busy,
+    connected:true, loading:state.loading, error:state.error, items:state.items, busy:state.busy, mode:'local',
   })}`;
   bindReviewQueueEvents(root, {onReviewDecision});
 }
@@ -40,13 +40,13 @@ async function refresh() {
     } else if (!response.ok || !Array.isArray(body.items)) {
       state.configured = true;
       state.items = [];
-      state.error = typeof body.message === 'string' ? body.message : '暂时无法读取公开待过审。';
+      state.error = typeof body.message === 'string' ? body.message : '暂时无法读取本机过审。';
     } else {
       state.configured = true;
       state.items = body.items;
     }
   } catch {
-    state.error = '暂时无法读取公开待过审。';
+    state.error = '暂时无法读取本机过审。';
   } finally {
     state.loading = false;
     paint();
