@@ -1,4 +1,4 @@
-# 卧云信息流
+# Levi flow
 
 公开首页是封面帖：KOSX 助力条、贴链接、已助力计数，以及精选封面。静态页面在 `public-dist`，由 Cloudflare Worker 提供。
 
@@ -58,7 +58,7 @@ Overheard 用同一把投递密钥把 X 链接送进 `/api/dot/pending`，见 [d
 
 ---
 
-# Woyun Feed
+# Levi flow
 
 The public homepage is a cover feed: the KOSX strip, the paste-link panel, the local boost count, and the curated cover cards. `public-dist` is the static site served by a Cloudflare Worker.
 

@@ -1,4 +1,4 @@
-# 卧云信息流：完整研发交接
+# Levi flow：完整研发交接
 
 你现在作为本项目的主要研发搭档，接手持续维护、产品规划和用户明确委派的开发任务。先完整阅读本项目 README、docs/workbench-start-here.md、docs/feed-contract.md、docs/workbench-design-20261010.md，以及当前代码。
 

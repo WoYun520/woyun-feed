@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * 我的信息流 · 本地预览与固定公开来源服务
+ * Levi flow · 本地预览与固定公开来源服务
  * 规范：
  * 1. 提供 frontend 静态文件、demo 数据、缓存读取与手动更新接口
  * 2. 严格检查路径边界，防范路径穿越
@@ -197,5 +197,5 @@ if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
   };
   process.once('SIGTERM', shutdown); process.once('SIGINT', shutdown);
   server.on('error', error => { console.error(`启动失败：${error.code}`); process.exitCode = 1; });
-  server.listen(port, '127.0.0.1', () => console.log(`我的信息流：http://127.0.0.1:${port}/`));
+  server.listen(port, '127.0.0.1', () => console.log(`Levi flow：http://127.0.0.1:${port}/`));
 }

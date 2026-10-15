@@ -27,7 +27,7 @@ const dataAdapterContent = fs.readFileSync(dataAdapterPath, 'utf-8');
 const demoFeedContent = fs.readFileSync(demoFeedPath, 'utf-8');
 
 // 1. 文件与关键结构存在性
-assert(htmlContent.includes('我的信息流'), 'HTML 应包含主标题');
+assert(htmlContent.includes('Levi flow'), 'HTML 应包含主标题');
 assert(htmlContent.includes('styles.css'), 'HTML 应引入样式表');
 assert(htmlContent.includes('app.js'), 'HTML 应引入主应用脚本');
 assert(htmlContent.includes('viewport'), 'HTML 必须包含移动端视口设置');

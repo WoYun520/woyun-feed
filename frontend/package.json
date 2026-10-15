@@ -1,7 +1,7 @@
 {
   "name": "personal-feed-frontend",
   "version": "0.43.0",
-  "description": "我的信息流 · 本机多来源阅读与收藏",
+  "description": "Levi flow · 本机多来源阅读与收藏",
   "type": "module",
   "private": true,
   "scripts": {

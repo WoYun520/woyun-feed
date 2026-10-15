@@ -65,10 +65,10 @@ test('failed startup and browser-opening failure report failure without claiming
 
 test('Mac command resolves a desktop symlink and finds Node with a minimal Finder PATH',{skip:process.platform!=='darwin'},async t=>{
   const f=await fixture(t);
-  await fs.copyFile(path.resolve(here,'../打开我的信息流.command'),path.join(f.root,'打开我的信息流.command'));
+  await fs.copyFile(path.resolve(here,'../打开 Levi flow.command'),path.join(f.root,'打开 Levi flow.command'));
   const output=path.join(f.root,'resolved.json');
   await fs.writeFile(path.join(f.directory,'launch.mjs'),`import fs from 'node:fs';fs.writeFileSync(${JSON.stringify(output)},JSON.stringify({script:process.argv[1],node:process.execPath}));`);
-  const link=path.join(f.root,'桌面入口.command');await fs.symlink(path.join(f.root,'打开我的信息流.command'),link);
+  const link=path.join(f.root,'桌面入口.command');await fs.symlink(path.join(f.root,'打开 Levi flow.command'),link);
   const result=await new Promise((resolve,reject)=>{const child=spawn('/bin/zsh',[link],{env:{PATH:'/usr/bin:/bin'},stdio:'pipe'});let error='';child.stderr.on('data',chunk=>error+=chunk);child.on('error',reject);child.on('exit',code=>resolve({code,error}));});
   assert.equal(result.code,0,result.error);assert.equal(JSON.parse(await fs.readFile(output,'utf8')).script,await fs.realpath(path.join(f.directory,'launch.mjs')));
 });
