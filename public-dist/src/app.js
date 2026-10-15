@@ -12,7 +12,7 @@ import { WRITING_FORMATS } from './writingBrief.js';
 import { SOURCE_GROUPS, matchesSource } from './sourceGroups.js';
 import { renderTopicWorkspace, bindTopicActions, renderTopicDialog, openTopicDialog } from './topicViews.js';
 import { bindSourceBoardActions, feedUpdateInfo, boardUpdateMessage } from './sourceBoard.js';
-import { mountKosxEmoji, renderHomeShowcase } from './homeShowcaseView.js';
+import { mountCranialFlight, mountKosxEmoji, renderHomeShowcase } from './homeShowcaseView.js';
 import { boostVisitorId, readBoostTotal, recordKosxBoost, writeBoostTotal } from './homeShowcase.js';
 import { repositoryName } from './repositoryGuide.js';
 import { renderCollectionPanel, bindCollectionActions } from './collectionViews.js';
@@ -772,6 +772,7 @@ class PersonalFeedApp {
     this.renderModals();
     // Loading tests re-evaluate this class without its imports. The page module still has the binding.
     if (typeof mountKosxEmoji === 'function') mountKosxEmoji(document);
+    if (typeof mountCranialFlight === 'function') mountCranialFlight(document);
   }
 
   renderMainContent(state) {
