@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { HOME_WEEK_BOOKMARK_MIN, addCalendarDays, beijingDateKey, parsePublicHeat, recordKosxBoost, selectHomeShowcase, wouldEnterUnderrated } from './src/homeShowcase.js';
 import { FeedDataAdapter } from './src/dataAdapter.js';
-import { KOSX_EMOJI_ALT, KOSX_EMOJI_FRAMES, KOSX_EMOJI_INTERVAL_MS, coverExcerpt, mountKosxEmoji, renderHomeShowcase, resetKosxEmoji } from './src/homeShowcaseView.js';
+import { KOSX_EMOJI_ALT, KOSX_EMOJI_FRAMES, KOSX_EMOJI_INTERVAL_MS, coverExcerpt, cranialFlightT, mountKosxEmoji, placeCranialCard, renderHomeShowcase, resetKosxEmoji } from './src/homeShowcaseView.js';
 import { renderWorkspaceNavigation } from './src/workspaceShell.js';
 import { KOSX_POOL_HANDLES } from './kosx-pool.js';
 import { PUBLIC_FILES } from './public-build.mjs';
@@ -551,6 +551,68 @@ test('default homepage renders cover cards, signature, navigation labels and no 
   assert.match(appSource, /已进入待筛选/);
   assert.match(appSource, /这条已在待筛选里/);
   assert.doesNotMatch(appSource, /已放入待筛选|已放回待筛选|这条链接已经收过/);
+});
+
+test('cranial hero stacks real latest essence cards inside the open heads', () => {
+  const cover = 'https://cdn.example.com/covers/cranial-a.jpg';
+  const items = [
+    post('7101', '2026-10-10T08:00:00.000Z', {origin:'kosx_approved', title:'颅内第一篇', review_type:'文章', cover_url:cover}),
+    post('7102', '2026-10-10T07:00:00.000Z', {origin:'kosx_approved', title:'颅内第二篇'}),
+    post('7103', '2026-10-10T06:00:00.000Z', {origin:'kosx_approved', title:'颅内第三篇'}),
+    post('7104', '2026-10-09T06:00:00.000Z', {title:'不是精华帖'}),
+  ];
+  const html = renderHomeShowcase(app(), state(items));
+  const hero = html.slice(html.indexOf('<div class="home-hero"'), html.indexOf('id="home-latest"'));
+  assert.match(hero, /aria-label="Levi flow"/);
+  assert.match(hero, /class="levi-kicker">LEVI</);
+  assert.match(hero, /src="\/assets\/hero\/couple-open-heads\.png"/);
+  assert.match(hero, /class="cranial-art"[^>]*alt=""[^>]*aria-hidden="true"/);
+  assert.doesNotMatch(hero, /你的文章，值得被看见/);
+  assert.ok(html.indexOf('aria-label="KOSX 精选计划"') < html.indexOf('levi-signature'));
+  assert.ok(html.indexOf('levi-signature') < html.indexOf('data-cranial-stage'));
+  assert.ok(html.indexOf('data-cranial-stage') < html.indexOf('id="home-latest"'));
+  assert.ok(hero.indexOf('levi-signature') < hero.indexOf('data-cranial-stage'));
+  assert.match(hero, /data-cranial-bowl="left"[\s\S]*颅内第一篇[\s\S]*颅内第三篇/);
+  assert.match(hero, /data-cranial-bowl="right"[\s\S]*颅内第二篇/);
+  assert.doesNotMatch(hero, /不是精华帖|打开原帖|data-action="toggle-save"|data-home-group=/);
+  assert.match(hero, /src="https:\/\/cdn\.example\.com\/covers\/cranial-a\.jpg"/);
+  assert.equal((hero.match(/data-cranial-card/g) || []).length, 3);
+  assert.match(hero, /inert/);
+  const marquee = html.match(/<p class="home-slogan"[\s\S]*?<\/p>/)[0];
+  assert.equal((marquee.match(/你的文章，值得被看见/g) || []).length, 1);
+  assert.ok(html.indexOf('id="home-latest"') < html.indexOf('id="home-marquee"'));
+  assert.equal((html.match(/你的文章，值得被看见/g) || []).length, 1);
+  const yesterday = renderHomeShowcase(app('yesterday'), state(items));
+  assert.match(yesterday, /couple-open-heads\.png/);
+  assert.doesNotMatch(yesterday, /data-cranial-card/);
+  const single = renderHomeShowcase(app(), state([items[0]]));
+  assert.match(single, /data-cranial-bowl="left"/);
+  assert.doesNotMatch(single, /data-cranial-bowl="right"/);
+  assert.equal((single.match(/data-cranial-card/g) || []).length, 1);
+  const empty = renderHomeShowcase(app(), state([items[3]]));
+  assert.match(empty, /couple-open-heads\.png/);
+  assert.match(empty, /aria-label="Levi flow"/);
+  assert.doesNotMatch(empty, /data-cranial-card|data-cranial-bowl/);
+  assert.equal(cranialFlightT(0, 0), 0);
+  assert.equal(cranialFlightT(1, 0), 1);
+  assert.equal(cranialFlightT(1, 2), 1);
+  assert.ok(cranialFlightT(0.15, 2) < cranialFlightT(0.15, 0));
+  const card = {style:{}};
+  placeCranialCard(card, {left:0, top:10, width:20, height:40}, {left:80, top:210, width:40, height:60}, 0.5);
+  assert.equal(card.style.position, 'fixed');
+  assert.equal(card.style.left, '40px');
+  assert.equal(card.style.top, '110px');
+  assert.equal(card.style.width, '30px');
+  assert.equal(card.style.height, '50px');
+  assert.equal(card.style.pointerEvents, 'none');
+  assert.equal(card.style.opacity, '1');
+  placeCranialCard(card, {left:0, top:10, width:20, height:40}, {left:80, top:210, width:40, height:60}, 1);
+  assert.equal(card.style.opacity, '0');
+  const css = readFileSync(new URL('./src/homeShowcase.css', import.meta.url), 'utf8');
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.cranial-card\s*\{[^}]*animation:\s*none/);
+  assert.equal(PUBLIC_FILES.includes('assets/hero/couple-open-heads.png'), true);
+  const appSource = readFileSync(new URL('./src/app.js', import.meta.url), 'utf8');
+  assert.match(appSource, /mountCranialFlight\(document\)/);
 });
 
 test('homepage cards hide leftover process excerpts and keep a real note', () => {

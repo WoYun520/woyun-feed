@@ -6,6 +6,10 @@ import { postAuthorLabel } from './topicWorkspace.js';
 import { isKosxPoolHandle } from '../kosx-pool.js';
 import { homeViewName, isArticleClassItem, readBoostTotal, selectHomeShowcase } from './homeShowcase.js';
 
+export const CRANIAL_PER_HEAD = 3;
+export const CRANIAL_SCRUB_PX = 560;
+const CRANIAL_ART = '/assets/hero/couple-open-heads.png';
+
 export const KOSX_EMOJI_ALT = 'KOSX 精选计划表情';
 export const KOSX_EMOJI_INTERVAL_MS = 600;
 export const KOSX_EMOJI_FRAMES = [1, 2, 3, 4, 5, 6].map(frame => `/assets/kosx/emoji/kosx-emoji-0${frame}-80.png`);
@@ -16,6 +20,7 @@ let kosxEmojiRoot = null;
 let kosxEmojiView = null;
 let kosxEmojiMedia = null;
 let kosxEmojiCache = [];
+const cranialState = {phase:'rest', listening:false, view:null};
 
 export function kosxEmojiFrame(index, reducedMotion = false) {
   if (reducedMotion) return 0;
@@ -190,7 +195,8 @@ export function renderHomeShowcase(app, state, {now} = {}) {
     : view === 'week' ? renderWeek(app, state, selection)
     : view === 'kept' ? renderKept(app, state, selection)
     : renderLatest(app, state, selection);
-  return `<div class="home-showcase">${renderKosxStrip(app)}<div class="home-hero">${signature}${renderBoostWatermark(app)}</div>${body}${renderKosxFooter()}</div>`;
+  const cranial = renderCranialStage(app, selection.latest, view === 'latest');
+  return `<div class="home-showcase">${renderKosxStrip(app)}<div class="home-hero"><div class="home-hero-mast">${signature}${renderBoostWatermark(app)}</div>${cranial}</div>${body}${renderKosxFooter()}</div>`;
 }
 
 function renderKosxStrip(app) {
@@ -215,7 +221,207 @@ function renderBoostWatermark(app) {
 
 function renderSignature() {
   const letters = ['L', 'e', 'v', 'i', 'f', 'l', 'o', 'w'];
-  return `<section class="levi-signature" aria-labelledby="levi-flow-title"><h1 id="levi-flow-title" class="levi-flow" aria-label="Levi flow">${letters.map((letter, index) => `<span${index === 4 ? ' class="levi-word"' : ''}>${letter}</span>`).join('')}</h1><svg class="levi-scribble" viewBox="0 0 360 28" aria-hidden="true"><path d="M6 16c28-12 42 10 70 2 24-8 36 12 62 4 22-6 40 10 66 2 28-8 48 12 78 0" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></section>`;
+  return `<section class="levi-signature" aria-labelledby="levi-flow-title"><h1 id="levi-flow-title" class="levi-flow" aria-label="Levi flow">${letters.map((letter, index) => `<span${index === 4 ? ' class="levi-word"' : ''}>${letter}</span>`).join('')}</h1><svg class="levi-scribble" viewBox="0 0 360 28" aria-hidden="true"><path d="M6 16c28-12 42 10 70 2 24-8 36 12 62 4 22-6 40 10 66 2 28-8 48 12 78 0" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg><p class="levi-kicker">LEVI</p></section>`;
+}
+
+// Alternate newest essence posts across the two open heads, up to three each.
+// An empty head is omitted so there is no blank slot.
+export function splitCranialEntries(entries) {
+  const list = Array.isArray(entries) ? entries.filter(Boolean).slice(0, CRANIAL_PER_HEAD * 2) : [];
+  const left = [], right = [];
+  list.forEach((entry, index) => (index % 2 === 0 ? left : right).push(entry));
+  return {left, right};
+}
+
+// Scroll progress 0–1. Later cards in a stack leave after the front card.
+// Ease-in keeps the stack in the heads until the scroll commits, then they arrive together.
+export function cranialFlightT(progress, stackIndex) {
+  const lead = Math.min(CRANIAL_PER_HEAD - 1, Math.max(0, Number(stackIndex) || 0)) * 0.1;
+  const raw = (Number(progress) - lead) / 0.8;
+  const t = Math.min(1, Math.max(0, raw));
+  return t * t;
+}
+
+export function placeCranialCard(card, anchorRect, targetRect, t) {
+  const start = anchorRect || {left:0, top:0, width:1, height:1};
+  const end = targetRect || {left:start.left, top:start.top + 48, width:start.width, height:start.height};
+  const amount = Number.isFinite(t) ? Math.min(1, Math.max(0, t)) : 0;
+  const left = start.left + (end.left - start.left) * amount;
+  const top = start.top + (end.top - start.top) * amount;
+  const width = start.width + (end.width - start.width) * amount;
+  const height = start.height + (end.height - start.height) * amount;
+  card.style.position = 'fixed';
+  card.style.left = `${left}px`;
+  card.style.top = `${top}px`;
+  card.style.width = `${Math.max(width, 1)}px`;
+  card.style.height = `${Math.max(height, 1)}px`;
+  card.style.margin = '0';
+  card.style.transform = 'none';
+  card.style.zIndex = '30';
+  card.style.pointerEvents = 'none';
+  const fade = amount >= 1 ? 0 : amount > 0.9 ? 1 - (amount - 0.9) / 0.1 : 1;
+  card.style.opacity = String(fade);
+}
+
+function renderCranialStage(app, entries, cards) {
+  const art = `<img class="cranial-art" src="${CRANIAL_ART}" width="2048" height="2048" alt="" aria-hidden="true">`;
+  if (!cards) return `<div class="cranial-stage" data-cranial-stage>${art}</div>`;
+  const split = splitCranialEntries(entries);
+  return `<div class="cranial-stage" data-cranial-stage>${art}${renderCranialBowl(app, 'left', split.left)}${renderCranialBowl(app, 'right', split.right)}</div>`;
+}
+
+function renderCranialBowl(app, side, entries) {
+  if (!entries.length) return '';
+  return `<div class="cranial-bowl cranial-bowl-${side}" data-cranial-bowl="${side}" inert aria-hidden="true">${entries.map((entry, index) => renderCranialCard(app, entry, index)).join('')}</div>`;
+}
+
+function renderCranialCard(app, entry, index) {
+  const e = value => app.escapeHtml(value);
+  const item = entry.post.item;
+  const title = item.title || '来源未提供标题';
+  const image = articleCover(item) || coverImage(entry.post);
+  const id = e(item.id);
+  const author = authorCue(item);
+  const cover = image ? `<img class="cranial-cover" src="${e(image.url)}" alt="" decoding="async" referrerpolicy="no-referrer">` : '';
+  return `<div class="cranial-slot" style="--stack:${index}" data-cranial-anchor="${id}"><article class="cranial-card" data-cranial-card data-cranial-id="${id}" data-cranial-stack="${index}">${cover}<p class="cranial-title">${e(title)}</p>${author ? `<p class="cranial-author">${e(author)}</p>` : ''}</article></div>`;
+}
+
+function cranialSelector(value) {
+  const text = String(value ?? '');
+  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') return CSS.escape(text);
+  return text.replace(/["\\]/g, '\\$&');
+}
+
+function cranialReduced(view) {
+  return view?.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches === true;
+}
+
+function cranialProgress(view) {
+  const y = view?.scrollY ?? view?.pageYOffset ?? 0;
+  return Math.min(1, Math.max(0, (Number(y) || 0) / CRANIAL_SCRUB_PX));
+}
+
+function cranialMeasure(node) {
+  const rect = node.getBoundingClientRect();
+  return {left:rect.left, top:rect.top, width:rect.width, height:rect.height};
+}
+
+function cranialLayer(doc) {
+  let layer = doc.getElementById('cranial-flight-root');
+  if (layer) return layer;
+  layer = doc.createElement('div');
+  layer.id = 'cranial-flight-root';
+  layer.setAttribute('aria-hidden', 'true');
+  layer.style.pointerEvents = 'none';
+  try { layer.inert = true; } catch { /* Older documents still keep the cards out of tab order via the bowl. */ }
+  doc.body.appendChild(layer);
+  return layer;
+}
+
+function cranialCardNodes(doc, stage) {
+  const layer = doc.getElementById('cranial-flight-root');
+  const parked = stage?.querySelectorAll?.('[data-cranial-card]') || [];
+  const flying = layer?.querySelectorAll?.('[data-cranial-card]') || [];
+  return [...parked, ...flying];
+}
+
+function restoreCranialCards(stage) {
+  const doc = stage?.ownerDocument;
+  const layer = doc?.getElementById('cranial-flight-root');
+  if (!layer) return;
+  for (const card of [...layer.querySelectorAll('[data-cranial-card]')]) {
+    const anchor = stage.querySelector(`[data-cranial-anchor="${cranialSelector(card.getAttribute('data-cranial-id'))}"]`);
+    card.removeAttribute('style');
+    if (anchor) anchor.appendChild(card);
+    else card.remove();
+  }
+  layer.remove();
+}
+
+function applyCranialFrame(doc, progress) {
+  const stage = doc.querySelector('[data-cranial-stage]');
+  if (!stage) return;
+  const cards = cranialCardNodes(doc, stage);
+  if (!cards.length) return;
+  const layer = cranialLayer(doc);
+  for (const card of cards) {
+    if (card.parentElement !== layer) layer.appendChild(card);
+    const id = card.getAttribute('data-cranial-id');
+    const anchor = stage.querySelector(`[data-cranial-anchor="${cranialSelector(id)}"]`);
+    if (!anchor) continue;
+    const target = doc.getElementById(`home-card-latest-${id}`);
+    const t = cranialFlightT(progress, card.getAttribute('data-cranial-stack'));
+    placeCranialCard(card, cranialMeasure(anchor), target ? cranialMeasure(target) : null, t);
+  }
+}
+
+function finishCranial(doc, {landed} = {}) {
+  const stage = doc.querySelector('[data-cranial-stage]');
+  const ids = cranialCardNodes(doc, stage).map(card => card.getAttribute('data-cranial-id')).filter(Boolean);
+  doc.getElementById('cranial-flight-root')?.remove();
+  cranialState.phase = 'done';
+  stage?.classList.add('is-settled');
+  if (!landed) return;
+  for (const id of ids) doc.getElementById(`home-card-latest-${id}`)?.classList.add('is-cranial-landed');
+}
+
+function onCranialScroll() {
+  const view = cranialState.view || globalThis;
+  const doc = view.document;
+  if (!doc || cranialState.phase === 'done') return;
+  const stage = doc.querySelector('[data-cranial-stage]');
+  if (!stage || stage.dataset.cranialMode === 'reduced') return;
+  if (!cranialCardNodes(doc, stage).length) return;
+  const progress = cranialProgress(view);
+  if (progress <= 0) {
+    restoreCranialCards(stage);
+    cranialState.phase = 'rest';
+    return;
+  }
+  cranialState.phase = 'scrub';
+  applyCranialFrame(doc, progress);
+  if (progress >= 1) finishCranial(doc, {landed:true});
+}
+
+export function resetCranialFlight() {
+  cranialState.phase = 'rest';
+  const doc = cranialState.view?.document || globalThis.document;
+  doc?.getElementById?.('cranial-flight-root')?.remove();
+}
+
+export function mountCranialFlight(root = globalThis.document) {
+  if (!root?.querySelector) return;
+  const stage = root.querySelector('[data-cranial-stage]');
+  if (!stage) return;
+  const view = root.defaultView || globalThis;
+  cranialState.view = view;
+  if (cranialState.phase === 'done') {
+    stage.classList.add('is-settled');
+    return;
+  }
+  if (cranialReduced(view)) {
+    stage.dataset.cranialMode = 'reduced';
+    restoreCranialCards(stage);
+    return;
+  }
+  const doc = root;
+  const progress = cranialProgress(view);
+  const hasCards = !!stage.querySelector('[data-cranial-card]');
+  if (hasCards && progress >= 1) {
+    finishCranial(doc, {landed:false});
+    return;
+  }
+  if (cranialState.phase === 'scrub' || (hasCards && progress > 0)) {
+    doc.getElementById('cranial-flight-root')?.remove();
+    if (progress <= 0) cranialState.phase = 'rest';
+    else {
+      cranialState.phase = 'scrub';
+      applyCranialFrame(doc, progress);
+    }
+  }
+  if (cranialState.listening) return;
+  view.addEventListener?.('scroll', onCranialScroll, {passive:true});
+  cranialState.listening = true;
 }
 
 function yesterdayNote(selection) {

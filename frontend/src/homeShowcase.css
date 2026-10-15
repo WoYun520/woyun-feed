@@ -110,8 +110,12 @@ body:has(.workspace-shell[data-workspace-tab="today"]) { background: var(--home-
 .kosx-status:empty { display: none; }
 .home-showcase { position: relative; container-type: inline-size; }
 .home-hero {
+  position: relative; display: flex; flex-direction: column; justify-content: flex-start; align-items: center;
+  min-height: 0; padding: 8px 0 12px;
+}
+.home-hero-mast {
   position: relative; display: flex; justify-content: center; align-items: center;
-  min-height: 148px; padding: 8px 0 4px;
+  width: 100%; min-height: 132px;
 }
 .boost-watermark {
   position: absolute; top: 0; right: 0; z-index: 1; display: flex; flex-direction: column; align-items: flex-end;
@@ -146,6 +150,49 @@ body:has(.workspace-shell[data-workspace-tab="today"]) { background: var(--home-
 .levi-flow span:nth-child(7) { transform: translate(-6px, 8px) rotate(-10deg); }
 .levi-flow span:nth-child(8) { transform: translate(8px, -4px) rotate(8deg); }
 .levi-scribble { display: block; width: 220px; height: 22px; margin: 2px auto 0; color: var(--home-ink, #171917); }
+.levi-kicker {
+  margin: 8px 0 0; color: #62675d; font-size: 11px; font-weight: 650;
+  letter-spacing: .28em; line-height: 1;
+}
+/* Bowls sit in the open ellipses of couple-open-heads.png (2048 square).
+   Card bottoms rest on each lower rim; the stack rises through the opening. */
+.cranial-stage { position: relative; width: min(920px, 100%); margin: 0 auto; }
+.cranial-art { display: block; width: 100%; height: auto; }
+.cranial-bowl { position: absolute; height: 28%; pointer-events: none; }
+.cranial-bowl-left { left: 23.9%; width: 18.9%; bottom: 66.4%; }
+.cranial-bowl-right { left: 58.2%; width: 18.8%; bottom: 62.6%; }
+.cranial-slot {
+  position: absolute; left: 10%; right: 10%; bottom: 0; z-index: calc(4 - var(--stack, 0));
+  aspect-ratio: 210 / 297;
+  transform: translateY(calc(var(--stack, 0) * -8%)) rotate(calc(var(--stack, 0) * -2deg));
+  transform-origin: center bottom;
+}
+.cranial-card {
+  position: absolute; inset: 0; display: flex; flex-direction: column; overflow: hidden;
+  background: #ffffff; border: 1px solid #171917; border-radius: 8px;
+  box-shadow: 0 10px 22px rgba(23, 25, 23, .14);
+}
+.cranial-cover {
+  display: block; width: 100%; height: 46%; flex: 0 0 46%; object-fit: cover; background: #f5f5f2;
+}
+.cranial-title {
+  margin: 0; padding: 6px 7px 0; color: #171917;
+  font-size: clamp(8px, 1.15vw, 12px); font-weight: 650; line-height: 1.3; letter-spacing: -.02em;
+  display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden;
+}
+.cranial-card:not(:has(.cranial-cover)) .cranial-title {
+  padding-top: 10px; font-family: var(--font-serif), "Songti SC", "Noto Serif CJK SC", serif;
+}
+.cranial-author {
+  margin: 2px 0 0; padding: 0 7px 6px; color: #62675d;
+  font-size: clamp(7px, .9vw, 10px); line-height: 1.3;
+}
+.cranial-stage.is-settled .cranial-bowl { visibility: hidden; }
+.cover-card.is-cranial-landed { animation: cranial-land 700ms ease; }
+@keyframes cranial-land {
+  from { box-shadow: 0 0 0 2px rgba(23, 25, 23, .45); }
+  to { box-shadow: 0 0 0 0 rgba(23, 25, 23, 0); }
+}
 .home-band { margin: 0 0 36px; }
 .home-band-heading { margin: 0 0 18px; }
 .home-band-heading h2, .home-subhead { margin: 0; font-family: var(--font-serif); font-weight: 600; letter-spacing: -.03em; color: var(--home-ink, #171917); }
@@ -267,7 +314,8 @@ body:has(.workspace-shell[data-workspace-tab="today"]) { background: var(--home-
   .kosx-middle { gap: 16px; }
   .cover-grid { grid-template-columns: 1fr; gap: 16px; }
   .cover-quote { font-size: 22px; }
-  .home-hero { min-height: 112px; }
+  .home-hero { min-height: 0; }
+  .home-hero-mast { min-height: 104px; }
   .boost-watermark-count { font-size: clamp(64px, 18vw, 80px); }
   .levi-flow { font-size: clamp(36px, 11vw, 44px); }
   .home-slogan { margin-top: 20px; }
@@ -280,4 +328,7 @@ body:has(.workspace-shell[data-workspace-tab="today"]) { background: var(--home-
 @media (prefers-reduced-motion: reduce) {
   .home-slogan-line { animation: none; }
   .levi-flow span { transform: none; }
+  .cranial-slot { transform: none; }
+  .cranial-card { transition: none; animation: none; }
+  .cover-card.is-cranial-landed { animation: none; }
 }
