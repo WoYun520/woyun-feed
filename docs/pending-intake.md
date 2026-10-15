@@ -70,13 +70,21 @@ curl -sS 'https://woyun-feed-preview.hhzovo66.workers.dev/api/dot/pending' \
 
 ## 账号池从哪里来
 
-账号池是 [https://impact.kosx.ai/api/members](https://impact.kosx.ai/api/members) 的公开 `members[].handle`。Worker 不在每次请求时访问这个地址，也只保存账号，不保存粉丝数、显示名或其他字段。名单在 `frontend/kosx-pool.js`。更新时在仓库根目录执行：
+账号池是 [https://impact.kosx.ai/api/members](https://impact.kosx.ai/api/members) 的公开 `members[].handle`。进料自动过审只认这份账号名单，不认粉丝数。`latest_followers`、显示名和其他字段都丢掉，不写入 KV，也不写入公开首页。
+
+预览 Worker 把小写 handle 存在私有 KV `DOT_INBOX` 的键 `kosx_pool_handles`。已有的定时任务（每天 01:00 与 13:00 UTC，北京时间 09:00 与 21:00）会拉取名单并覆盖这个键。投递到达时，缓存不存在或早于一小时，也会当场再拉一次。拉取成功后，名单变化不必再部署才能用于自动过审。
+
+拉取失败时继续用上一次成功写入的缓存。还没有可用缓存时，用仓库里的 `frontend/kosx-pool.js`。名单拉取失败不会让进料接口失败，也不会把这一次投递记成失败。
+
+首页上的 KOSX 标记仍读随静态资源发布的 `kosx-pool.js`，不读这份 KV。它要等下一次构建部署才换。
+
+仓库里的后备名单用下面的命令从同一接口刷新。脚本只写入小写 handle，并同时更新 `frontend/kosx-pool.js` 与 `public-dist/kosx-pool.js`。确认 diff 里没有粉丝数之后再提交。
 
 ```sh
 node frontend/refresh-kosx-pool.mjs
 ```
 
-脚本只写入小写 handle。确认 diff 里没有粉丝数之后再提交。预览 Worker 要等这次提交部署之后才会用新名单。部署步骤见 [预览部署](preview-deploy.md)。不要部署名为 `woyun` 的 Worker。
+部署步骤见 [预览部署](preview-deploy.md)。不要部署名为 `woyun` 的 Worker。这次代码要部署一次之后，账号加入或退出万粉计划才不必为了进料自动过审再次部署。
 
 ## 给 Overheard 的结果怎么读
 

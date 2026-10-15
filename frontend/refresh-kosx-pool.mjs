@@ -1,25 +1,16 @@
 // Refresh the committed KOSX handle allowlist from the public impact roster.
-// The Worker reads frontend/kosx-pool.js. It does not fetch this URL per request.
+// Intake auto-approve reads a KV cache of the same handles. This file is the
+// fallback when that cache is missing and the live fetch fails.
 // Follower counts are dropped on purpose and must not be written back.
 import { writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
+import { KOSX_POOL_SOURCE, handlesFromRoster } from './kosx-pool-roster.js';
+export { KOSX_POOL_SOURCE, handlesFromRoster };
 
-export const KOSX_POOL_SOURCE = 'https://impact.kosx.ai/api/members';
-const target = fileURLToPath(new URL('./kosx-pool.js', import.meta.url));
-const handlePattern = /^[A-Za-z0-9_]{1,15}$/;
-
-export function handlesFromRoster(body) {
-  if (!body || !Array.isArray(body.members) || !body.members.length) throw Error('impact roster 没有 members 数组。');
-  const handles = [];
-  for (const member of body.members) {
-    const handle = typeof member?.handle === 'string' ? member.handle : '';
-    if (!handlePattern.test(handle)) throw Error(`impact roster 含有不能用作 X 账号的 handle：${handle}`);
-    handles.push(handle.toLowerCase());
-  }
-  const unique = [...new Set(handles)].sort();
-  if (unique.length !== handles.length) throw Error('impact roster 有重复 handle。');
-  return unique;
-}
+const targets = [
+  fileURLToPath(new URL('./kosx-pool.js', import.meta.url)),
+  fileURLToPath(new URL('../public-dist/kosx-pool.js', import.meta.url)),
+];
 
 export function renderPoolModule(handles, syncedAt) {
   const lines = handles.map(handle => `  '${handle}',`).join('\n');
@@ -43,6 +34,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   if (!response.ok) throw Error(`impact roster 返回 ${response.status}。`);
   const handles = handlesFromRoster(await response.json());
   const syncedAt = new Date().toISOString();
-  await writeFile(target, renderPoolModule(handles, syncedAt));
-  console.log(`已写入 ${handles.length} 个账号到 frontend/kosx-pool.js（${syncedAt}）。没有粉丝数。`);
+  const moduleText = renderPoolModule(handles, syncedAt);
+  await Promise.all(targets.map(file => writeFile(file, moduleText)));
+  console.log(`已写入 ${handles.length} 个账号到 frontend/kosx-pool.js 和 public-dist/kosx-pool.js（${syncedAt}）。没有粉丝数。`);
 }

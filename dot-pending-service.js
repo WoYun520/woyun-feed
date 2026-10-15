@@ -3,7 +3,8 @@ import { containsCredentialText } from './frontend/src/contentPrivacy.js';
 import { dotInboxHash } from './dot-inbox-service.js';
 import { PUBLIC_FEED_KEY, loadPublicSeed } from './frontend/cloud-feed-service.js';
 import { attachKosxApproved, kosxPublicItem } from './frontend/kosx-public-posts.js';
-import { isKosxPoolHandle } from './frontend/kosx-pool.js';
+import { KOSX_POOL_HANDLES } from './frontend/kosx-pool.js';
+import { loadKosxPoolHandles } from './frontend/kosx-pool-cache.js';
 import { wouldEnterUnderrated } from './frontend/src/homeShowcase.js';
 import { PRIVATE_CONTENT } from './frontend/public-feed-data.js';
 import { normalizeCoverUrl } from './frontend/src/postMedia.js';
@@ -295,10 +296,14 @@ function publicView(record, {includeNote}) {
   };
 }
 
-function intakeView(record, {includeNote, existing, held}) {
+function inPool(handles, value) {
+  return typeof value === 'string' && handles.has(value.toLowerCase());
+}
+
+function intakeView(record, {includeNote, existing, held, handles}) {
   const view = {...publicView(record, {includeNote}), existing};
   if (includeNote) {
-    view.pool = isKosxPoolHandle(record.author_handle);
+    view.pool = inPool(handles, record.author_handle);
     view.published = record.status === 'approved';
   }
   if (held) view.message = '这条会进入昨日最被低估，保持待筛选，需接收码人工过审。';
@@ -391,11 +396,11 @@ function canRelease(item) {
 // Delivery of a pool handle can publish onto the chronological cover.
 // Homepage paste, non-members, rejected rows, and anything that would enter
 // 昨日最被低估 stay pending for the review code. Follower counts are not read.
-async function applyPoolRelease(env, posts, existing, delivery) {
+async function applyPoolRelease(env, posts, existing, delivery, handles) {
   const held = new Set();
   const promoted = new Set();
   if (!delivery) return {held, promoted, published:false};
-  const pendingPool = posts.map(post => existing.get(post.key)).filter(record => record?.source === 'delivery' && record.status === 'pending' && isKosxPoolHandle(record.author_handle));
+  const pendingPool = posts.map(post => existing.get(post.key)).filter(record => record?.source === 'delivery' && record.status === 'pending' && inPool(handles, record.author_handle));
   const repair = posts.some(post => {
     const record = existing.get(post.key);
     return record?.source === 'delivery' && record.status === 'approved' && record.approval === 'pool';
@@ -579,9 +584,14 @@ export async function handleDotPendingRequest(request, env) {
       existing.set(post.key, next);
       if (next.status === 'approved') refreshed.push(next.key);
     }
-    const {held, promoted, published} = await applyPoolRelease(env, posts, existing, delivery);
+    let handles = new Set(KOSX_POOL_HANDLES);
+    if (delivery) {
+      try { handles = await loadKosxPoolHandles(env); }
+      catch { handles = new Set(KOSX_POOL_HANDLES); }
+    }
+    const {held, promoted, published} = await applyPoolRelease(env, posts, existing, delivery, handles);
     if (refreshed.length && !published) await publishApproved(env);
-    const results = posts.map(post => intakeView(existing.get(post.key), {includeNote:delivery, existing:!created.includes(post), held:held.has(post.key)}));
+    const results = posts.map(post => intakeView(existing.get(post.key), {includeNote:delivery, existing:!created.includes(post), held:held.has(post.key), handles}));
     const changed = created.length || promoted.size;
     if (!batched) return json(results[0], changed ? 201 : 200);
     const status = results.every(row => row.status === 'approved') ? 'approved' : results.some(row => row.status === 'approved') ? 'partial' : 'pending';
