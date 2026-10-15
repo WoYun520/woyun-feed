@@ -637,6 +637,8 @@ test('cranial hero stacks real latest essence cards inside the open heads', () =
   const css = readFileSync(new URL('./src/homeShowcase.css', import.meta.url), 'utf8');
   assert.match(css, /\.cranial-card\s*\{[^}]*transform:\s*rotate\(calc\(var\(--fan, 0\) \* 1deg\)\)/);
   assert.match(css, /\.cranial-card\s*\{[^}]*transform-origin:\s*center bottom/);
+  assert.match(css, /\.cranial-title\s*\{[^}]*-webkit-line-clamp:\s*2/);
+  assert.match(css, /\.cranial-title\s*\{[^}]*line-clamp:\s*2/);
   assert.match(css, /\.cranial-stage\.is-settled \.cranial-lid\s*\{[^}]*visibility:\s*visible/);
   assert.match(css, /\.cranial-stage\.is-settled \.cranial-bowl\s*\{[^}]*visibility:\s*hidden/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.cranial-card\s*\{[^}]*animation:\s*none/);
@@ -645,7 +647,7 @@ test('cranial hero stacks real latest essence cards inside the open heads', () =
   assert.match(appSource, /mountCranialFlight\(document\)/);
 });
 
-test('cranial flight returns cards before landing and caps the openings after', () => {
+test('cranial flight returns cards before landing, caps the openings, and restores the fan on scroll-back', () => {
   resetCranialFlight();
   const matchSel = (node, sel) => {
     const attr = sel.match(/^\[([^\]="]+)(?:="([^"]*)")?\]$/);
@@ -660,6 +662,7 @@ test('cranial flight returns cards before landing and caps the openings after', 
     };
     node.classList = {
       add(name){ const parts = new Set(node.className.split(/\s+/).filter(Boolean)); parts.add(name); node.className = [...parts].join(' '); },
+      remove(...names){ const parts = new Set(node.className.split(/\s+/).filter(Boolean)); for (const name of names) parts.delete(name); node.className = [...parts].join(' '); },
       contains(name){ return node.className.split(/\s+/).includes(name); },
     };
     node.setAttribute = (name, value) => { node.attributes.set(name, String(value)); if (name === 'id') node.id = String(value); };
@@ -703,6 +706,7 @@ test('cranial flight returns cards before landing and caps the openings after', 
   card.setAttribute('data-cranial-card', '');
   card.setAttribute('data-cranial-id', 'a1');
   card.setAttribute('data-cranial-stack', '0');
+  card.setAttribute('data-cranial-fan', '-12');
   target.setAttribute('id', 'home-card-latest-a1');
   const listeners = [];
   const view = {
@@ -734,11 +738,31 @@ test('cranial flight returns cards before landing and caps the openings after', 
   scroll(448);
   assert.equal(stage.classList.contains('is-settled'), true);
   assert.equal(doc.getElementById('cranial-flight-root'), null);
-  assert.equal(anchor.children.includes(card), false);
+  assert.equal(anchor.children.includes(card), true);
+  assert.equal(card.getAttribute('data-cranial-fan'), '-12');
+  assert.equal(card.style.position, undefined);
   assert.equal(target.classList.contains('is-cranial-landed'), true);
-  scroll(0);
+  scroll(200);
   assert.equal(stage.classList.contains('is-settled'), true);
-  assert.equal(anchor.children.includes(card), false);
+  assert.equal(anchor.children.includes(card), true);
+  scroll(0);
+  assert.equal(stage.classList.contains('is-settled'), false);
+  assert.equal(anchor.children.includes(card), true);
+  assert.equal(card.parentElement, anchor);
+  assert.equal(card.getAttribute('data-cranial-fan'), '-12');
+  assert.equal(card.style.position, undefined);
+  assert.equal(doc.getElementById('cranial-flight-root'), null);
+  stage.rect = {left:0, top:40, width:400, height:500};
+  view.innerHeight = 800;
+  scroll(160);
+  assert.equal(stage.classList.contains('is-settled'), false);
+  assert.equal(anchor.children.includes(card), true);
+  assert.equal(card.style.position, undefined);
+  stage.rect = {left:0, top:-700, width:400, height:500};
+  scroll(448);
+  assert.equal(stage.classList.contains('is-settled'), true);
+  assert.equal(anchor.children.includes(card), true);
+  assert.equal(doc.getElementById('cranial-flight-root'), null);
   resetCranialFlight();
 });
 
