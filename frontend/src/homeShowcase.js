@@ -111,6 +111,29 @@ function isHomepageEssence(item) {
   return Array.isArray(refs) && refs.length === 1 && refs[0] === KOSX_PUBLIC_SOURCE_ID;
 }
 
+// The stream keeps the longest excerpt when one status is both a public board
+// post and an approved row. 最新精华 still follows the approved row.
+function latestEssence(entry) {
+  const items = [entry?.post?.item, ...(Array.isArray(entry?.post?.records) ? entry.post.records : [])];
+  return items.some(isHomepageEssence);
+}
+
+// Approval writes source_item_time to the review clock and leaves published_at
+// on the original post. 最新精华 uses the later of the two, so a just-approved
+// older original still enters the 18. Yesterday and the week shelf stay on
+// the original post clock.
+function latestPlacementMs(entry) {
+  const clocks = [entry?.time?.ms || 0];
+  const items = [entry?.post?.item, ...(Array.isArray(entry?.post?.records) ? entry.post.records : [])];
+  for (const item of items) {
+    if (!isHomepageEssence(item)) continue;
+    if (finite(item.source_item_time)) clocks.push(Date.parse(item.source_item_time));
+    if (finite(item.published_at)) clocks.push(Date.parse(item.published_at));
+    if (finite(item.captured_at)) clocks.push(Date.parse(item.captured_at));
+  }
+  return Math.max(...clocks);
+}
+
 const WEEK_ARTICLE_TYPES = new Set(['文章', '教程指南']);
 const WEEK_REJECT_TYPES = new Set(['短帖', '产品安利', '避坑']);
 
@@ -251,9 +274,11 @@ export function selectHomeShowcase(state, {now} = {}) {
   const yesterdayEntries = dated.filter(entry => onDay(entry, yesterday) && isHomepageEssence(entry.post.item));
   const weekEntries = dated.filter(entry => weekKeys.includes(beijingDateKey(entry.time.ms)) && isHomepageEssence(entry.post.item));
   const week = pickWeek(weekEntries);
-  // 「最新精华」uses the same homepage-essence line as 「昨日全部」, newest first.
-  // A short list stays short: public-stream heat posts do not fill the cap.
-  const latest = dated.filter(entry => isHomepageEssence(entry.post.item)).slice(0, HOME_LATEST_LIMIT);
+  // 「最新精华」uses the same homepage-essence line as 「昨日全部」. Order is
+  // when the post joined that line if approval is later than the original,
+  // otherwise the original post time. A short list stays short: public-stream
+  // heat posts do not fill the cap.
+  const latest = dated.filter(latestEssence).sort((a, b) => latestPlacementMs(b) - latestPlacementMs(a) || byRecent(a, b)).slice(0, HOME_LATEST_LIMIT);
   const under = pickPinnedUnderrated(yesterdayEntries, state?.underratedPins ?? state?.underrated_pins, yesterday);
   const kept = pickKept(dated);
   if (before !== state) throw Error('首页筛选不应替换资料对象。');

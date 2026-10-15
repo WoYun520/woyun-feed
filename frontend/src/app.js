@@ -247,7 +247,7 @@ class PersonalFeedApp {
   }
 
   shouldDeferBackgroundRender() {
-    if (this.dotBusy) return true;
+    if (this.dotBusy || this.reviewQueue?.busy) return true;
     if (document.querySelector?.('.item-full-summary[open]')) return true;
     if (this.currentTab === 'candidates' && (this.dotSelectedIds?.size
       || document.querySelector?.('.dot-candidate-details[open], .dot-candidate-fulltext[open]')
@@ -593,6 +593,12 @@ class PersonalFeedApp {
       this.dotMessage = status === 'approved'
         ? (underrated_candidate ? '已过审上首页，并记为低估栏候选。尚未钉进昨日低估栏。' : '已过审上首页。')
         : '已略过，不会出现在公开首页。';
+      // The homepage reads PUBLIC_FEED. Reload it before the next 最新精华 paint
+      // so this decision is not stuck on the feed from when the page opened.
+      if (feedAdapter.publicPreview) {
+        try { await feedAdapter.loadFeed(true); }
+        catch { /* The decision is already stored. The next successful read shows it. */ }
+      }
     } catch (error) {
       this.reviewQueue.error = error?.message || '过审没有完成。';
     } finally {
