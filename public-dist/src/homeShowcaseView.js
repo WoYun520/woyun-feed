@@ -345,10 +345,26 @@ function homepageCardTitle(item) {
   return handle ? `@${handle} 的精华帖` : '来源未提供标题';
 }
 
+// Intake sometimes glues a type tag onto a real sentence, as in
+// 「宏观黑板微观树（文章卡）」. The tag is not the excerpt. A classifier
+// blurb such as「文章卡·收藏5/点赞18·Levi样例·收藏偏低但类型优先」still drops.
+function withoutClassifierTag(line) {
+  const text = line.trim();
+  const tagged = text
+    .replace(/\s*[（(]\s*(?:文章卡|Article卡)\s*[）)]\s*$/u, '')
+    .replace(/\s*(?:文章卡|Article卡)\s*$/u, '');
+  if (tagged === text) return text;
+  return tagged.replace(/[：:·\s]+$/u, '').trim();
+}
+
 function homepageCardExcerpt(summary) {
   const excerpt = coverExcerpt(summary);
   if (!excerpt) return '';
-  return excerpt.split(/\n+/).map(line => line.trim()).filter(line => line && !isReviewSignalCopy(line)).join('\n');
+  return excerpt.split(/\n+/).map(line => {
+    const cleaned = withoutClassifierTag(line);
+    if (!cleaned || isReviewSignalCopy(cleaned)) return '';
+    return cleaned;
+  }).filter(Boolean).join('\n');
 }
 
 function renderPostCard(app, state, entry, group) {

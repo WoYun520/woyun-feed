@@ -731,6 +731,80 @@ test('昨日最被低估 cards use @handle的精华帖 and drop classifier signa
   assert.doesNotMatch(real, /@kept_name 的精华帖/);
 });
 
+test('昨日最被低估 cover cards show a real excerpt under @handle and still drop signal blurbs', () => {
+  const signalTitle = '文章卡·收藏5/点赞18·Levi样例·收藏偏低但类型优先';
+  const signalNote = '教程·可执行提示词·互动尚低';
+  const covered = post('20944121', '2026-10-09T04:00:00.000Z', {
+    origin:'kosx_approved', author_handle:'ErwinWu000', review_type:'文章', has_article:true,
+    url:'https://x.com/ErwinWu000/status/20944121',
+    title:signalTitle,
+    summary:'多智能体协作：主从派发 vs 黑板模式，宏观黑板微观树（文章卡）',
+    cover_url:'https://cdn.example.com/covers/underrated-article.jpg',
+  });
+  const signalsOnly = post('20944124', '2026-10-09T02:00:00.000Z', {
+    origin:'kosx_approved', author_handle:'quiet_user', review_type:'文章', has_article:true,
+    url:'https://x.com/quiet_user/status/20944124',
+    title:signalTitle, summary:signalNote,
+    cover_url:'https://cdn.example.com/covers/signal-only.jpg',
+  });
+  const shown = renderHomeShowcase(app(), {...state([covered, signalsOnly]), underratedPins:[
+    {id:covered.id, key:`x:${covered.id}`, day:'2026-10-09'},
+    {id:signalsOnly.id, key:`x:${signalsOnly.id}`, day:'2026-10-09'},
+  ]});
+  const band = shown.slice(shown.indexOf('id="home-underrated"'));
+  const coveredCard = cardHtml(band, covered.id);
+  assert.match(coveredCard, /data-cover="media"/);
+  assert.match(coveredCard, /underrated-article\.jpg/);
+  assert.match(coveredCard, /@ErwinWu000 的精华帖/);
+  assert.match(coveredCard, /<p class="cover-excerpt">多智能体协作：主从派发 vs 黑板模式，宏观黑板微观树<\/p>/);
+  assert.doesNotMatch(coveredCard, /文章卡|收藏偏低|类型优先|互动尚低|可执行提示词|Levi样例|文章卡·收藏/);
+  const latestCard = cardHtml(shown.slice(shown.indexOf('id="home-latest"'), shown.indexOf('id="home-underrated"')), covered.id);
+  assert.match(latestCard, /<p class="cover-excerpt">多智能体协作：主从派发 vs 黑板模式，宏观黑板微观树<\/p>/);
+  const quietCard = cardHtml(band, signalsOnly.id);
+  assert.match(quietCard, /data-cover="media"/);
+  assert.match(quietCard, /@quiet_user 的精华帖/);
+  assert.doesNotMatch(quietCard, /cover-excerpt|cover-quote|文章卡|收藏偏低|可执行提示词|互动尚低|Levi样例/);
+  const glued = post('20944122', '2026-10-09T03:30:00.000Z', {
+    origin:'kosx_approved', author_handle:'cgnot996', review_type:'文章', has_article:true,
+    url:'https://x.com/cgnot996/status/20944122',
+    title:'@cgnot996 的精华帖',
+    summary:'逆向最大困难是说服 AI 帮你逆向：方法论文章卡',
+    cover_url:'https://cdn.example.com/covers/glued-article.jpg',
+  });
+  const clean = post('20944123', '2026-10-09T03:00:00.000Z', {
+    origin:'kosx_approved', author_handle:'ai_suxiaole', review_type:'教程指南',
+    url:'https://x.com/ai_suxiaole/status/20944123',
+    title:'@ai_suxiaole 的精华帖',
+    summary:'腾讯开源 AI Agent：本机可部署类似 WorkBuddy 的助手',
+    cover_url:'https://cdn.example.com/covers/workbuddy.jpg',
+  });
+  const styled = renderHomeShowcase(app(), {...state([glued, clean]), underratedPins:[
+    {id:glued.id, key:`x:${glued.id}`, day:'2026-10-09'},
+    {id:clean.id, key:`x:${clean.id}`, day:'2026-10-09'},
+  ]});
+  const styledBand = styled.slice(styled.indexOf('id="home-underrated"'));
+  const gluedCard = cardHtml(styledBand, glued.id);
+  assert.match(gluedCard, /<p class="cover-excerpt">逆向最大困难是说服 AI 帮你逆向：方法论<\/p>/);
+  assert.match(gluedCard, /@cgnot996 的精华帖/);
+  assert.doesNotMatch(gluedCard, /文章卡/);
+  const cleanCard = cardHtml(styledBand, clean.id);
+  assert.match(cleanCard, /data-cover="media"/);
+  assert.match(cleanCard, /<p class="cover-excerpt">腾讯开源 AI Agent：本机可部署类似 WorkBuddy 的助手<\/p>/);
+  assert.match(cleanCard, /@ai_suxiaole 的精华帖/);
+  const tagOnly = post('20944125', '2026-10-09T01:00:00.000Z', {
+    origin:'kosx_approved', author_handle:'empty_user', review_type:'文章', has_article:true,
+    url:'https://x.com/empty_user/status/20944125',
+    title:signalTitle, summary:'（文章卡）',
+    cover_url:'https://cdn.example.com/covers/tag-only.jpg',
+  });
+  const blank = renderHomeShowcase(app(), {...state([tagOnly]), underratedPins:[{id:tagOnly.id, key:`x:${tagOnly.id}`, day:'2026-10-09'}]});
+  const blankCard = cardHtml(blank.slice(blank.indexOf('id="home-underrated"')), tagOnly.id);
+  assert.match(blankCard, /data-cover="media"/);
+  assert.match(blankCard, /@empty_user 的精华帖/);
+  assert.doesNotMatch(blankCard, /cover-excerpt|cover-quote|文章卡|收藏偏低|可执行提示词|互动尚低/);
+  assert.doesNotMatch(`${band}\n${styledBand}\n${blankCard}`, /文章卡|收藏偏低|类型优先|互动尚低|可执行提示词|Levi样例|文章卡·收藏/);
+});
+
 test('essence cards drop stock evidence and bookmark counts, and keep a longer excerpt', () => {
   const long = ['第一行金句，讲清楚这件事。', '第二行还在卡片上。', '第三行只在摘录依据里，避免和套话混在一起。'].join('\n');
   const longerItem = post('9301', '2026-10-14T12:00:00.000Z', {
