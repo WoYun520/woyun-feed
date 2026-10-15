@@ -328,28 +328,32 @@ function authorCue(item) {
   return postAuthorLabel(item);
 }
 
-function bookmarkCount(item) {
-  const value = item?.bookmark_count;
-  return Number.isSafeInteger(value) && value >= 0 && value <= 1_000_000_000 ? value : null;
-}
-
 function quoteText(excerpt) {
   const lines = excerpt.split(/\n+/).map(line => line.replace(/\s+/g, ' ').trim()).filter(Boolean);
   if (lines.length > 1) return lines.slice(0, 2).join(' ');
   return excerpt.replace(/\s+/g, ' ').trim();
 }
 
+// The card face already shows the excerpt. Open the details only when that
+// face is shorter than the real excerpt. Heat gaps and "未核对" lines stay off the card.
+function cardEvidence(e, excerpt, mode) {
+  const full = typeof excerpt === 'string' ? excerpt.trim() : '';
+  if (!full) return '';
+  const collapsed = full.replace(/\s+/g, ' ').trim();
+  const visible = mode === 'media' ? shorten(full, 96) : quoteText(full);
+  if (!visible || visible === collapsed || visible.replace(/…$/, '') === collapsed) return '';
+  return `<details class="cover-evidence"><summary>摘录与时间依据</summary><p>${e(full)}</p></details>`;
+}
+
 function renderPostCard(app, state, entry, group) {
-  const post = entry.post, item = post.item, e = value => app.escapeHtml(value);
+  const post = entry.post, item = post.item;
   const title = item.title || '来源未提供标题';
   const excerpt = coverExcerpt(item.summary);
   const image = articleCover(item) || coverImage(post);
-  const heat = typeof item.heat_label === 'string' && item.heat_label.trim() ? item.heat_label.trim() : '';
-  const evidence = `<details class="cover-evidence"><summary>摘录与时间依据</summary><p>${e(excerpt || '来源未提供摘录。')}</p>${heat ? `<p>来源标注：${e(heat)}。未核对。</p>` : '<p>来源没有给出可展示的热度文字。</p>'}<p>${e(entry.time.label)}。未核对原帖，未实测。</p>${post.instruction?.eligible ? `<p>${e(post.instruction.label)}。这是摘录里的线索，不是实测。</p>` : ''}</details>`;
   return renderShowcaseCard(app, {
     group, item, title, excerpt, image, originalUrl:post.originalUrl, mediaKey:`${group}:${item.id}`,
     collection:collectionFor(state, post), names:sourceNames(entry, state).join('、'),
-    clock:cardClock(item, entry.time), saveId:`home-save-${group}-${item.id}`, evidence,
+    clock:cardClock(item, entry.time), saveId:`home-save-${group}-${item.id}`,
   });
 }
 
@@ -367,27 +371,26 @@ function renderKeptCard(app, state, item, group) {
   return renderShowcaseCard(app, {
     group, item, title, excerpt, image, originalUrl:item.original_url, mediaKey:`${group}:${item.id}`,
     collection:{saved, archived, itemId:item.id}, names:names.filter(Boolean).join('、') || '来源未提供',
-    clock:cardClock(item), saveId:`home-save-${group}-${item.id}`, evidence:'',
+    clock:cardClock(item), saveId:`home-save-${group}-${item.id}`,
   });
 }
 
 function renderShowcaseCard(app, spec) {
   const e = value => app.escapeHtml(value);
-  const {group, item, title, excerpt, image, originalUrl, mediaKey, collection, names, clock, saveId, evidence} = spec;
+  const {group, item, title, excerpt, image, originalUrl, mediaKey, collection, names, clock, saveId} = spec;
   const mode = image ? 'media' : excerpt ? 'quote' : 'plain';
   const id = e(item.id);
   const quote = quoteText(excerpt);
   const shown = clock.iso ? (app.formatTime ? app.formatTime(clock.iso) : clock.iso) : '';
   const kind = clock.iso && clock.label && clock.label !== '原帖发布时间' ? `<span class="cover-date-kind">${e(clock.label)}</span>` : '';
   const date = `<p class="cover-date">${kind}${clock.iso ? `<time datetime="${e(clock.iso)}">${e(shown)}</time>` : e(clock.label || '时间未提供')}</p>`;
-  const quoteBlock = quote ? `<blockquote class="cover-quote">${e(quote)}</blockquote>` : '';
+  const quoteBlock = quote ? `<blockquote class="cover-quote"><span class="cover-quote-text">${e(quote)}</span></blockquote>` : '';
   const excerptLine = mode === 'media' && excerpt ? `<p class="cover-excerpt">${e(shorten(excerpt, 96))}</p>` : '';
-  const bookmarks = bookmarkCount(item);
+  const evidence = cardEvidence(e, excerpt, mode);
   const author = authorCue(item);
   const cueBits = [
     kosxPoolBadge(item),
     author ? `<span class="cover-author">${e(author)}</span>` : '',
-    bookmarks !== null ? `<span class="cover-bookmarks">收藏 ${e(bookmarks.toLocaleString('zh-CN'))}</span>` : '',
     names ? `<span>${e(names)}</span>` : '',
   ].filter(Boolean);
   return `<article class="cover-card shape-card" id="home-card-${e(group)}-${id}" data-shape="card" data-home-card="${id}" data-home-group="${e(group)}" data-cover="${mode}">
