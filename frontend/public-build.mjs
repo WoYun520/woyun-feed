@@ -19,7 +19,7 @@ export const PUBLIC_FILES = ['assets/woyun-guides.png', ...KOSX_ASSETS, ...PUBLI
     'collectionViews.js', 'excerptViews.js', 'welcome.js', 'sourcePreferences.js', 'dailyHighlights.js', 'dailyHighlightsView.js', 'actionHighlights.css', 'materialStart.js', 'materialStart.css', 'feedSearch.js', 'feedSearchView.js', 'postQuality.js', 'postStream.js', 'postStreamView.js', 'postStream.css', 'postMedia.js', 'postMediaView.js', 'postMediaView.css', 'practicalMaterials.js', 'feedCache.js', 'feedLoadingView.js', 'homeShowcase.js', 'homeShowcaseView.js', 'homeShowcase.css'].map(file => 'src/' + file)];
 
 function auditText(content) { if (PRIVATE_CONTENT.test(content)) throw Error('发布文件出现私人路径或疑似凭据，未生成发布目录；请在本机检查。'); }
-const page = (title,body) => `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title} · 我的信息流</title><link rel="stylesheet" href="/src/styles.css"></head><body><main class="page-container" style="max-width:740px;padding-top:48px"><h1>${title}</h1>${body}<p><a href="/">← 回到信息流</a></p></main></body></html>`;
+const page = (title,body) => `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title} · Levi flow</title><link rel="stylesheet" href="/src/styles.css"></head><body><main class="page-container" style="max-width:740px;padding-top:48px"><h1>${title}</h1>${body}<p><a href="/">← 回到信息流</a></p></main></body></html>`;
 
 async function readLiveFeed(projectRoot) {
   try {
@@ -78,7 +78,7 @@ export async function buildPublic({ projectRoot = root, publishedAt } = {}) {
         if(file.endsWith('.jpg') && !(content[0]===0xff && content[1]===0xd8 && content[2]===0xff)) throw Error('公开实测图片格式不正确。');
         if(file.endsWith('.mp4') && content.subarray(4,8).toString('ascii')!=='ftyp') throw Error('公开实测视频格式不正确。');
       }
-      if (file==='index.html') content=content.replace('<title>我的信息流</title>','<title>我的信息流 · 公开预览</title>').replace('我的信息流 · 近期小工具、原始来源、收藏与跟进','科技、热点与日常工具。读原文、收藏材料、整理主题，带给你自己的 AI。');
+      if (file==='index.html') content=content.replace('<title>Levi flow</title>','<title>Levi flow · 公开预览</title>').replace('Levi flow · 近期小工具、原始来源、收藏与跟进','科技、热点与日常工具。读原文、收藏材料、整理主题，带给你自己的 AI。');
       auditText(typeof content==='string' ? content : content.toString('utf8'));
       // Every frontend dependency must also be in the allowlist.
       if (file.endsWith('.js')) for (const match of content.matchAll(/(?:import|export)[^;]*?from\s*['"](\.[^'"]+)['"]/g)) {

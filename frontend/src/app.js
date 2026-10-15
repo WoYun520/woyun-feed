@@ -1,5 +1,5 @@
 /**
- * 我的信息流 · 前端交互主逻辑
+ * Levi flow · 前端交互主逻辑
  * 遵从 docs/antigravity-brief.md 及 docs/feed-contract.md
  * 零静默伪造、严谨错误呈现、完备无障碍与焦点管理
  */

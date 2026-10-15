@@ -1082,7 +1082,7 @@ ${task.research?.report ? `## 5. Codex 整理结果（阅读说明，未实测�
 ${task.trial_plan ? this.exportTrialText(task.id) : ''}
 ${task.writing_brief ? `## 发文准备（手动填写，尚未发布）\n文章形式：${WRITING_FORMATS[task.writing_brief.format] || '未知'}\n读者：${task.writing_brief.audience || '未指定'}\n个人看法：${task.writing_brief.angle || '尚未填写'}\n` : ''}
 ---
-说明：${task.research ? '本材料包含本机保存的 Codex 整理记录，不代表安装实测或用户验收。' : '本材料由“我的信息流”本地生成，不代表已向任何外部模型发出请求。'}
+说明：${task.research ? '本材料包含本机保存的 Codex 整理记录，不代表安装实测或用户验收。' : '本材料由“Levi flow”本地生成，不代表已向任何外部模型发出请求。'}
 `;
   }
 
