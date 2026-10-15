@@ -25,7 +25,7 @@ import { bindPostMediaEvents } from './postMediaView.js';
 import { DOT_IMPORT_MAX_BYTES } from './dotCandidates.js';
 import { renderDotCandidatesView, bindDotCandidatesEvents, renderDotInboxPanel, bindDotInboxEvents, renderDotInboxFeedback, bindDotInboxFeedbackEvents } from './dotCandidatesView.js';
 import { DotInboxClient, DOT_INBOX_STORAGE_KEY } from './dotInboxClient.js';
-import { renderWorkspaceNavigation, renderWorkspaceResume, renderWorkspaceStorageNotice } from './workspaceShell.js';
+import { renderWorkspaceNavigation, renderWorkspaceResume, renderWorkspaceStorageNotice, reviewRouteRequested } from './workspaceShell.js';
 import { DOT_FILTER_DEFAULTS } from './dotCandidateFilters.js';
 
 class PersonalFeedApp {
@@ -65,6 +65,7 @@ class PersonalFeedApp {
     this.homeView = 'latest';
     this.homeMenuOpen = false;
     this.catsOpen = false;
+    this.openedFromReviewRoute = false;
     this.kosxOpen = false;
     this.kosxDraft = '';
     this.kosxMessage = '';
@@ -77,6 +78,13 @@ class PersonalFeedApp {
     this.candidateLimit = 10;
     this.selectedTopicId = null;
     this.triggerInfo = null; // 保存触发弹窗的元素及选择器信息，用于精准恢复焦点
+
+    if (typeof reviewRouteRequested === 'function' && reviewRouteRequested(globalThis.location)) {
+      this.currentTab = 'candidates';
+      this.openedFromReviewRoute = true;
+      try { if (!this.dotInbox.getState().connected) this.dotIntakeOpen = true; }
+      catch { /* 存储不可用时仍打开待过审，连接码由页面现有表单收集。 */ }
+    }
 
     this.init();
   }
@@ -129,6 +137,7 @@ class PersonalFeedApp {
   async init() {
     this.bindGlobalEvents();
     await this.loadAndRender();
+    if (this.currentTab === 'candidates') this.loadReviewQueue();
     this.refreshHomeBoost();
     this.startDotInboxReception();
   }
@@ -460,6 +469,8 @@ class PersonalFeedApp {
   }
 
   bindGlobalEvents() {
+    window.addEventListener('hashchange', () => this.followReviewRoute());
+    window.addEventListener('popstate', () => this.followReviewRoute());
     // 弹窗键盘无障碍监听：Esc 关闭与 Tab 循环限制 (Focus Trap)
     window.addEventListener('keydown', (e) => {
       if (!this.activeModal) return;
@@ -505,9 +516,44 @@ class PersonalFeedApp {
     return this.currentTab === 'today' && state?.mode === 'live' && this.feedView === 'sources';
   }
 
+  followReviewRoute() {
+    if (typeof reviewRouteRequested !== 'function') return;
+    if (reviewRouteRequested(globalThis.location)) this.openReviewQueue();
+    else if (this.openedFromReviewRoute && this.currentTab === 'candidates') {
+      this.openedFromReviewRoute = false;
+      this.switchTab('today');
+    }
+  }
+
+  openReviewQueue() {
+    this.openedFromReviewRoute = true;
+    try { if (!this.dotInbox?.getState?.().connected) this.dotIntakeOpen = true; }
+    catch { /* 接收码表单打不开时，待过审说明仍然留下。 */ }
+    if (this.currentTab !== 'candidates') this.switchTab('candidates');
+    else this.loadReviewQueue();
+  }
+
+  clearReviewRoute() {
+    const location = globalThis.location;
+    const history = globalThis.history;
+    if (!location || typeof history?.replaceState !== 'function') return;
+    let url;
+    try { url = new URL(location.href); }
+    catch { return; }
+    const hash = url.hash.toLowerCase();
+    let changed = false;
+    if (hash === '#review' || hash === '#/review') { url.hash = ''; changed = true; }
+    if (url.searchParams.has('review')) { url.searchParams.delete('review'); changed = true; }
+    if (!changed) return;
+    history.replaceState(history.state, '', `${url.pathname}${url.search}${url.hash}`);
+  }
+
   switchTab(tab) {
+    const leavingReview = tab !== 'candidates' && this.openedFromReviewRoute && typeof reviewRouteRequested === 'function' && reviewRouteRequested(globalThis.location);
     this.homeMenuOpen = false;
+    if (leavingReview) this.openedFromReviewRoute = false;
     this.currentTab = tab;
+    if (leavingReview) this.clearReviewRoute();
     window.scrollTo({ top: 0, behavior: 'smooth' });
     this.render();
     if (tab === 'candidates') this.loadReviewQueue();
@@ -761,6 +807,15 @@ class PersonalFeedApp {
     document.getElementById('nav-topics')?.addEventListener('click', () => { this.selectedTopicId=null; this.switchTab('topics'); });
     document.getElementById('nav-saved')?.addEventListener('click', () => this.switchTab('saved'));
     document.getElementById('nav-profile')?.addEventListener('click', () => this.switchTab('profile'));
+    document.getElementById('home-review')?.addEventListener('click', event => {
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button) return;
+      event.preventDefault();
+      const hash = String(globalThis.location?.hash || '').toLowerCase();
+      try {
+        if (hash !== '#review' && hash !== '#/review' && globalThis.location) globalThis.location.hash = 'review';
+      } catch { /* 地址栏写失败时仍打开当前页的待过审。 */ }
+      this.openReviewQueue();
+    });
     document.getElementById('open-guide')?.addEventListener('click', e => this.openGuide(e.currentTarget));
     document.getElementById('welcome-example')?.addEventListener('click', e => this.openGuide(e.currentTarget));
     document.getElementById('welcome-dismiss')?.addEventListener('click', () => { this.dismissWelcome(); document.getElementById('open-guide')?.focus(); });
