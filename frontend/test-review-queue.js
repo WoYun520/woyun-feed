@@ -718,3 +718,28 @@ test('delivery stores a cover, copies it onto the public item, and a later deliv
   assert.equal(pooled.cover_url, storedCover);
   assert.equal(env.PUBLIC_FEED.json().items.find(item => item.original_url === poolUrl).cover_url, storedCover);
 });
+
+test('approving an older original puts that post on 最新精华 ahead of newer originals approved earlier', async () => {
+  const env = await environment();
+  for (let index = 0; index < 18; index += 1) {
+    const url = `https://x.com/example/status/2108148604447885${String(index).padStart(3, '0')}`;
+    const published_at = `2026-10-14T${String(index).padStart(2, '0')}:15:00.000Z`;
+    assert.equal((await submit(env, {url, published_at, review_type:'文章', bookmark_count:10})).status, 201);
+    assert.equal((await decide(env, {url, status:'approved'})).status, 200);
+  }
+  const oldUrl = 'https://x.com/example/status/2108148604447884999';
+  assert.equal((await submit(env, {url:oldUrl, published_at:'2026-09-01T00:00:00.000Z', review_type:'教程指南', bookmark_count:59})).status, 201);
+  const decision = await (await decide(env, {url:oldUrl, status:'approved'})).json();
+  assert.equal(decision.published, true);
+  const item = env.PUBLIC_FEED.json().items.find(entry => entry.original_url === oldUrl);
+  assert.equal(item.origin, 'kosx_approved');
+  assert.deepEqual(item.source_refs, ['sopilot-kosx']);
+  assert.equal(item.source_item_time, decision.reviewed_at);
+  assert.equal(item.published_at, '2026-09-01T00:00:00.000Z');
+  const home = showcase(env.PUBLIC_FEED.json());
+  assert.equal(home.latest[0].post.item.original_url, oldUrl);
+  assert.equal(home.latest.length, 18);
+  assert.equal(home.kept.some(entry => entry.post.item.original_url === oldUrl), false);
+  assert.match(renderFeed(env.PUBLIC_FEED.json()), /id="home-latest"/);
+  assert.match(renderFeed(env.PUBLIC_FEED.json()), new RegExp(item.id));
+});

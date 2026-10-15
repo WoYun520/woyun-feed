@@ -19,7 +19,7 @@ const post = (id, published, extra = {}) => ({
   source_refs:extra.source_refs || [source.id], link_kind:'post', origin:extra.origin || 'public', content_status:'excerpt_only',
   original_url:extra.url || `https://x.com/example/status/${id}`,
   canonical_url:extra.url || `https://x.com/example/status/${id}`,
-  published_at:published, source_item_time:published, captured_at:published,
+  published_at:published, source_item_time:extra.source_item_time || published, captured_at:extra.captured_at || published,
   heat_label:extra.heat || '', source_rank:extra.rank ?? null, post_image:extra.image,
   ...(extra.author_handle ? {author_handle:extra.author_handle} : {}),
   ...(extra.kosx_review ? {kosx_review:extra.kosx_review} : {}),
@@ -154,6 +154,43 @@ test('beijing yesterday is the calendar day before the published snapshot', () =
   assert.equal(parsePublicHeat('1.3K 曝光/小时').value, 1300);
   assert.equal(parsePublicHeat('5.1万 次浏览').unit, 'views');
   assert.equal(parsePublicHeat('没有数字'), null);
+});
+
+test('approving an older original still places it on 最新精华 without entering 卧云精选', () => {
+  const newer = Array.from({length:18}, (_, index) => post(String(500000 + index), `2026-10-14T${String(index).padStart(2, '0')}:10:00.000Z`, {
+    origin:'kosx_approved', source_item_time:'2026-10-14T12:00:00.000Z', review_type:'文章', bookmark_count:2200,
+  }));
+  const approved = post('188888', '2026-09-01T00:00:00.000Z', {
+    origin:'kosx_approved', source_refs:['sopilot-kosx'], source_item_time:'2026-10-15T07:50:21.000Z',
+    title:'刚过审的旧原帖', review_type:'教程指南', bookmark_count:59,
+  });
+  const hot = post('188889', '2026-10-15T09:00:00.000Z', {heat:'9万 曝光/小时', title:'热榜帖', source_item_time:'2026-10-15T09:00:00.000Z'});
+  const input = state([...newer, approved, hot]);
+  input.sources = [source, {id:'sopilot-kosx', name:'KOSX 过审', group:'posts', link_kind:'post', status:'ok', enabled:true}];
+  const selected = selectHomeShowcase(input);
+  assert.equal(selected.latest[0].post.item.id, approved.id);
+  assert.equal(selected.latest.length, 18);
+  assert.equal(selected.latest.some(entry => entry.post.item.id === hot.id), false);
+  assert.equal(selected.kept.some(entry => entry.post.item.id === approved.id), false);
+  const note = renderHomeShowcase(app(), input);
+  assert.match(note, /刚过审的帖会进这 18 条/);
+  assert.match(note, /刚过审的旧原帖/);
+  assert.doesNotMatch(note, /热榜帖/);
+});
+
+test('an approved row stays on 最新精华 when a longer public excerpt is the card that was chosen', () => {
+  const url = 'https://x.com/example/status/660001';
+  const stream = post('660001', '2026-10-10T08:00:00.000Z', {summary:'榜'.repeat(180), title:'榜单长摘录', url});
+  const approved = post('kosx660001', '2026-09-02T00:00:00.000Z', {
+    origin:'kosx_approved', source_refs:['sopilot-kosx'], summary:'短摘录', title:'过审帖', url,
+    source_item_time:'2026-10-15T01:00:00.000Z',
+  });
+  const input = state([stream, approved]);
+  input.sources = [source, {id:'sopilot-kosx', name:'KOSX 过审', group:'posts', link_kind:'post', status:'ok', enabled:true}];
+  const selected = selectHomeShowcase(input);
+  assert.equal(selected.latest.length, 1);
+  assert.equal(selected.latest[0].post.records.some(item => item.origin === 'kosx_approved'), true);
+  assert.equal(selected.latest.some(entry => entry.post.item.id === stream.id) || selected.latest[0].post.item.id === 'kosx660001', true);
 });
 
 test('latest keeps 18 homepage essence posts by publication time and does not fill with the public stream', () => {
