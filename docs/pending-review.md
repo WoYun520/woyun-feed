@@ -33,7 +33,17 @@ curl -sS -X POST 'https://woyun-feed-preview.hhzovo66.workers.dev/api/dot/pendin
   -d '{"url":"https://x.com/name/status/123","status":"approved","underrated_candidate":true,"review_type":"教程指南"}'
 ```
 
-公开预览的「待筛选」页在连上接收码后会列出待过审链接。每条显示类型、收藏/点赞（或比例）和有没有 X Article 卡。建议先看文章，再看教程指南、避坑，短帖和产品安利靠后。点「过审上首页」时可勾选「进低估栏候选」。勾选只写下上面的记号。没有接收码时，这一栏不显示队列，也不能过审。
+公开预览的「待筛选」页在连上接收码后会列出待过审链接。卡片不显示热度、Article 卡或「文章卡·收藏…·收藏偏低但类型优先」这类依据说明；类型仍可在过审前改。建议先看文章，再看教程指南、避坑，短帖和产品安利靠后。点「过审上首页」时可勾选「进低估栏候选」。勾选只写下上面的记号。没有接收码时，这一栏不显示队列，也不能过审。
+
+## 本机过审
+
+公开预览没有免接收码的过审地址。「待过审」在浏览器里仍然要粘贴接收码。本机另有一页，接收码只留在这台电脑上，不交给浏览器。
+
+1. 把接收码写成一行，放进仓库里的 `.local/dot-review-token`。这个目录已被忽略，不要提交。也可以在启动前设置环境变量 `DOT_REVIEW_TOKEN`。不要把接收码写进网址。
+2. 双击「打开过审.command」。它和「打开 Levi flow.command」启动同一个本机服务，并打开过审页。已经开着信息流时，直接打开 `http://127.0.0.1:3000/review-admin`。端口以启动时打印的为准。
+3. 也可以先双击「打开 Levi flow.command」，或在仓库里运行 `cd frontend && node serve.js`，再打开上面的地址。
+
+这一页只由本机 `frontend/serve.js` 提供，只监听 `127.0.0.1`。它用本机保存的接收码去调用预览 Worker 上原有的 `GET /api/dot/pending` 和 `POST /api/dot/pending/decision`。公开预览没有 `/review-admin`，也没有不带接收码的过审接口。不要为了这一页执行 `npx wrangler deploy`。
 
 接收码读取 `GET /api/dot/pending` 时，每条在原有字段外还会带上已保存的 `review_type`、`bookmark_count`、`like_count`、`has_article`、`cover_url`、`text`。有候选记号时带 `underrated_candidate: true` 和 `underrated_candidate_at`。旧记录没有这些字段时，页面会按备注粗分，热度和 Article 卡显示为未知。
 

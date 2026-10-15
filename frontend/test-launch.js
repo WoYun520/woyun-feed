@@ -30,6 +30,17 @@ async function fixture(t,{broken=false}={}) {
   return {root,directory,port,pids};
 }
 
+test('the review admin launcher opens only the local review path',async t=>{
+  const f=await fixture(t),opened=[];
+  const result=await launchFeed({...f,openPath:'/review-admin',openPage:async url=>opened.push(url)});
+  f.pids.push(result.pid);
+  assert.deepEqual(opened,[`http://127.0.0.1:${f.port}/review-admin`]);
+  opened.length=0;
+  const home=await launchFeed({...f,openPath:'https://evil.example/review-admin',openPage:async url=>opened.push(url)});
+  assert.equal(home.reused,true);
+  assert.deepEqual(opened,[`http://127.0.0.1:${f.port}/`]);
+});
+
 test('cold launch detaches its own server and later launches reuse the same address',async t=>{
   const f=await fixture(t),opened=[];
   const result=await launchFeed({...f,openPage:async url=>opened.push(url)});f.pids.push(result.pid);

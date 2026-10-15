@@ -18,6 +18,7 @@ import { ResearchService, researchError } from './research-service.js';
 import { stopCodexReaders } from './codex-reader.js';
 import { RepositoryGuideService } from './repository-guide-service.js';
 import { installationId } from './installation.js';
+import { REVIEW_ADMIN_PATH, decidePendingForLocalReview, listPendingForLocalReview, loadReviewToken, normalizeReviewToken } from './local-review.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -132,7 +133,7 @@ function serveStatic(req, res) {
   });
 }
 
-export function createFeedServer({ service = new FeedService({ dataDir: path.join(ROOT_DIR, 'data') }), research, guides } = {}) {
+export function createFeedServer({ service = new FeedService({ dataDir: path.join(ROOT_DIR, 'data') }), research, guides, review } = {}) {
   const dataDir=service.dataDir || path.join(ROOT_DIR,'data');
   research ||= new ResearchService({ dataDir, feed: service });
   guides ||= new RepositoryGuideService({dataDir,feed:service});
@@ -144,6 +145,25 @@ export function createFeedServer({ service = new FeedService({ dataDir: path.joi
     };
     if (!/^(127\.0\.0\.1|localhost):\d+$/.test(host)) return json(403, { error: '请通过本机地址访问。' });
     const route = req.url.split('?')[0];
+    if (route === REVIEW_ADMIN_PATH) {
+      if (req.method !== 'GET' && req.method !== 'HEAD') {
+        res.writeHead(405, {'Content-Type':'text/plain; charset=utf-8', Allow:'GET, HEAD'});
+        res.end('405 Method Not Allowed');
+        return;
+      }
+      const adminPage = path.join(FRONTEND_DIR, 'review-admin.html');
+      fs.stat(adminPage, (err, stats) => {
+        if (err || !stats.isFile()) {
+          res.writeHead(404, {'Content-Type':'text/plain; charset=utf-8'});
+          res.end('404 Not Found');
+          return;
+        }
+        res.writeHead(200, {'Content-Type':'text/html; charset=utf-8', 'Cache-Control':'no-store', 'X-Content-Type-Options':'nosniff'});
+        if (req.method === 'HEAD') { res.end(); return; }
+        fs.createReadStream(adminPage).pipe(res);
+      });
+      return;
+    }
     if (route.startsWith('/api/')) {
       if (req.headers.origin && req.headers.origin !== `http://${host}`) return json(403, { error: '只接受本页面的请求。' });
       if (req.headers['sec-fetch-site'] === 'cross-site') return json(403, { error: '只接受本页面的请求。' });
@@ -151,6 +171,30 @@ export function createFeedServer({ service = new FeedService({ dataDir: path.joi
         if (route === '/api/health' && req.method === 'GET') return json(200, {
           app: 'personal-feed', protocol: 1, installation_id: installationId(FRONTEND_DIR)
         });
+        if (route === '/api/local-review/pending' || route === '/api/local-review/decision') {
+          if (req.url.includes('?')) return json(400, {error:'invalid_query', message:'这一页不接受查询参数。'});
+          const reviewToken = review && Object.hasOwn(review, 'token') ? normalizeReviewToken(review.token) : loadReviewToken({root:ROOT_DIR});
+          const origin = review?.origin || process.env.DOT_REVIEW_ORIGIN;
+          const fetchImpl = review?.fetch || globalThis.fetch;
+          if (route === '/api/local-review/pending') {
+            if (req.method !== 'GET') return json(405, {error:'method_not_allowed', message:'不支持此操作。'});
+            const result = await listPendingForLocalReview({token:reviewToken, origin, fetchImpl});
+            return json(result.status, result.body);
+          }
+          if (req.method !== 'POST') return json(405, {error:'method_not_allowed', message:'不支持此操作。'});
+          if (req.headers['x-personal-feed'] !== '1' || !String(req.headers['content-type'] || '').startsWith('application/json')) return json(403, {error:'请通过本机过审页操作。'});
+          const chunks = []; let size = 0;
+          for await (const chunk of req) {
+            size += chunk.length;
+            if (size > 8000) return json(413, {error:'请求过长。'});
+            chunks.push(chunk);
+          }
+          let input;
+          try { input = JSON.parse(Buffer.concat(chunks).toString('utf8')); }
+          catch { return json(400, {error:'请求格式错误。'}); }
+          const result = await decidePendingForLocalReview({token:reviewToken, origin, fetchImpl, input});
+          return json(result.status, result.body);
+        }
         if (route === '/api/research' && req.method === 'POST') {
           if (req.headers['x-personal-feed'] !== '1' || !String(req.headers['content-type']).startsWith('application/json')) return json(403, { error: '请通过页面开始整理。' });
           const chunks = []; let size = 0;

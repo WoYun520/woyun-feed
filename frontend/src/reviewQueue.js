@@ -114,17 +114,13 @@ export function sortReviewQueue(items) {
   }).map(({item}) => item);
 }
 
-export function formatReviewSignals(input = {}) {
-  const item = presentReviewItem(input);
-  const bookmarks = item.bookmark_count === null ? '收藏未知' : `收藏 ${item.bookmark_count.toLocaleString('zh-CN')}`;
-  const likes = item.like_count === null ? '点赞未知' : `点赞 ${item.like_count.toLocaleString('zh-CN')}`;
-  const parts = [bookmarks, likes];
-  if (item.bookmark_count !== null && item.like_count !== null && item.like_count > 0) {
-    parts.push(`收藏/点赞 ${(item.bookmark_count / item.like_count).toFixed(2)}`);
-  } else if (item.bookmark_count !== null && item.like_count === 0 && item.bookmark_count > 0) {
-    parts.push('点赞为 0');
-  }
-  if (item.bookmark_signal) parts.push('收藏信号强');
-  const article = item.article_known ? (item.has_article ? '有 X Article 卡' : '无 X Article 卡') : 'Article 卡未知';
-  return {...item, heat:parts.join(' · '), article};
+// Short classifier blurbs such as「文章卡·收藏5/点赞18·Levi样例·收藏偏低但类型优先」
+// are evidence copy. They are not the post. Longer notes stay visible.
+const SIGNAL_COPY = /文章卡|收藏偏低|类型优先|互动尚低|可执行提示词|Levi样例|收藏信号|Article卡|收藏\/点赞|收藏\d+[/／]点赞\d+/;
+
+export function isReviewSignalCopy(value) {
+  if (typeof value !== 'string') return false;
+  const compact = value.replace(/\s+/g, '');
+  if (!compact || compact.length > 80) return false;
+  return SIGNAL_COPY.test(compact);
 }
