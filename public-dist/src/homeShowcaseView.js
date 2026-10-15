@@ -233,6 +233,24 @@ export function splitCranialEntries(entries) {
   return {left, right};
 }
 
+// Poker fan for one head. One card stays upright. Two open to the wings.
+// Three sit at −12°, 0°, and +12°, pivoted on the lower rim.
+export function cranialFanDegrees(index, count) {
+  const total = Math.max(0, Math.min(CRANIAL_PER_HEAD, Number(count) || 0));
+  const slot = Math.max(0, Math.min(total - 1, Number(index) || 0));
+  if (total <= 1) return 0;
+  if (total === 2) return slot === 0 ? -12 : 12;
+  return (slot - 1) * 12;
+}
+
+export function cranialFanLayer(index, count) {
+  const total = Math.max(0, Math.min(CRANIAL_PER_HEAD, Number(count) || 0));
+  const slot = Math.max(0, Math.min(total - 1, Number(index) || 0));
+  if (total <= 1) return 2;
+  if (total === 2) return slot === 0 ? 1 : 2;
+  return slot === 1 ? 3 : 2;
+}
+
 // Scroll progress 0–1. Later cards in a stack leave after the front card.
 // Ease-in keeps the stack in the heads until the scroll commits, then they arrive together.
 export function cranialFlightT(progress, stackIndex) {
@@ -273,6 +291,10 @@ export function placeCranialCard(card, anchorRect, targetRect, t) {
   const amount = clamp01(t);
   const arrive = cranialBlend(amount, 0.84);
   const fade = cranialBlend(amount, 0.72);
+  const rawFan = Number(card.getAttribute?.('data-cranial-fan'));
+  const tilt = Number.isFinite(rawFan) ? rawFan : 0;
+  const straighten = cranialBlend(Math.min(1, amount / 0.35), 0);
+  const angle = tilt * (1 - straighten);
   const startW = Math.max(start.width, 1);
   const startH = Math.max(start.height, 1);
   const scaleX = (startW + (end.width - startW) * arrive) / startW;
@@ -289,8 +311,11 @@ export function placeCranialCard(card, anchorRect, targetRect, t) {
   card.style.width = `${cssNum(startW)}px`;
   card.style.height = `${cssNum(startH)}px`;
   card.style.margin = '0';
-  card.style.transformOrigin = '0 0';
-  card.style.transform = `translate3d(${cssNum(left)}px, ${cssNum(top)}px, 0) scale(${cssNum(scaleX)}, ${cssNum(scaleY)})`;
+  const fanned = Math.abs(angle) > 0.001;
+  card.style.transformOrigin = fanned ? 'center bottom' : '0 0';
+  card.style.transform = fanned
+    ? `translate3d(${cssNum(left)}px, ${cssNum(top)}px, 0) rotate(${cssNum(angle)}deg)`
+    : `translate3d(${cssNum(left)}px, ${cssNum(top)}px, 0) scale(${cssNum(scaleX)}, ${cssNum(scaleY)})`;
   card.style.zIndex = '30';
   card.style.pointerEvents = 'none';
   card.style.opacity = cssNum(1 - fade);
@@ -310,10 +335,10 @@ function renderCranialStage(app, entries, cards) {
 
 function renderCranialBowl(app, side, entries) {
   if (!entries.length) return '';
-  return `<div class="cranial-bowl cranial-bowl-${side}" data-cranial-bowl="${side}" inert aria-hidden="true">${entries.map((entry, index) => renderCranialCard(app, entry, index)).join('')}</div>`;
+  return `<div class="cranial-bowl cranial-bowl-${side}" data-cranial-bowl="${side}" inert aria-hidden="true">${entries.map((entry, index) => renderCranialCard(app, entry, index, entries.length)).join('')}</div>`;
 }
 
-function renderCranialCard(app, entry, index) {
+function renderCranialCard(app, entry, index, count) {
   const e = value => app.escapeHtml(value);
   const item = entry.post.item;
   const title = item.title || '来源未提供标题';
@@ -321,7 +346,9 @@ function renderCranialCard(app, entry, index) {
   const id = e(item.id);
   const author = authorCue(item);
   const cover = image ? `<img class="cranial-cover" src="${e(image.url)}" alt="" decoding="async" referrerpolicy="no-referrer">` : '';
-  return `<div class="cranial-slot" style="--stack:${index}" data-cranial-anchor="${id}"><article class="cranial-card" data-cranial-card data-cranial-id="${id}" data-cranial-stack="${index}">${cover}<p class="cranial-title">${e(title)}</p>${author ? `<p class="cranial-author">${e(author)}</p>` : ''}</article></div>`;
+  const fan = cranialFanDegrees(index, count);
+  const layer = cranialFanLayer(index, count);
+  return `<div class="cranial-slot" style="--fan:${fan};--fan-layer:${layer}" data-cranial-anchor="${id}"><article class="cranial-card" data-cranial-card data-cranial-id="${id}" data-cranial-stack="${index}" data-cranial-fan="${fan}">${cover}<p class="cranial-title">${e(title)}</p>${author ? `<p class="cranial-author">${e(author)}</p>` : ''}</article></div>`;
 }
 
 function cranialSelector(value) {

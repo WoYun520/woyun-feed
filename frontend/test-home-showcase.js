@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { HOME_WEEK_BOOKMARK_MIN, addCalendarDays, beijingDateKey, parsePublicHeat, recordKosxBoost, selectHomeShowcase, wouldEnterUnderrated } from './src/homeShowcase.js';
 import { FeedDataAdapter } from './src/dataAdapter.js';
-import { KOSX_EMOJI_ALT, KOSX_EMOJI_FRAMES, KOSX_EMOJI_INTERVAL_MS, coverExcerpt, cranialFlightT, mountCranialFlight, mountKosxEmoji, placeCranialCard, renderHomeShowcase, resetCranialFlight, resetKosxEmoji } from './src/homeShowcaseView.js';
+import { KOSX_EMOJI_ALT, KOSX_EMOJI_FRAMES, KOSX_EMOJI_INTERVAL_MS, coverExcerpt, cranialFanDegrees, cranialFlightT, mountCranialFlight, mountKosxEmoji, placeCranialCard, renderHomeShowcase, resetCranialFlight, resetKosxEmoji } from './src/homeShowcaseView.js';
 import { renderWorkspaceNavigation } from './src/workspaceShell.js';
 import { KOSX_POOL_HANDLES } from './kosx-pool.js';
 import { PUBLIC_FILES } from './public-build.mjs';
@@ -572,8 +572,19 @@ test('cranial hero stacks real latest essence cards inside the open heads', () =
   assert.ok(html.indexOf('levi-signature') < html.indexOf('data-cranial-stage'));
   assert.ok(html.indexOf('data-cranial-stage') < html.indexOf('id="home-latest"'));
   assert.ok(hero.indexOf('levi-signature') < hero.indexOf('data-cranial-stage'));
-  assert.match(hero, /data-cranial-bowl="left"[\s\S]*颅内第一篇[\s\S]*颅内第三篇/);
-  assert.match(hero, /data-cranial-bowl="right"[\s\S]*颅内第二篇/);
+  assert.match(hero, /data-cranial-bowl="left"[\s\S]*--fan:-12[\s\S]*颅内第一篇[\s\S]*--fan:12[\s\S]*颅内第三篇/);
+  assert.match(hero, /data-cranial-bowl="right"[\s\S]*--fan:0[\s\S]*颅内第二篇/);
+  assert.deepEqual([0, 1, 2].map(index => cranialFanDegrees(index, 3)), [-12, 0, 12]);
+  assert.deepEqual([0, 1].map(index => cranialFanDegrees(index, 2)), [-12, 12]);
+  assert.equal(cranialFanDegrees(0, 1), 0);
+  const fannedPage = renderHomeShowcase(app(), state([0, 1, 2, 3, 4, 5].map(index => post(
+    String(7111 + index),
+    `2026-10-10T0${8 - index}:00:00.000Z`,
+    {origin:'kosx_approved', title:`扇面${index}`},
+  ))));
+  const leftBowl = fannedPage.match(/data-cranial-bowl="left"[\s\S]*?data-cranial-bowl="right"/)[0];
+  assert.match(leftBowl, /--fan:-12[\s\S]*data-cranial-fan="-12"[\s\S]*--fan:0[\s\S]*data-cranial-fan="0"[\s\S]*--fan:12[\s\S]*data-cranial-fan="12"/);
+  assert.equal((leftBowl.match(/data-cranial-card/g) || []).length, 3);
   assert.doesNotMatch(hero, /不是精华帖|打开原帖|data-action="toggle-save"|data-home-group=/);
   assert.match(hero, /src="https:\/\/cdn\.example\.com\/covers\/cranial-a\.jpg"/);
   assert.equal((hero.match(/data-cranial-card/g) || []).length, 3);
@@ -615,7 +626,17 @@ test('cranial hero stacks real latest essence cards inside the open heads', () =
   assert.equal(card.style.opacity, '0');
   assert.equal(card.style.width, '20px');
   assert.equal(card.style.transform, 'translate3d(80px, 210px, 0) scale(2, 1.5)');
+  const fanned = {style:{}, getAttribute(name){ return name === 'data-cranial-fan' ? '-12' : null; }};
+  placeCranialCard(fanned, {left:0, top:10, width:20, height:40}, {left:80, top:210, width:40, height:60}, 0);
+  assert.equal(fanned.style.transform, 'translate3d(0px, 10px, 0) rotate(-12deg)');
+  assert.equal(fanned.style.transformOrigin, 'center bottom');
+  assert.equal(fanned.style.width, '20px');
+  placeCranialCard(fanned, {left:0, top:10, width:20, height:40}, {left:80, top:210, width:40, height:60}, 0.5);
+  assert.equal(fanned.style.width, '20px');
+  assert.equal(fanned.style.transform, 'translate3d(45px, 115px, 0) scale(1, 1)');
   const css = readFileSync(new URL('./src/homeShowcase.css', import.meta.url), 'utf8');
+  assert.match(css, /\.cranial-card\s*\{[^}]*transform:\s*rotate\(calc\(var\(--fan, 0\) \* 1deg\)\)/);
+  assert.match(css, /\.cranial-card\s*\{[^}]*transform-origin:\s*center bottom/);
   assert.match(css, /\.cranial-stage\.is-settled \.cranial-lid\s*\{[^}]*visibility:\s*visible/);
   assert.match(css, /\.cranial-stage\.is-settled \.cranial-bowl\s*\{[^}]*visibility:\s*hidden/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.cranial-card\s*\{[^}]*animation:\s*none/);
