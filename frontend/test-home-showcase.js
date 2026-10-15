@@ -119,15 +119,16 @@ test('homepage essence cards keep a cover image or a quote and never an empty at
   assert.match(shown, /超15万人关注的话题/);
   assert.match(shown, /<span class="kosx-pool-badge">KOSX<\/span>/);
   assert.match(shown, /@ai_suxiaole 的精华帖/);
-  assert.match(shown, /收藏 12/);
+  assert.doesNotMatch(shown, /cover-bookmarks|收藏 \d|来源没有给出可展示的热度文字|未核对原帖，未实测|摘录与时间依据/);
   assert.match(shown, /打开原帖/);
   assert.match(shown, />收藏</);
   const said = cardHtml(html, '9102');
   assert.match(said, /data-cover="quote"/);
-  assert.match(said, /<blockquote class="cover-quote">可玩性已经离开玩具级别了。下一句仍在摘录里。<\/blockquote>/);
+  assert.match(said, /<blockquote class="cover-quote"><span class="cover-quote-text">可玩性已经离开玩具级别了。下一句仍在摘录里。<\/span><\/blockquote>/);
   assert.match(said, /class="cover-author">@ai_suxiaole</);
-  assert.match(said, /收藏 3/);
+  assert.doesNotMatch(said, /cover-bookmarks|收藏 \d|来源没有给出可展示的热度文字|未核对原帖，未实测|摘录与时间依据/);
   assert.match(said, /打开原帖/);
+  assert.match(said, />收藏</);
   assert.doesNotMatch(said, /<img|cover-frame|无来源附图/);
   const empty = cardHtml(html, '9103');
   assert.match(empty, /data-cover="plain"/);
@@ -138,7 +139,12 @@ test('homepage essence cards keep a cover image or a quote and never an empty at
   assert.match(created, /<time datetime="2026-10-01T08:30:00.000Z">/);
   assert.doesNotMatch(created, /2026-10-13T01:00:00.000Z/);
   const css = readFileSync(new URL('./src/homeShowcase.css', import.meta.url), 'utf8');
-  assert.match(css, /\.cover-quote\s*\{[^}]*-webkit-line-clamp:\s*2/);
+  assert.match(css, /\.cover-quote-text\s*\{[^}]*-webkit-line-clamp:\s*2/);
+  assert.match(css, /\.cover-quote\s*\{[^}]*flex:\s*1\s+1\s+auto/);
+  assert.match(css, /\.cover-grid\s*\{[^}]*align-items:\s*stretch/);
+  assert.match(css, /\.shape-card, \.cover-card\s*\{[^}]*height:\s*100%/);
+  assert.match(css, /\.cover-actions\s*\{[^}]*margin-top:\s*auto/);
+  assert.match(css, /--shape-cover:\s*2\s*\/\s*1/);
   assert.match(css, /@media \(max-width: 720px\)[\s\S]*\.cover-quote\s*\{[^}]*font-size:\s*22px/);
 });
 
@@ -477,7 +483,7 @@ test('default homepage renders cover cards, signature, navigation labels and no 
   assert.match(css, /--home-bg:\s*#ffffff/);
   assert.match(css, /--shape-card:\s*24px 24px 12px 24px/);
   assert.doesNotMatch(css, /shape-age|18\+|年龄/);
-  assert.match(css, /--shape-cover:\s*16\s*\/\s*9/);
+  assert.match(css, /--shape-cover:\s*2\s*\/\s*1/);
   assert.match(css, /--home-line:\s*#e8e8e4/);
   assert.match(css, /--home-accent:\s*#c84924/);
   assert.match(css, /--home-wash:\s*#f5f5f2/);
@@ -563,16 +569,50 @@ test('homepage cards hide leftover process excerpts and keep a real note', () =>
   ];
   const html = renderHomeShowcase(app(), state(items));
   assert.doesNotMatch(html, /不进入昨日最被低估|尚未读取原文，未核对热度|按时间放上首页|过审后放上首页/);
-  assert.match(html, /来源未提供摘录。/);
+  assert.doesNotMatch(html, /来源未提供摘录。|来源没有给出可展示的热度文字/);
   assert.doesNotMatch(html, /来源未提供摘录，请打开原帖。|无来源附图/);
   assert.match(html, /三步装好本地字幕/);
   assert.match(html, /原文摘录：第一步打开设置。/);
+  for (const id of ['8801', '8802', '8803', '8804']) {
+    const card = cardHtml(html, id);
+    assert.doesNotMatch(card, /摘录与时间依据|未核对原帖，未实测|cover-bookmarks|收藏 \d/);
+  }
   const keptState = state([]);
   keptState.savedItems = [items[0]];
   const kept = renderHomeShowcase(app('kept'), keptState);
   assert.doesNotMatch(kept, /不进入昨日最被低估|尚未读取原文|没有摘录。|无来源附图/);
   assert.match(kept, /@aaa 的精华帖/);
   assert.match(kept, /data-cover="plain"/);
+});
+
+test('essence cards drop stock evidence and bookmark counts, and keep a longer excerpt', () => {
+  const long = ['第一行金句，讲清楚这件事。', '第二行还在卡片上。', '第三行只在摘录依据里，避免和套话混在一起。'].join('\n');
+  const longerItem = post('9301', '2026-10-14T12:00:00.000Z', {
+    origin:'kosx_approved', review_type:'文章', bookmark_count:30, heat:'',
+    author_handle:'cgnot996', title:'@cgnot996 的精华帖', summary:long,
+    url:'https://x.com/cgnot996/status/9301',
+  });
+  const cover = 'https://cdn.example.com/covers/row-mate.jpg';
+  const media = post('9302', '2026-10-14T11:30:00.000Z', {
+    origin:'kosx_approved', review_type:'文章', bookmark_count:1, heat:'2万 曝光/小时',
+    author_handle:'ai_suxiaole', title:'@ai_suxiaole 的精华帖', summary:'只有一行摘录。',
+    cover_url:cover, url:'https://x.com/ai_suxiaole/status/9302',
+  });
+  const html = renderHomeShowcase(app(), state([longerItem, media]));
+  const longer = cardHtml(html, '9301');
+  assert.match(longer, /data-cover="quote"/);
+  assert.match(longer, /摘录与时间依据/);
+  assert.match(longer, /第三行只在摘录依据里，避免和套话混在一起。/);
+  assert.doesNotMatch(longer, /来源没有给出可展示的热度文字|未核对原帖，未实测|来源未提供摘录|来源标注：|这是摘录里的线索，不是实测/);
+  assert.doesNotMatch(longer, /cover-bookmarks|收藏 30|收藏 \d/);
+  assert.match(longer, /打开原帖/);
+  assert.match(longer, />收藏</);
+  const shown = cardHtml(html, '9302');
+  assert.match(shown, /data-cover="media"/);
+  assert.match(shown, /src="https:\/\/cdn\.example\.com\/covers\/row-mate\.jpg"/);
+  assert.match(shown, /只有一行摘录。/);
+  assert.doesNotMatch(shown, /摘录与时间依据|来源没有给出可展示的热度文字|来源标注：|未核对原帖，未实测|cover-bookmarks|收藏 1/);
+  assert.match(shown, />收藏</);
 });
 
 test('category views and the masthead keep the three names visible without a second local store', () => {
