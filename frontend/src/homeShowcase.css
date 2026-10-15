@@ -187,7 +187,16 @@ body:has(.workspace-shell[data-workspace-tab="today"]) { background: var(--home-
   margin: 2px 0 0; padding: 0 7px 6px; color: #62675d;
   font-size: clamp(7px, .9vw, 10px); line-height: 1.3;
 }
+/* Paper caps over the open ellipses in couple-open-heads.png (2048 square).
+   Shown only after the cards have landed, so the rims do not stay as holes. */
+.cranial-lid {
+  position: absolute; z-index: 2; border-radius: 50%; pointer-events: none;
+  background: #fcfcfc; opacity: 0; visibility: hidden;
+}
+.cranial-lid-left { left: 19.16%; top: 26.141%; width: 27.891%; height: 7.875%; }
+.cranial-lid-right { left: 53.828%; top: 30.23%; width: 27.891%; height: 8.094%; }
 .cranial-stage.is-settled .cranial-bowl { visibility: hidden; }
+.cranial-stage.is-settled .cranial-lid { opacity: 1; visibility: visible; }
 .cover-card.is-cranial-landed { animation: cranial-land 700ms ease; }
 @keyframes cranial-land {
   from { box-shadow: 0 0 0 2px rgba(23, 25, 23, .45); }

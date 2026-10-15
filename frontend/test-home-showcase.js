@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { HOME_WEEK_BOOKMARK_MIN, addCalendarDays, beijingDateKey, parsePublicHeat, recordKosxBoost, selectHomeShowcase, wouldEnterUnderrated } from './src/homeShowcase.js';
 import { FeedDataAdapter } from './src/dataAdapter.js';
-import { KOSX_EMOJI_ALT, KOSX_EMOJI_FRAMES, KOSX_EMOJI_INTERVAL_MS, coverExcerpt, cranialFlightT, mountKosxEmoji, placeCranialCard, renderHomeShowcase, resetKosxEmoji } from './src/homeShowcaseView.js';
+import { KOSX_EMOJI_ALT, KOSX_EMOJI_FRAMES, KOSX_EMOJI_INTERVAL_MS, coverExcerpt, cranialFlightT, mountCranialFlight, mountKosxEmoji, placeCranialCard, renderHomeShowcase, resetCranialFlight, resetKosxEmoji } from './src/homeShowcaseView.js';
 import { renderWorkspaceNavigation } from './src/workspaceShell.js';
 import { KOSX_POOL_HANDLES } from './kosx-pool.js';
 import { PUBLIC_FILES } from './public-build.mjs';
@@ -577,6 +577,8 @@ test('cranial hero stacks real latest essence cards inside the open heads', () =
   assert.doesNotMatch(hero, /不是精华帖|打开原帖|data-action="toggle-save"|data-home-group=/);
   assert.match(hero, /src="https:\/\/cdn\.example\.com\/covers\/cranial-a\.jpg"/);
   assert.equal((hero.match(/data-cranial-card/g) || []).length, 3);
+  assert.match(hero, /data-cranial-lid="left"/);
+  assert.match(hero, /data-cranial-lid="right"/);
   assert.match(hero, /inert/);
   const marquee = html.match(/<p class="home-slogan"[\s\S]*?<\/p>/)[0];
   assert.equal((marquee.match(/你的文章，值得被看见/g) || []).length, 1);
@@ -600,19 +602,123 @@ test('cranial hero stacks real latest essence cards inside the open heads', () =
   const card = {style:{}};
   placeCranialCard(card, {left:0, top:10, width:20, height:40}, {left:80, top:210, width:40, height:60}, 0.5);
   assert.equal(card.style.position, 'fixed');
-  assert.equal(card.style.left, '40px');
-  assert.equal(card.style.top, '110px');
-  assert.equal(card.style.width, '30px');
-  assert.equal(card.style.height, '50px');
+  assert.equal(card.style.width, '20px');
+  assert.equal(card.style.height, '40px');
+  assert.equal(card.style.transform, 'translate3d(45px, 115px, 0) scale(1, 1)');
   assert.equal(card.style.pointerEvents, 'none');
   assert.equal(card.style.opacity, '1');
+  placeCranialCard(card, {left:0, top:10, width:20, height:40}, {left:80, top:210, width:40, height:60}, 0.8);
+  assert.equal(card.style.width, '20px');
+  assert.equal(card.style.height, '40px');
+  assert.match(card.style.transform, /scale\(1, 1\)$/);
   placeCranialCard(card, {left:0, top:10, width:20, height:40}, {left:80, top:210, width:40, height:60}, 1);
   assert.equal(card.style.opacity, '0');
+  assert.equal(card.style.width, '20px');
+  assert.equal(card.style.transform, 'translate3d(80px, 210px, 0) scale(2, 1.5)');
   const css = readFileSync(new URL('./src/homeShowcase.css', import.meta.url), 'utf8');
+  assert.match(css, /\.cranial-stage\.is-settled \.cranial-lid\s*\{[^}]*visibility:\s*visible/);
+  assert.match(css, /\.cranial-stage\.is-settled \.cranial-bowl\s*\{[^}]*visibility:\s*hidden/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.cranial-card\s*\{[^}]*animation:\s*none/);
   assert.equal(PUBLIC_FILES.includes('assets/hero/couple-open-heads.png'), true);
   const appSource = readFileSync(new URL('./src/app.js', import.meta.url), 'utf8');
   assert.match(appSource, /mountCranialFlight\(document\)/);
+});
+
+test('cranial flight returns cards before landing and caps the openings after', () => {
+  resetCranialFlight();
+  const matchSel = (node, sel) => {
+    const attr = sel.match(/^\[([^\]="]+)(?:="([^"]*)")?\]$/);
+    if (!attr) return false;
+    const value = node.getAttribute(attr[1]);
+    return value != null && (attr[2] === undefined || value === attr[2]);
+  };
+  const make = (tag, rect) => {
+    const node = {
+      tagName:tag, children:[], parentElement:null, ownerDocument:null, style:{}, dataset:{}, rect,
+      attributes:new Map(), className:'',
+    };
+    node.classList = {
+      add(name){ const parts = new Set(node.className.split(/\s+/).filter(Boolean)); parts.add(name); node.className = [...parts].join(' '); },
+      contains(name){ return node.className.split(/\s+/).includes(name); },
+    };
+    node.setAttribute = (name, value) => { node.attributes.set(name, String(value)); if (name === 'id') node.id = String(value); };
+    node.getAttribute = name => node.attributes.has(name) ? node.attributes.get(name) : null;
+    node.removeAttribute = name => { node.attributes.delete(name); if (name === 'style') node.style = {}; };
+    node.appendChild = child => {
+      if (child.parentElement && child.parentElement !== node) child.remove();
+      child.parentElement = node;
+      child.ownerDocument = node.ownerDocument;
+      node.children.push(child);
+      return child;
+    };
+    node.remove = () => { node.parentElement.children = node.parentElement.children.filter(child => child !== node); node.parentElement = null; };
+    node.querySelectorAll = sel => {
+      const found = [];
+      const walk = current => { for (const child of current.children) { if (matchSel(child, sel)) found.push(child); walk(child); } };
+      walk(node);
+      return found;
+    };
+    node.querySelector = sel => node.querySelectorAll(sel)[0] || null;
+    node.getBoundingClientRect = () => node.rect;
+    return node;
+  };
+  const doc = make('document');
+  const body = make('body');
+  const stage = make('stage');
+  const anchor = make('anchor', {left:10, top:20, width:30, height:60});
+  const card = make('card', {left:10, top:20, width:30, height:60});
+  const target = make('target', {left:100, top:400, width:200, height:240});
+  doc.ownerDocument = doc;
+  body.ownerDocument = doc;
+  stage.ownerDocument = doc;
+  doc.body = body;
+  doc.appendChild(body);
+  body.appendChild(stage);
+  stage.appendChild(anchor);
+  anchor.appendChild(card);
+  body.appendChild(target);
+  stage.setAttribute('data-cranial-stage', '');
+  anchor.setAttribute('data-cranial-anchor', 'a1');
+  card.setAttribute('data-cranial-card', '');
+  card.setAttribute('data-cranial-id', 'a1');
+  card.setAttribute('data-cranial-stack', '0');
+  target.setAttribute('id', 'home-card-latest-a1');
+  const listeners = [];
+  const view = {
+    document:doc, scrollY:0,
+    matchMedia:() => ({matches:false}),
+    addEventListener:(type, handler) => { listeners.push({type, handler}); },
+  };
+  doc.defaultView = view;
+  doc.createElement = () => { const el = make('div'); el.ownerDocument = doc; return el; };
+  doc.getElementById = id => {
+    let found = null;
+    const walk = node => { if (found || !node) return; if (node.id === id || node.getAttribute('id') === id) { found = node; return; } for (const child of node.children || []) walk(child); };
+    walk(doc);
+    return found;
+  };
+  const scroll = y => { view.scrollY = y; listeners.filter(item => item.type === 'scroll').forEach(item => item.handler()); };
+  mountCranialFlight(doc);
+  scroll(280);
+  assert.equal(card.parentElement.id, 'cranial-flight-root');
+  assert.equal(card.style.width, '30px');
+  assert.equal(card.style.height, '60px');
+  assert.match(card.style.transform, /scale\(1, 1\)$/);
+  assert.equal(card.style.opacity, '1');
+  scroll(0);
+  assert.equal(card.parentElement, anchor);
+  assert.equal(card.style.position, undefined);
+  assert.equal(doc.getElementById('cranial-flight-root'), null);
+  assert.equal(stage.classList.contains('is-settled'), false);
+  scroll(448);
+  assert.equal(stage.classList.contains('is-settled'), true);
+  assert.equal(doc.getElementById('cranial-flight-root'), null);
+  assert.equal(anchor.children.includes(card), false);
+  assert.equal(target.classList.contains('is-cranial-landed'), true);
+  scroll(0);
+  assert.equal(stage.classList.contains('is-settled'), true);
+  assert.equal(anchor.children.includes(card), false);
+  resetCranialFlight();
 });
 
 test('homepage cards hide leftover process excerpts and keep a real note', () => {

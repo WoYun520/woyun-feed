@@ -242,32 +242,70 @@ export function cranialFlightT(progress, stackIndex) {
   return t * t;
 }
 
+function clamp01(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.min(1, Math.max(0, n));
+}
+
+function cssNum(value) {
+  const n = Math.round(value * 1000) / 1000;
+  return Object.is(n, -0) ? '0' : String(n);
+}
+
+// Size stays at the slot until the card is over its feed card, then eases
+// into that rect. Fading starts slightly earlier so the arrival dissolves
+// instead of sitting opaque on the real card.
+function cranialBlend(t, startAt) {
+  const amount = clamp01(t);
+  if (amount <= startAt) return 0;
+  const u = (amount - startAt) / (1 - startAt);
+  return u * u * (3 - 2 * u);
+}
+
 export function placeCranialCard(card, anchorRect, targetRect, t) {
-  const start = anchorRect || {left:0, top:0, width:1, height:1};
-  const end = targetRect || {left:start.left, top:start.top + 48, width:start.width, height:start.height};
-  const amount = Number.isFinite(t) ? Math.min(1, Math.max(0, t)) : 0;
-  const left = start.left + (end.left - start.left) * amount;
-  const top = start.top + (end.top - start.top) * amount;
-  const width = start.width + (end.width - start.width) * amount;
-  const height = start.height + (end.height - start.height) * amount;
+  const start = anchorRect && Number.isFinite(anchorRect.width) && Number.isFinite(anchorRect.height)
+    ? anchorRect
+    : {left:0, top:0, width:1, height:1};
+  const end = targetRect && Number.isFinite(targetRect.width) && Number.isFinite(targetRect.height)
+    ? targetRect
+    : {left:start.left, top:start.top + 48, width:start.width, height:start.height};
+  const amount = clamp01(t);
+  const arrive = cranialBlend(amount, 0.84);
+  const fade = cranialBlend(amount, 0.72);
+  const startW = Math.max(start.width, 1);
+  const startH = Math.max(start.height, 1);
+  const scaleX = (startW + (end.width - startW) * arrive) / startW;
+  const scaleY = (startH + (end.height - startH) * arrive) / startH;
+  const startCx = start.left + start.width / 2;
+  const startCy = start.top + start.height / 2;
+  const cx = startCx + ((end.left + end.width / 2) - startCx) * amount;
+  const cy = startCy + ((end.top + end.height / 2) - startCy) * amount;
+  const left = cx - (startW * scaleX) / 2;
+  const top = cy - (startH * scaleY) / 2;
   card.style.position = 'fixed';
-  card.style.left = `${left}px`;
-  card.style.top = `${top}px`;
-  card.style.width = `${Math.max(width, 1)}px`;
-  card.style.height = `${Math.max(height, 1)}px`;
+  card.style.left = '0px';
+  card.style.top = '0px';
+  card.style.width = `${cssNum(startW)}px`;
+  card.style.height = `${cssNum(startH)}px`;
   card.style.margin = '0';
-  card.style.transform = 'none';
+  card.style.transformOrigin = '0 0';
+  card.style.transform = `translate3d(${cssNum(left)}px, ${cssNum(top)}px, 0) scale(${cssNum(scaleX)}, ${cssNum(scaleY)})`;
   card.style.zIndex = '30';
   card.style.pointerEvents = 'none';
-  const fade = amount >= 1 ? 0 : amount > 0.9 ? 1 - (amount - 0.9) / 0.1 : 1;
-  card.style.opacity = String(fade);
+  card.style.opacity = cssNum(1 - fade);
+}
+
+function renderCranialLids() {
+  return '<div class="cranial-lid cranial-lid-left" data-cranial-lid="left" aria-hidden="true"></div><div class="cranial-lid cranial-lid-right" data-cranial-lid="right" aria-hidden="true"></div>';
 }
 
 function renderCranialStage(app, entries, cards) {
   const art = `<img class="cranial-art" src="${CRANIAL_ART}" width="2048" height="2048" alt="" aria-hidden="true">`;
-  if (!cards) return `<div class="cranial-stage" data-cranial-stage>${art}</div>`;
+  const lids = renderCranialLids();
+  if (!cards) return `<div class="cranial-stage" data-cranial-stage>${art}${lids}</div>`;
   const split = splitCranialEntries(entries);
-  return `<div class="cranial-stage" data-cranial-stage>${art}${renderCranialBowl(app, 'left', split.left)}${renderCranialBowl(app, 'right', split.right)}</div>`;
+  return `<div class="cranial-stage" data-cranial-stage>${art}${lids}${renderCranialBowl(app, 'left', split.left)}${renderCranialBowl(app, 'right', split.right)}</div>`;
 }
 
 function renderCranialBowl(app, side, entries) {
@@ -365,13 +403,18 @@ function finishCranial(doc, {landed} = {}) {
   for (const id of ids) doc.getElementById(`home-card-latest-${id}`)?.classList.add('is-cranial-landed');
 }
 
+function cranialCardsLanded(cards, progress) {
+  return cards.length > 0 && cards.every(card => cranialFlightT(progress, card.getAttribute('data-cranial-stack')) >= 1);
+}
+
 function onCranialScroll() {
   const view = cranialState.view || globalThis;
   const doc = view.document;
   if (!doc || cranialState.phase === 'done') return;
   const stage = doc.querySelector('[data-cranial-stage]');
   if (!stage || stage.dataset.cranialMode === 'reduced') return;
-  if (!cranialCardNodes(doc, stage).length) return;
+  const cards = cranialCardNodes(doc, stage);
+  if (!cards.length) return;
   const progress = cranialProgress(view);
   if (progress <= 0) {
     restoreCranialCards(stage);
@@ -380,7 +423,9 @@ function onCranialScroll() {
   }
   cranialState.phase = 'scrub';
   applyCranialFrame(doc, progress);
-  if (progress >= 1) finishCranial(doc, {landed:true});
+  // The last card reaches t=1 before the scrub track ends. Cap the bowls then,
+  // so the openings are not left empty while an invisible card waits out the track.
+  if (cranialCardsLanded(cards, progress)) finishCranial(doc, {landed:true});
 }
 
 export function resetCranialFlight() {
@@ -406,12 +451,12 @@ export function mountCranialFlight(root = globalThis.document) {
   }
   const doc = root;
   const progress = cranialProgress(view);
-  const hasCards = !!stage.querySelector('[data-cranial-card]');
-  if (hasCards && progress >= 1) {
+  const parked = [...(stage.querySelectorAll?.('[data-cranial-card]') || [])];
+  if (cranialCardsLanded(parked, progress)) {
     finishCranial(doc, {landed:false});
     return;
   }
-  if (cranialState.phase === 'scrub' || (hasCards && progress > 0)) {
+  if (cranialState.phase === 'scrub' || (parked.length && progress > 0)) {
     doc.getElementById('cranial-flight-root')?.remove();
     if (progress <= 0) cranialState.phase = 'rest';
     else {
