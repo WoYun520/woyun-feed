@@ -9,6 +9,7 @@ import { wouldEnterUnderrated } from './frontend/src/homeShowcase.js';
 import { PRIVATE_CONTENT } from './frontend/public-feed-data.js';
 import { normalizeCoverUrl } from './frontend/src/postMedia.js';
 import { REVIEW_COUNT_MAX, REVIEW_TEXT_MAX, REVIEW_TYPES, classifyReviewItem } from './frontend/src/reviewQueue.js';
+import { homepageCardExcerpt, usableCardTitle } from './frontend/src/homeShowcaseView.js';
 import { shouldAutoApprove } from './frontend/essence-schedule.js';
 
 export const DOT_PENDING_PATH = '/api/dot/pending';
@@ -87,10 +88,18 @@ function plain(value) {
   return value && typeof value === 'object' && !Array.isArray(value) && [Object.prototype, null].includes(Object.getPrototypeOf(value));
 }
 
-function cleanNote(value, present) {
-  if (!present) return '';
-  if (typeof value !== 'string' || value.length > MAX_NOTE || /[\u0000-\u001f\u007f]/.test(value) || containsCredentialText(value)) bad('invalid_note', '备注过长或不完整。');
-  return value.trim();
+// A delivery note is often the post itself: several lines, or longer than the
+// title slot. Keep that body as the excerpt instead of refusing the link.
+// A one-line note that fits stays the reviewer title. Credentials still refuse.
+function intakeNote(value, present) {
+  if (!present) return {note:'', carried:''};
+  if (typeof value !== 'string' || containsCredentialText(value)) bad('invalid_note', '备注过长或不完整。');
+  const normalized = value.replace(/\r\n?/g, '\n').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '').trim();
+  if (!normalized) return {note:'', carried:''};
+  if (!normalized.includes('\n') && normalized.length <= MAX_NOTE) return {note:normalized, carried:''};
+  const first = normalized.split('\n').map(line => line.trim()).find(Boolean) || '';
+  const note = first.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, MAX_NOTE);
+  return {note, carried:normalized};
 }
 
 function cleanCount(value, present, label) {
@@ -158,19 +167,21 @@ function onePost(value, {allowNote}) {
   if (Object.hasOwn(value, 'author_handle')) {
     if (typeof value.author_handle !== 'string' || value.author_handle.toLowerCase() !== post.author_handle.toLowerCase()) bad('invalid_author', '作者账号与原帖链接不一致。');
   }
-  const note = cleanNote(value.note, Object.hasOwn(value, 'note'));
-  if (!allowNote) return {...post, note};
+  const split = intakeNote(value.note, Object.hasOwn(value, 'note'));
+  if (!allowNote) return {...post, note:split.note};
   const review_type = cleanType(value.review_type, Object.hasOwn(value, 'review_type'));
   const bookmark_count = cleanCount(value.bookmark_count, Object.hasOwn(value, 'bookmark_count'), '收藏数');
   const like_count = cleanCount(value.like_count, Object.hasOwn(value, 'like_count'), '点赞数');
   const has_article = cleanArticle(value.has_article, Object.hasOwn(value, 'has_article'));
   const cover_url = cleanCover(value.cover_url, Object.hasOwn(value, 'cover_url'));
-  const text = deliveredText(value);
+  const fromFields = deliveredText(value) || '';
+  const fromNote = split.carried ? (cleanText(split.carried, true) || '') : '';
+  const text = fromFields.length >= fromNote.length ? fromFields : fromNote;
   const published_at = cleanInstant(value.published_at, Object.hasOwn(value, 'published_at'));
   const created_at = cleanInstant(value.created_at, Object.hasOwn(value, 'created_at'));
   return {
     ...post,
-    note,
+    note:split.note,
     ...(review_type ? {review_type} : {}),
     ...(bookmark_count !== undefined ? {bookmark_count} : {}),
     ...(like_count !== undefined ? {like_count} : {}),
@@ -358,12 +369,18 @@ function absentSignal(stored, post, field) {
   return undefined;
 }
 
+function blankFaceNote(note) {
+  const text = typeof note === 'string' ? note.trim() : '';
+  return !text || text === '来源未提供标题' || /^@[A-Za-z0-9_]{1,15} 的精华帖$/u.test(text);
+}
+
 // A later delivery may replace published_at / created_at when the body brings
 // a valid instant. Signal fields are fill-if-absent: bookmark_count, like_count,
 // review_type, has_article, cover_url, and text are copied only when the stored
 // row does not already have them. Zero counts and has_article false count as
-// present. An existing cover_url is not replaced. Notes and the review clock
-// stay as first written. The caller leaves rejected rows untouched.
+// present. An existing cover_url is not replaced. A real note stays as first
+// written. An empty note, or the face 「@用户 的精华帖」, can be filled once.
+// The caller leaves rejected rows untouched.
 function mergeIntakeTimes(stored, post) {
   let changed = false;
   const next = {...stored};
@@ -377,6 +394,13 @@ function mergeIntakeTimes(stored, post) {
     if (value === undefined) continue;
     next[field] = value;
     changed = true;
+  }
+  if (blankFaceNote(next.note) && !blankFaceNote(post.note)) {
+    const line = String(post.note).replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, MAX_NOTE);
+    if (line && line !== next.note) {
+      next.note = line;
+      changed = true;
+    }
   }
   return changed ? next : null;
 }
@@ -558,8 +582,82 @@ export async function publishApprovedFeed(env) {
   return publishApproved(env);
 }
 
+function faceText(value) {
+  const raw = homepageCardExcerpt(value);
+  if (!raw || raw === '来源未提供标题' || /^@[A-Za-z0-9_]{1,15} 的精华帖$/u.test(raw)) return '';
+  const text = raw.replace(/\r\n?/g, '\n').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '').trim();
+  if (!text || containsCredentialText(text)) return '';
+  return text.length > REVIEW_TEXT_MAX ? text.slice(0, REVIEW_TEXT_MAX).trim() : text;
+}
+
+function faceTitle(item) {
+  const line = usableCardTitle(item).split('\n').map(part => part.trim()).find(Boolean) || '';
+  const title = line.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, MAX_NOTE);
+  if (!title || containsCredentialText(title) || blankFaceNote(title)) return '';
+  return title;
+}
+
+// The public card is rebuilt from the queue. A summary that exists only on a
+// board row, or only on the previous public card, has to be written back here
+// or the next scheduled snapshot publishes an empty shell.
+export async function backfillEssenceFace(env, {extraItems = []} = {}) {
+  const empty = {updated:0};
+  let snapshot = [];
+  try {
+    const feed = await readPublicFeedSnapshot(env);
+    if (Array.isArray(feed?.items)) snapshot = feed.items;
+  } catch { snapshot = []; }
+  const faces = new Map();
+  for (const item of [...(Array.isArray(extraItems) ? extraItems : []), ...snapshot]) {
+    let key = '';
+    try { key = canonicalPendingPost(item?.original_url || item?.canonical_url || item?.url || '')?.key || ''; }
+    catch { key = ''; }
+    if (!key) continue;
+    const text = faceText(item?.summary);
+    const title = faceTitle(item);
+    const prev = faces.get(key) || {text:'', title:''};
+    if (text.length > prev.text.length) prev.text = text;
+    if (Array.from(title).length > Array.from(prev.title).length) prev.title = title;
+    faces.set(key, prev);
+  }
+  let records = [];
+  try { records = await listKosxRecords(env); }
+  catch { return empty; }
+  let updated = 0;
+  for (const record of records) {
+    if (!record || record.status === 'rejected') continue;
+    const face = faces.get(record.key);
+    if (!face) continue;
+    const next = {...record};
+    let changed = false;
+    if (!faceText(record.text) && face.text && face.text !== faceText(record.note)) {
+      next.text = face.text;
+      changed = true;
+    }
+    if (blankFaceNote(record.note) && face.title && face.title !== next.note) {
+      next.note = face.title;
+      changed = true;
+    }
+    if (!changed) continue;
+    try {
+      await env.DOT_INBOX.put(`${DOT_PENDING_PREFIX}${record.key}`, JSON.stringify(next), {
+        metadata:{
+          id:record.id, key:record.key, status:record.status, submitted_at:record.submitted_at,
+          ...(record.reviewed_at ? {reviewed_at:record.reviewed_at} : {}),
+          ...(record.approval ? {approval:record.approval} : {}),
+        },
+      });
+      updated += 1;
+    } catch { /* One bad row does not stop the rest. */ }
+  }
+  return {updated};
+}
+
 async function publishApproved(env) {
-  const feed = attachKosxApproved(await readPublicFeed(env), await listApprovedKosxRecords(env));
+  const current = await readPublicFeed(env);
+  try { await backfillEssenceFace(env, {extraItems:current.items}); }
+  catch { /* Publish still copies a face that is already on this snapshot. */ }
+  const feed = attachKosxApproved(current, await listApprovedKosxRecords(env));
   await env.PUBLIC_FEED.put(PUBLIC_FEED_KEY, JSON.stringify(feed));
   return feed;
 }

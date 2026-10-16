@@ -148,12 +148,16 @@ export function withSalvagedFace(item, donors) {
   };
 }
 
-export function attachKosxApproved(feed, records) {
+export function attachKosxApproved(feed, records, extraDonors) {
   const previous = (Array.isArray(feed?.items) ? feed.items : []).filter(isKosxPublicItem);
+  // A scheduled rebuild drops these rows before they are attached again.
+  // The previous public card is still a donor, so a salvaged excerpt survives
+  // that rebuild even when the board copy has already aged off.
+  const extras = Array.isArray(extraDonors) ? extraDonors.filter(donor => donor && typeof donor === 'object') : [];
   const approved = (Array.isArray(records) ? records : []).map(record => {
     const item = kosxPublicItem(record);
     if (!item) return null;
-    const donors = [...(Array.isArray(feed?.items) ? feed.items : []), ...previous].filter(donor => donor?.original_url === item.original_url || donor?.canonical_url === item.original_url);
+    const donors = [...(Array.isArray(feed?.items) ? feed.items : []), ...previous, ...extras].filter(donor => donor?.original_url === item.original_url || donor?.canonical_url === item.original_url);
     return withSalvagedFace(item, donors);
   }).filter(Boolean);
   const sources = Array.isArray(feed?.sources) ? feed.sources : [];

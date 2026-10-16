@@ -178,16 +178,18 @@ export async function runScheduledUpdate(env, options) {
   const refreshed=await refreshPublicFeed(previous, options);
   let approved=[];
   if (typeof env?.DOT_INBOX?.list==='function') {
-    const {listApprovedKosxRecords}=await import('../dot-pending-service.js');
+    const {listApprovedKosxRecords, autoApproveStalePending, backfillEssenceFace}=await import('../dot-pending-service.js');
     const {backfillEssenceHeat}=await import('./essence-sweep.js');
-    const {autoApproveStalePending}=await import('../dot-pending-service.js');
     try { await backfillEssenceHeat(env, {publish:false, extraItems:refreshed.items}); }
     catch { console.warn(JSON.stringify({event:'essence-heat-backfill-failed'})); }
     try { await autoApproveStalePending(env, {publish:false}); }
     catch { console.warn(JSON.stringify({event:'essence-auto-approve-failed'})); }
+    const remembered=[...(Array.isArray(previous?.items) ? previous.items : []), ...(Array.isArray(refreshed?.items) ? refreshed.items : [])];
+    try { await backfillEssenceFace(env, {extraItems:remembered}); }
+    catch { console.warn(JSON.stringify({event:'essence-face-backfill-failed'})); }
     approved=await listApprovedKosxRecords(env);
   }
-  const next=attachKosxApproved(refreshed, approved);
+  const next=attachKosxApproved(refreshed, approved, previous?.items);
   // A single completed snapshot is published; partial failures keep each source's previous items.
   await env.PUBLIC_FEED.put(PUBLIC_FEED_KEY,JSON.stringify(next));
   console.log(JSON.stringify({event:'public-feed-updated',status:next.refresh.status,items:next.items.length,new_items:next.refresh.new_count,
