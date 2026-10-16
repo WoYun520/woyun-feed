@@ -9,6 +9,7 @@ import { wouldEnterUnderrated } from './frontend/src/homeShowcase.js';
 import { PRIVATE_CONTENT } from './frontend/public-feed-data.js';
 import { normalizeCoverUrl } from './frontend/src/postMedia.js';
 import { REVIEW_COUNT_MAX, REVIEW_TEXT_MAX, REVIEW_TYPES, classifyReviewItem } from './frontend/src/reviewQueue.js';
+import { shouldAutoApprove } from './frontend/essence-schedule.js';
 
 export const DOT_PENDING_PATH = '/api/dot/pending';
 export const DOT_PENDING_DECISION_PATH = '/api/dot/pending/decision';
@@ -238,8 +239,8 @@ function validRecord(value, storageKey) {
   if (Object.hasOwn(value, 'underrated_candidate')) fields.push('underrated_candidate', 'underrated_candidate_at');
   if (!plain(value) || Object.keys(value).length !== fields.length || fields.some(field => !Object.hasOwn(value, field))) return false;
   if (!signalsValid(value)) return false;
-  if (Object.hasOwn(value, 'approval') && !['pool', 'review'].includes(value.approval)) return false;
-  if (value?.approval === 'pool' && value.source !== 'delivery') return false;
+  if (Object.hasOwn(value, 'approval') && !['pool', 'review', 'auto'].includes(value.approval)) return false;
+  if ((value?.approval === 'pool' || value?.approval === 'auto') && value.source !== 'delivery') return false;
   if (!['pending', 'approved', 'rejected'].includes(value.status) || !['homepage', 'delivery'].includes(value.source)) return false;
   if (decided && !timestamp(value.reviewed_at)) return false;
   if (!decided && Object.hasOwn(value, 'reviewed_at')) return false;
@@ -368,7 +369,7 @@ function mergeIntakeTimes(stored, post) {
 }
 
 // candidate: true sets the flag, false clears it, null keeps the previous flag.
-// The flag never writes the underrated pin list.
+// The flag itself does not pin. A human decision that sends true also calls the pin.
 function decidedRecord(stored, status, reviewed_at, approval, {candidate = null, review_type, candidateAt} = {}) {
   const record = {
     id:stored.id, key:stored.key, url:stored.url, author_handle:stored.author_handle, note:stored.note,
@@ -441,7 +442,7 @@ function queryCursor(url, isRead) {
   return value;
 }
 
-export async function listApprovedKosxRecords(env) {
+export async function listKosxRecords(env) {
   const records = [];
   let cursor;
   for (let page = 0; page < 10; page += 1) {
@@ -454,13 +455,73 @@ export async function listApprovedKosxRecords(env) {
       if (!entry?.name?.startsWith(DOT_PENDING_PREFIX) || !key) unavailable();
       const stored = await readStored(env, key);
       if (!stored) unavailable();
-      if (stored.status === 'approved') records.push(stored);
+      records.push(stored);
     }
     if (listed.list_complete) return records;
     if (typeof listed.cursor !== 'string' || !listed.cursor || listed.cursor === cursor) unavailable();
     cursor = listed.cursor;
   }
   unavailable();
+}
+
+export async function listApprovedKosxRecords(env) {
+  return (await listKosxRecords(env)).filter(record => record.status === 'approved');
+}
+
+function storeRecord(env, record) {
+  return env.DOT_INBOX.put(`${DOT_PENDING_PREFIX}${record.key}`, JSON.stringify(record), {
+    metadata:{
+      id:record.id, key:record.key, status:record.status, submitted_at:record.submitted_at,
+      ...(record.reviewed_at ? {reviewed_at:record.reviewed_at} : {}),
+      ...(record.approval ? {approval:record.approval} : {}),
+    },
+  });
+}
+
+// Same write path as a delivery POST: new rows start pending, pool release may
+// approve them, and a row that would enter yesterday's underrated shelf stays
+// pending. Already queued keys, including rejected, are left alone.
+export async function enqueueDeliveryPosts(env, posts, {handles} = {}) {
+  const incoming = Array.isArray(posts) ? posts.filter(post => post?.key && post.url) : [];
+  if (!incoming.length) return {created:[], promoted:[], held:[], full:false};
+  const existing = new Map();
+  for (const post of incoming) {
+    const stored = await readStored(env, post.key);
+    if (stored) existing.set(post.key, stored);
+  }
+  const created = incoming.filter(post => !existing.has(post.key));
+  if (created.length && await pendingCount(env) + created.length > DOT_PENDING_MAX) return {created:[], promoted:[], held:[], full:true};
+  const submitted_at = new Date().toISOString();
+  for (const post of created) {
+    const record = withReviewSignals({...post, note:typeof post.note === 'string' ? post.note : '', status:'pending', submitted_at, source:'delivery'}, post);
+    await storeRecord(env, record);
+    existing.set(post.key, record);
+  }
+  let pool = handles instanceof Set ? handles : new Set(KOSX_POOL_HANDLES);
+  if (!(handles instanceof Set)) {
+    try { pool = await loadKosxPoolHandles(env); }
+    catch { pool = new Set(KOSX_POOL_HANDLES); }
+  }
+  const {held, promoted} = await applyPoolRelease(env, incoming, existing, true, pool);
+  return {created:created.map(post => post.key), promoted:[...promoted], held:[...held], full:false};
+}
+
+// Pending delivery older than 3 hours is approved onto the public feed.
+// Homepage paste is skipped. Nothing here writes an underrated pin.
+export async function autoApproveStalePending(env, {now = Date.now(), publish = true} = {}) {
+  const due = (await listKosxRecords(env)).filter(record => shouldAutoApprove(record, now));
+  if (!due.length) return {approved:[]};
+  const clock = now instanceof Date ? now.getTime() : typeof now === 'number' ? now : Date.parse(now);
+  const reviewed_at = new Date(Number.isFinite(clock) ? clock : Date.now()).toISOString();
+  const approved = [];
+  for (const record of due) {
+    const next = decidedRecord(record, 'approved', reviewed_at, 'auto');
+    if (!canRelease(kosxPublicItem(next))) continue;
+    await storeRecord(env, next);
+    approved.push(next.key);
+  }
+  if (publish && approved.length) await publishApproved(env);
+  return {approved};
 }
 
 async function readPublicFeed(env) {
@@ -474,6 +535,14 @@ async function readPublicFeed(env) {
   if (raw && typeof raw === 'object' && Array.isArray(raw.items) && Array.isArray(raw.sources)) return raw;
   try { return await loadPublicSeed(env); }
   catch { unavailable(); }
+}
+
+export async function readPublicFeedSnapshot(env) {
+  return readPublicFeed(env);
+}
+
+export async function publishApprovedFeed(env) {
+  return publishApproved(env);
 }
 
 async function publishApproved(env) {
@@ -492,8 +561,8 @@ async function handleDecision(request, env, review) {
   const decisionFields = ['url', 'status', 'underrated_candidate', 'review_type'];
   if (!plain(body) || Object.keys(body).some(key => !decisionFields.includes(key)) || !Object.hasOwn(body, 'url') || !Object.hasOwn(body, 'status')) bad('invalid_body', '请提交要过审的 X 链接和结果。');
   if (!['approved', 'rejected'].includes(body.status)) bad('invalid_status', '过审结果只能是 approved 或 rejected。');
-  if (Object.hasOwn(body, 'underrated_candidate') && typeof body.underrated_candidate !== 'boolean') bad('invalid_candidate', '进低估栏候选只能是 true 或 false。');
-  if (body.underrated_candidate === true && body.status !== 'approved') bad('invalid_candidate', '只有过审通过时才能标成低估栏候选。');
+    if (Object.hasOwn(body, 'underrated_candidate') && typeof body.underrated_candidate !== 'boolean') bad('invalid_candidate', '进低估只能是 true 或 false。');
+  if (body.underrated_candidate === true && body.status !== 'approved') bad('invalid_candidate', '只有过审通过时才能钉进低估栏。');
   const reviewType = cleanType(body.review_type, Object.hasOwn(body, 'review_type'));
   const post = canonicalPendingPost(body.url);
   if (!post) bad('invalid_url', '请粘贴有效的 X 链接。');
@@ -501,7 +570,7 @@ async function handleDecision(request, env, review) {
   if (!stored) return json({error:'not_found', message:'这条链接不在待筛选里。'}, 404);
   let record = stored;
   const statusChanged = stored.status !== body.status;
-  const markReview = body.status === 'approved' && stored.approval === 'pool';
+  const markReview = body.status === 'approved' && (stored.approval === 'pool' || stored.approval === 'auto');
   const candidate = Object.hasOwn(body, 'underrated_candidate') ? body.underrated_candidate : null;
   const candidateChanged = candidate === true ? stored.underrated_candidate !== true : candidate === false && stored.underrated_candidate === true;
   const typeChanged = !!reviewType && reviewType !== stored.review_type;
@@ -517,7 +586,21 @@ async function handleDecision(request, env, review) {
     });
   }
   await publishApproved(env);
-  return json({...publicView(record, {includeNote:true}), existing:!statusChanged, published:record.status === 'approved'});
+  let pin = null;
+  if (candidate === true && record.status === 'approved') {
+    const {pinReviewedPost} = await import('./dot-underrated-service.js');
+    pin = await pinReviewedPost(env, record.url);
+  }
+  const notYesterday = pin && !pin.pinned && pin.code === 'not_yesterday';
+  return json({
+    ...publicView(record, {includeNote:true}),
+    existing:!statusChanged,
+    published:record.status === 'approved',
+    ...(pin ? {
+      pinned:pin.pinned === true,
+      ...(pin.pinned ? {pin_message:'已过审上首页，并钉进昨日低估栏。'} : {pin_code:pin.code || 'pin_failed', pin_message:notYesterday ? '已过审上首页。原帖日期不是昨日，没有钉进昨日低估栏。' : (pin.message || '已过审上首页。钉选没有完成。')}),
+    } : {}),
+  });
 }
 
 export async function handleDotPendingRequest(request, env) {

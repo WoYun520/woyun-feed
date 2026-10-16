@@ -89,18 +89,18 @@ test('article-class KOSX cards show a delivered cover and a quote when the cover
 
 test('homepage essence cards keep a cover image or a quote and never an empty attachment frame', () => {
   const member = 'ai_suxiaole';
-  const withCover = post('9101', '2026-10-14T12:21:00.000Z', {
+  const withCover = post('9101', '2026-10-10T12:21:00.000Z', {
     origin:'kosx_approved', review_type:'文章', bookmark_count:12, kosx_review:'pool',
     cover_url:'https://cdn.example.com/covers/dense.jpg', author_handle:member,
     url:`https://x.com/${member}/status/9101`, title:`@${member} 的精华帖`,
     summary:'超15万人关注的话题。\n原作者已经把仓库开源。',
   });
-  const quote = post('9102', '2026-10-14T11:00:00.000Z', {
+  const quote = post('9102', '2026-10-10T11:00:00.000Z', {
     origin:'kosx_approved', author_handle:member, bookmark_count:3,
     url:`https://x.com/${member}/status/9102`, title:`@${member} 的精华帖`,
     summary:'可玩性已经离开玩具级别了。下一句仍在摘录里。',
   });
-  const bare = post('9103', '2026-10-14T10:00:00.000Z', {
+  const bare = post('9103', '2026-10-10T10:00:00.000Z', {
     origin:'kosx_approved', author_handle:member, url:`https://x.com/${member}/status/9103`,
     title:`@${member} 的精华帖`,
     summary:'账号池成员的精华帖，按时间放上首页。尚未读取原文，未核对热度。不进入昨日最被低估。',
@@ -109,13 +109,13 @@ test('homepage essence cards keep a cover image or a quote and never an empty at
     origin:'kosx_approved', title:'只有创建时间', summary:'金句来自创建时间那条。',
   });
   delete createdOnly.published_at;
-  createdOnly.created_at = '2026-10-01T08:30:00.000Z';
+  createdOnly.created_at = '2026-10-08T08:30:00.000Z';
   const html = renderHomeShowcase(app(), state([withCover, quote, bare, createdOnly]));
   assert.doesNotMatch(html, /无来源附图|cover-fallback|cover-type|data-review-type/);
   const shown = cardHtml(html, '9101');
   assert.match(shown, /data-cover="media"/);
   assert.match(shown, /src="https:\/\/cdn\.example\.com\/covers\/dense\.jpg"/);
-  assert.match(shown, /<time datetime="2026-10-14T12:21:00.000Z">/);
+  assert.match(shown, /<time datetime="2026-10-10T12:21:00.000Z">/);
   assert.match(shown, /超15万人关注的话题/);
   assert.match(shown, /<span class="kosx-pool-badge">KOSX<\/span>/);
   assert.match(shown, /@ai_suxiaole 的精华帖/);
@@ -136,7 +136,7 @@ test('homepage essence cards keep a cover image or a quote and never an empty at
   assert.match(empty, /打开原帖/);
   assert.doesNotMatch(empty, /cover-quote|cover-frame|<img|无来源附图|按时间放上首页|来源未提供摘录，请打开原帖/);
   const created = cardHtml(html, '9104');
-  assert.match(created, /<time datetime="2026-10-01T08:30:00.000Z">/);
+  assert.match(created, /<time datetime="2026-10-08T08:30:00.000Z">/);
   assert.doesNotMatch(created, /2026-10-13T01:00:00.000Z/);
   const css = readFileSync(new URL('./src/homeShowcase.css', import.meta.url), 'utf8');
   assert.match(css, /\.cover-quote-text\s*\{[^}]*-webkit-line-clamp:\s*2/);
@@ -156,32 +156,36 @@ test('beijing yesterday is the calendar day before the published snapshot', () =
   assert.equal(parsePublicHeat('没有数字'), null);
 });
 
-test('approving an older original still places it on 最新精华 without entering 卧云精选', () => {
-  const newer = Array.from({length:18}, (_, index) => post(String(500000 + index), `2026-10-14T${String(index).padStart(2, '0')}:10:00.000Z`, {
-    origin:'kosx_approved', source_item_time:'2026-10-14T12:00:00.000Z', review_type:'文章', bookmark_count:2200,
+test('an original older than seven Beijing days leaves 最新精华 and can still enter 卧云精选', () => {
+  const newer = Array.from({length:18}, (_, index) => post(String(500000 + index), `2026-10-09T${String(index).padStart(2, '0')}:10:00.000Z`, {
+    origin:'kosx_approved', source_item_time:'2026-10-10T12:00:00.000Z', review_type:'文章', bookmark_count:40,
   }));
   const approved = post('188888', '2026-09-01T00:00:00.000Z', {
     origin:'kosx_approved', source_refs:['sopilot-kosx'], source_item_time:'2026-10-15T07:50:21.000Z',
     title:'刚过审的旧原帖', review_type:'教程指南', bookmark_count:59,
   });
+  const keptOld = post('188890', '2026-08-02T00:00:00.000Z', {
+    origin:'kosx_approved', source_refs:['sopilot-kosx'], title:'旧的高收藏文章', review_type:'文章', bookmark_count:2200,
+  });
   const hot = post('188889', '2026-10-15T09:00:00.000Z', {heat:'9万 曝光/小时', title:'热榜帖', source_item_time:'2026-10-15T09:00:00.000Z'});
-  const input = state([...newer, approved, hot]);
+  const input = state([...newer, approved, keptOld, hot]);
   input.sources = [source, {id:'sopilot-kosx', name:'KOSX 过审', group:'posts', link_kind:'post', status:'ok', enabled:true}];
   const selected = selectHomeShowcase(input);
-  assert.equal(selected.latest[0].post.item.id, approved.id);
+  assert.equal(selected.latest.some(entry => entry.post.item.id === approved.id), false);
+  assert.equal(selected.latest.some(entry => entry.post.item.id === keptOld.id), false);
   assert.equal(selected.latest.length, 18);
   assert.equal(selected.latest.some(entry => entry.post.item.id === hot.id), false);
   assert.equal(selected.kept.some(entry => entry.post.item.id === approved.id), false);
+  assert.equal(selected.kept.some(entry => entry.post.item.id === keptOld.id), true);
   const note = renderHomeShowcase(app(), input);
-  assert.doesNotMatch(note, /刚过审的帖会进这 18 条|最新精华是已经放上公开首页的精华帖/);
-  assert.match(note, /刚过审的旧原帖/);
+  assert.doesNotMatch(note, /刚过审的帖会进这 18 条|最新精华是已经放上公开首页的精华帖|刚过审的旧原帖|旧的高收藏文章/);
   assert.doesNotMatch(note, /热榜帖/);
 });
 
 test('an approved row stays on 最新精华 when a longer public excerpt is the card that was chosen', () => {
   const url = 'https://x.com/example/status/660001';
   const stream = post('660001', '2026-10-10T08:00:00.000Z', {summary:'榜'.repeat(180), title:'榜单长摘录', url});
-  const approved = post('kosx660001', '2026-09-02T00:00:00.000Z', {
+  const approved = post('kosx660001', '2026-10-08T00:00:00.000Z', {
     origin:'kosx_approved', source_refs:['sopilot-kosx'], summary:'短摘录', title:'过审帖', url,
     source_item_time:'2026-10-15T01:00:00.000Z',
   });
@@ -194,10 +198,10 @@ test('an approved row stays on 最新精华 when a longer public excerpt is the 
 });
 
 test('latest keeps 18 homepage essence posts by publication time and does not fill with the public stream', () => {
-  const essence = Array.from({length:20}, (_, index) => post(String(200000 + index), `2026-10-10T${String(index).padStart(2,'0')}:00:00.000Z`, {origin:'kosx_approved'}));
-  const hot = post('199001', '2026-10-10T23:30:00.000Z', {heat:'5.1万 曝光/小时', title:'2027年或成史上最热一年'});
-  const mixed = post('199002', '2026-10-10T23:00:00.000Z', {heat:'100 曝光/小时', source_refs:['sopilot-kosx', 'sopilot-all'], title:'多来源热榜'});
-  const sourced = post('199003', '2026-10-10T22:30:00.000Z', {source_refs:['sopilot-kosx'], title:'来源即精华'});
+  const essence = Array.from({length:20}, (_, index) => post(String(200000 + index), new Date(Date.parse('2026-10-09T16:00:00.000Z') + index * 30 * 60 * 1000).toISOString(), {origin:'kosx_approved'}));
+  const hot = post('199001', '2026-10-10T07:30:00.000Z', {heat:'5.1万 曝光/小时', title:'2027年或成史上最热一年'});
+  const mixed = post('199002', '2026-10-10T07:00:00.000Z', {heat:'100 曝光/小时', source_refs:['sopilot-kosx', 'sopilot-all'], title:'多来源热榜'});
+  const sourced = post('199003', '2026-10-10T06:30:00.000Z', {source_refs:['sopilot-kosx'], title:'来源即精华'});
   const folded = post('188001', '2026-10-09T01:00:00.000Z', {origin:'kosx_approved', summary:'转发抽一名，送周边礼品，关注后参与。'});
   const items = [...essence, hot, mixed, sourced, folded];
   const input = state(items);
@@ -807,13 +811,13 @@ test('昨日最被低估 cover cards show a real excerpt under @handle and still
 
 test('essence cards drop stock evidence and bookmark counts, and keep a longer excerpt', () => {
   const long = ['第一行金句，讲清楚这件事。', '第二行还在卡片上。', '第三行只在摘录依据里，避免和套话混在一起。'].join('\n');
-  const longerItem = post('9301', '2026-10-14T12:00:00.000Z', {
+  const longerItem = post('9301', '2026-10-10T12:00:00.000Z', {
     origin:'kosx_approved', review_type:'文章', bookmark_count:30, heat:'',
     author_handle:'cgnot996', title:'@cgnot996 的精华帖', summary:long,
     url:'https://x.com/cgnot996/status/9301',
   });
   const cover = 'https://cdn.example.com/covers/row-mate.jpg';
-  const media = post('9302', '2026-10-14T11:30:00.000Z', {
+  const media = post('9302', '2026-10-10T11:30:00.000Z', {
     origin:'kosx_approved', review_type:'文章', bookmark_count:1, heat:'2万 曝光/小时',
     author_handle:'ai_suxiaole', title:'@ai_suxiaole 的精华帖', summary:'只有一行摘录。',
     cover_url:cover, url:'https://x.com/ai_suxiaole/status/9302',

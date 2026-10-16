@@ -1,4 +1,6 @@
 import { PUBLIC_FEED_KEY, runScheduledUpdate } from './frontend/cloud-feed-service.js';
+import { ESSENCE_SWEEP_CRON } from './frontend/essence-schedule.js';
+import { runEssenceSweep } from './frontend/essence-sweep.js';
 import { handleDotInboxRequest, isDotInboxRoute } from './dot-inbox-service.js';
 import { handleDotPendingRequest, isDotPendingRoute } from './dot-pending-service.js';
 import { handleDotUnderratedRequest, isDotUnderratedRoute, overlayPublicUnderratedPins } from './dot-underrated-service.js';
@@ -27,6 +29,10 @@ export default {
     return env.ASSETS.fetch(request);
   },
   async scheduled(controller,env) {
+    if(controller?.cron===ESSENCE_SWEEP_CRON) {
+      await runEssenceSweep(env);
+      return;
+    }
     await runScheduledUpdate(env);
   }
 };

@@ -72,7 +72,7 @@ curl -sS 'https://woyun-feed-preview.hhzovo66.workers.dev/api/dot/pending' \
 
 账号池是 [https://impact.kosx.ai/api/members](https://impact.kosx.ai/api/members) 的公开 `members[].handle`。进料自动过审只认这份账号名单，不认粉丝数。`latest_followers`、显示名和其他字段都丢掉，不写入 KV，也不写入公开首页。
 
-预览 Worker 把小写 handle 存在私有 KV `DOT_INBOX` 的键 `kosx_pool_handles`。已有的定时任务（每天 01:00 与 13:00 UTC，北京时间 09:00 与 21:00）会拉取名单并覆盖这个键。投递到达时，缓存不存在或早于一小时，也会当场再拉一次。拉取成功后，名单变化不必再部署才能用于自动过审。
+预览 Worker 把小写 handle 存在私有 KV `DOT_INBOX` 的键 `kosx_pool_handles`。公开来源定时任务（每天 01:00 与 13:00 UTC，北京时间 09:00 与 21:00）会拉取名单并覆盖这个键。另有一条大约每 3 小时的精华进队（UTC `0 */3 * * *`）只读已有公开快照，不调用 X；缓存不存在或早于一小时时，它最多再拉一次这份免费名单。投递到达时，缓存不存在或早于一小时，也会当场再拉一次。拉取成功后，名单变化不必再部署才能用于自动过审。调用量和 3 小时自动过审见 [待筛选过审](pending-review.md)。
 
 拉取失败时继续用上一次成功写入的缓存。还没有可用缓存时，用仓库里的 `frontend/kosx-pool.js`。名单拉取失败不会让进料接口失败，也不会把这一次投递记成失败。
 

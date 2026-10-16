@@ -81,7 +81,7 @@ The local review page is `http://127.0.0.1:3000/review-admin`, and it is the onl
 
 ## Preview deploy
 
-`wrangler.jsonc` targets the existing preview Worker `woyun-feed-preview` (account `2406ce3e27726cda95852f23951dfc93`). Assets come from `./public-dist`. KV bindings are `PUBLIC_FEED` and `DOT_INBOX`; the namespace ids are in that file. Cron is `0 1,13 * * *` UTC (09:00 and 21:00 Asia/Shanghai).
+`wrangler.jsonc` targets the existing preview Worker `woyun-feed-preview` (account `2406ce3e27726cda95852f23951dfc93`). Assets come from `./public-dist`. KV bindings are `PUBLIC_FEED` and `DOT_INBOX`; the namespace ids are in that file. Public-source cron stays `0 1,13 * * *` UTC (09:00 and 21:00 Asia/Shanghai). Latest-essence intake is `0 */3 * * *` and does not call the X API.
 
 ```sh
 node frontend/public-build.mjs

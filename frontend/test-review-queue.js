@@ -144,7 +144,7 @@ test('missing type is classified from the note or text, and a later duplicate do
   assert.equal((await fromNote.json()).review_type, '文章');
 });
 
-test('approval can record an underrated candidate without pinning, and omitting it leaves that path empty', async () => {
+test('approval pins 进低估 only when the original day is yesterday', async () => {
   const env = await environment();
   const before = showcase(env.PUBLIC_FEED.json());
   await submit(env, {url:postUrl, note:'一篇教程', review_type:'教程指南', bookmark_count:9, like_count:4, has_article:false});
@@ -166,13 +166,15 @@ test('approval can record an underrated candidate without pinning, and omitting 
   assert.equal(await overlayPublicUnderratedPins(env.PUBLIC_FEED.raw, env), env.PUBLIC_FEED.raw);
 
   const second = 'https://x.com/example/status/2108148604447884012';
-  await submit(env, {url:second, has_article:true, bookmark_count:20, like_count:10, text:'长文'});
+  await submit(env, {url:second, has_article:true, bookmark_count:20, like_count:10, text:'长文', published_at:'2026-10-08T04:00:00.000Z'});
   const marked = await decide(env, {url:second, status:'approved', underrated_candidate:true, review_type:'文章'});
   const markedBody = await marked.json();
   assert.equal(markedBody.underrated_candidate, true);
   assert.equal(typeof markedBody.underrated_candidate_at, 'string');
   assert.equal(markedBody.review_type, '文章');
   assert.equal(markedBody.published, true);
+  assert.equal(markedBody.pinned, false);
+  assert.equal(markedBody.pin_code, 'not_yesterday');
   const row = stored(env).find(item => item.url === second);
   assert.equal(row.underrated_candidate, true);
   assert.equal(env.DOT_INBOX.values.has(UNDERRATED_PIN_KEY), false);
@@ -182,6 +184,16 @@ test('approval can record an underrated candidate without pinning, and omitting 
   assert.equal(JSON.stringify(published).includes('underrated_candidate'), false);
   assert.equal(showcase(published).underratedRule === 'pinned', false);
   assert.deepEqual(showcase(published).underrated.map(entry => entry.post.item.id), before.underrated.map(entry => entry.post.item.id));
+  const yesterdayUrl = 'https://x.com/example/status/2108148604447884019';
+  await submit(env, {url:yesterdayUrl, published_at:'2026-10-09T02:00:00.000Z', review_type:'文章', bookmark_count:40, like_count:8});
+  const pinned = await (await decide(env, {url:yesterdayUrl, status:'approved', underrated_candidate:true})).json();
+  assert.equal(pinned.published, true);
+  assert.equal(pinned.pinned, true);
+  assert.match(pinned.pin_message, /钉进昨日低估栏/);
+  const pinnedRows = await (await handleDotUnderratedRequest(request('GET', {token:review, path:'/api/dot/underrated'}), env)).json();
+  assert.equal(pinnedRows.items.some(item => item.url === yesterdayUrl && item.day === '2026-10-09'), true);
+  assert.equal(pinnedRows.items.some(item => item.url === second), false);
+
   const repeat = await (await decide(env, {url:second, status:'approved'})).json();
   assert.equal(repeat.existing, true);
   assert.equal(repeat.underrated_candidate, true);
@@ -236,14 +248,16 @@ test('the review queue keeps approve and skip, and does not print signal or evid
   assert.match(html, /产品安利/);
   assert.match(html, /过审上首页/);
   assert.match(html, /略过/);
-  assert.match(html, /进低估栏候选/);
+  assert.match(html, /进低估/);
+  assert.match(html, /原帖是昨日时，过审通过会钉进昨日低估栏/);
+  assert.doesNotMatch(html, /进低估栏候选|只记在这条过审记录|不会钉进昨日低估栏|尚未钉进/);
   assert.doesNotMatch(html, /data-review-underrated[^>]*checked/);
   assert.doesNotMatch(html, /有 X Article 卡|收藏 12|点赞 4|收藏\/点赞|收藏信号强|可后看|review-queue-heat|review-queue-article|文章卡|收藏偏低|类型优先|互动尚低|可执行提示词|Levi样例/);
   assert.deepEqual([...html.matchAll(/data-review-type="([^"]+)"/g)].map(match => match[1]), ['教程指南', '教程指南', '产品安利']);
   assert.doesNotMatch(html, /data-review-url="https:\/\/x.com\/example\/status\/2108148604447884002"/);
   const disconnected = renderReviewQueue({connected:false, items:[{status:'pending', url:postUrl}]});
   assert.match(disconnected, /连接接收码后/);
-  assert.doesNotMatch(disconnected, /进低估栏候选|过审上首页|收藏、点赞|Article 卡/);
+  assert.doesNotMatch(disconnected, /进低估|过审上首页|收藏、点赞|Article 卡/);
 });
 
 test('public pending review keeps Shanghai today and yesterday, and drops the day before', () => {
@@ -846,11 +860,11 @@ test('delivery stores a cover, copies it onto the public item, and a later deliv
   assert.equal(env.PUBLIC_FEED.json().items.find(item => item.original_url === poolUrl).cover_url, storedCover);
 });
 
-test('approving an older original puts that post on 最新精华 ahead of newer originals approved earlier', async () => {
+test('an original older than seven Beijing days stays off 最新精华 and can still enter 卧云精选', async () => {
   const env = await environment();
   for (let index = 0; index < 18; index += 1) {
     const url = `https://x.com/example/status/2108148604447885${String(index).padStart(3, '0')}`;
-    const published_at = `2026-10-14T${String(index).padStart(2, '0')}:15:00.000Z`;
+    const published_at = `2026-10-09T${String(index).padStart(2, '0')}:15:00.000Z`;
     assert.equal((await submit(env, {url, published_at, review_type:'文章', bookmark_count:10})).status, 201);
     assert.equal((await decide(env, {url, status:'approved'})).status, 200);
   }
@@ -858,15 +872,19 @@ test('approving an older original puts that post on 最新精华 ahead of newer 
   assert.equal((await submit(env, {url:oldUrl, published_at:'2026-09-01T00:00:00.000Z', review_type:'教程指南', bookmark_count:59})).status, 201);
   const decision = await (await decide(env, {url:oldUrl, status:'approved'})).json();
   assert.equal(decision.published, true);
+  const keptUrl = 'https://x.com/example/status/2108148604447884998';
+  await submit(env, {url:keptUrl, published_at:'2026-08-01T00:00:00.000Z', review_type:'文章', bookmark_count:1500});
+  await decide(env, {url:keptUrl, status:'approved'});
   const item = env.PUBLIC_FEED.json().items.find(entry => entry.original_url === oldUrl);
   assert.equal(item.origin, 'kosx_approved');
   assert.deepEqual(item.source_refs, ['sopilot-kosx']);
   assert.equal(item.source_item_time, decision.reviewed_at);
   assert.equal(item.published_at, '2026-09-01T00:00:00.000Z');
   const home = showcase(env.PUBLIC_FEED.json());
-  assert.equal(home.latest[0].post.item.original_url, oldUrl);
+  assert.equal(home.latest.some(entry => entry.post.item.original_url === oldUrl), false);
+  assert.equal(home.latest.some(entry => entry.post.item.original_url === keptUrl), false);
   assert.equal(home.latest.length, 18);
   assert.equal(home.kept.some(entry => entry.post.item.original_url === oldUrl), false);
+  assert.equal(home.kept.some(entry => entry.post.item.original_url === keptUrl), true);
   assert.match(renderFeed(env.PUBLIC_FEED.json()), /id="home-latest"/);
-  assert.match(renderFeed(env.PUBLIC_FEED.json()), new RegExp(item.id));
 });
