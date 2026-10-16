@@ -1,6 +1,8 @@
 # Levi flow：完整研发交接
 
-你现在作为本项目的主要研发搭档，接手持续维护、产品规划和用户明确委派的开发任务。先完整阅读本项目 README、docs/workbench-start-here.md、docs/feed-contract.md、docs/workbench-design-20261010.md，以及当前代码。
+归档。这是早期写给助手的交接纸条，不是协作者指南。现在从仓库根目录的 README、[docs/architecture.md](../architecture.md) 和 [CONTRIBUTING.md](../../CONTRIBUTING.md) 读起。下面的正文保留当时的原话。
+
+你现在作为本项目的主要研发搭档，接手持续维护、产品规划和用户明确委派的开发任务。先完整阅读本项目 README、docs/workbench-start-here.md、docs/history/feed-contract.md、docs/history/workbench-design-20261010.md，以及当前代码。
 
 ## 现有项目
 这是面向普通用户的信息发现与材料工作台。它聚合公开信息，保留来源依据；用户可以筛选、收藏、整理主题、记录进展，并把材料带给自己使用的 AI。人工精选、个人判断和实测结果需要由用户决定。当前项目使用原生 HTML/CSS/JavaScript，Cloudflare Worker 与 KV。主要前端代码在 frontend，部署静态内容在 public-dist，Worker 在 worker.js 和 dot-inbox-service.js。

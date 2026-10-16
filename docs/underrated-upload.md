@@ -4,7 +4,7 @@
 
 「昨日全部」是公开首页精华线上、原帖日期为昨日（北京时间）的帖。精华线是过审写入公开首页的帖（`origin` 为 `kosx_approved`，或来源只有 `sopilot-kosx`），包括账号池自动放上首页的帖。抽奖等已被质量规则收起的帖不在里面。信息流里没有走上这条线的带日期帖不进入「昨日全部」。整理日优先用公开快照的 `generated_at`，没有这份时间时用当前北京时间。「昨日」是整理日的前一个自然日。
 
-**当前仓库改动还没有部署。** 不要执行 `npx wrangler deploy`，也不要部署名为 `woyun` 的 Worker。下面的地址要等有人发布预览 Worker `woyun-feed-preview` 之后才能用。
+预览地址是熟人软启动：`https://woyun-feed-preview.hhzovo66.workers.dev/`。把改动推进 Git 不会自动部署。发布只打 Worker `woyun-feed-preview`。不要部署名为 `woyun` 的 Worker。线上是否已经包含某次提交，以最近一次预览部署为准。钉选规则以这一页和当前代码为准。
 
 ## 谁可以钉
 

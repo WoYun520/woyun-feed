@@ -1,5 +1,9 @@
 {
-  "name": "woyun-feed-preview",
+  // Copy this file to wrangler.jsonc only for your own Cloudflare account.
+  // Keep a Worker name other than "woyun" and "woyun-feed-preview".
+  // Those names are the existing production shell and the shared Levi flow preview.
+  // Secrets are not written here: DOT_DELIVERY_TOKEN_HASH, DOT_REVIEW_TOKEN_HASH.
+  "name": "your-woyun-feed",
   "main": "worker.js",
   "account_id": "SET_YOUR_OWN_ACCOUNT_ID",
   "compatibility_date": "2026-10-01",
@@ -9,7 +13,7 @@
   "assets": {
     "directory": "./public-dist",
     "binding": "ASSETS",
-    "run_worker_first": ["/data/public-feed.json", "/api/dot/*"],
+    "run_worker_first": ["/data/public-feed.json", "/api/dot/*", "/api/home-boost"],
     "not_found_handling": "404-page",
     "html_handling": "auto-trailing-slash"
   },

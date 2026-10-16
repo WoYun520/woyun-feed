@@ -1,10 +1,60 @@
 # Levi flow
 
-公开首页是封面帖：KOSX 助力条、贴链接、已助力计数，以及精选封面。静态页面在 `public-dist`，由 Cloudflare Worker 提供。
+**Levi flow** 是公开的精华封面站：KOSX 助力条、首页「贴链接」、已助力计数，以及按栏排好的 X 精华帖。熟人软启动挂在预览地址上，正式域名还没定。
+
+预览：<https://woyun-feed-preview.hhzovo66.workers.dev/>
+
+这份仓库的部署配置只指向预览 Worker `woyun-feed-preview`。生产 Worker `woyun` 要等 Levi 另外开口。
+
+## 公开栏
+
+整理日用公开快照的 `generated_at`，没有这份时间时用当前北京时间。精华线是过审或账号池写入公开首页的帖。信息流里没走上这条线的帖不进这些栏。
+
+| 栏 | 规则 |
+| --- | --- |
+| 最新精华 | 最近 3 个北京时间自然日（含整理日），最多 18 条 |
+| 昨日全部 | 整理日前一个北京时间自然日 |
+| 昨日最被低估 | 人工从「昨日全部」钉选，最多 2 条，可以空着 |
+| 七日精选 | 最近 7 个北京时间自然日里的精华文章，收藏数达到 200 |
+| 卧云精选 | 不限日期的精华文章，收藏数达到 1000 |
+
+占位标题 `@handle 的精华帖` 可以留在卡片上，只要摘录还在。摘录为空、又没有封面图或视频海报的帖是空白封面（`blankPublicCover`），按产品规则不放上公开栏。七日精选在整批文章都没有收藏数时还有热度退路。这两处的代码现状写在 [docs/architecture.md](docs/architecture.md)。
+
+内容政策、3 小时自动过审，以及「贴链接永不自动公开」，也在那一页。
+
+## 文档
+
+| 读这个 | 为了 |
+| --- | --- |
+| [docs/architecture.md](docs/architecture.md) | 目录、请求怎么走、栏和内容政策 |
+| [docs/ops-cron.md](docs/ops-cron.md) | 两条定时、队列和首页快照、密钥名称、预览部署边界 |
+| [docs/pending-review.md](docs/pending-review.md) | 本机过审和放上首页 |
+| [docs/pending-intake.md](docs/pending-intake.md) | 贴链接和 Overheard 进队 |
+| [docs/underrated-upload.md](docs/underrated-upload.md) | 钉「昨日最被低估」 |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | 改代码、提 PR |
+| [docs/README.md](docs/README.md) | `docs/` 里其余文件各管什么 |
+
+## 目录
+
+```text
+worker.js                         请求与定时入口
+dot-inbox-service.js              /api/dot/inbox
+dot-pending-service.js            /api/dot/pending
+dot-underrated-service.js         /api/dot/underrated
+frontend/                         页面、采集、测试、本机服务
+public-dist/                      已构建的静态站，Worker 直接托管
+data/                             本机演示与目录，不是线上首页快照
+scripts/                          feedgrab 采集和投递
+wrangler.jsonc                    只描述预览 Worker
+打开 Levi flow.command            Mac：打开本机首页
+打开过审.command                  Mac：打开本机过审
+```
+
+静态资源在 `public-dist`。`/data/public-feed.json`、`/api/dot/*`、`/api/home-boost` 先进入 Worker，其余路径由静态资源处理。
 
 ## 本机查看
 
-需要 Node.js 20 或更新版本。
+需要 Node.js 22 或更新版本。Mac 双击入口和 `frontend/launch.mjs` 会拒绝更低版本。
 
 ```sh
 git clone https://github.com/WoYun520/woyun-feed.git
@@ -13,100 +63,40 @@ node frontend/public-build.mjs
 cd frontend && node serve.js
 ```
 
-浏览器打开 `http://127.0.0.1:3000/`。`serve.js` 只监听本机。没有 `data/live-feed.json` 时，公开构建沿用已提交的 `public-dist/data/public-feed.json`，不会重新抓取来源。
+浏览器打开 `http://127.0.0.1:3000/`。`serve.js` 只监听 `127.0.0.1`。没有本机 `data/live-feed.json` 时，公开构建沿用已提交的 `public-dist/data/public-feed.json`，不会重新抓取来源。
 
-本机过审页是 `http://127.0.0.1:3000/review-admin`，也是唯一的过审入口。双击「打开过审.command」，或先双击「打开 Levi flow.command」再打开这个地址。接收码放在 `.local/dot-review-token`（一行）或环境变量 `DOT_REVIEW_TOKEN`，浏览器里不用粘贴。公开首页没有「待过审」或「待筛选」链接，`#review` 和 `?review=1` 也不会打开过审。说明见 [docs/pending-review.md](docs/pending-review.md)。
+Mac 上也可以双击仓库根目录的「打开 Levi flow.command」。这两个 `.command` 必须留在仓库根目录：它们把自己的上一级目录当成项目根。
 
-## 预览部署
+本机过审页是 `http://127.0.0.1:3000/review-admin`，也是唯一的过审入口。Mac 上双击「打开过审.command」。接收码放在 `.local/dot-review-token`（一行）或环境变量 `DOT_REVIEW_TOKEN`，浏览器里不用粘贴。公开首页没有「待过审」入口，`#review` 和 `?review=1` 也不会打开过审。
 
-根目录 `wrangler.jsonc` 指向现有预览 Worker `woyun-feed-preview`（账号 `2406ce3e27726cda95852f23951dfc93`）。静态目录是 `./public-dist`。KV 绑定是 `PUBLIC_FEED` 与 `DOT_INBOX`，命名空间 id 写在该文件里。公开来源定时为每天 01:00 与 13:00 UTC（北京时间 09:00、21:00）。最新精华进队为 UTC `0 0,4,8,12 * * *`（北京时间 08:00、12:00、16:00、20:00），不调用 X API。
+本机过审由 `serve.js` 带着接收码去调用预览 Worker。默认上游是上面的预览地址，可用 `DOT_REVIEW_ORIGIN` 改成另一个 https 源。首页「贴链接」请求的是当前站点的 `/api/dot/pending`；本机 `serve.js` 没有这条路由，贴链接要在已部署的预览站上试。
 
-先构建，再部署：
+## 预览与自己的 Worker
 
-```sh
-node frontend/public-build.mjs
-npx wrangler deploy
-```
-
-预期地址：`https://woyun-feed-preview.hhzovo66.workers.dev/`
-
-本机需要已登录的 Wrangler，或环境变量 `CLOUDFLARE_API_TOKEN`（Workers 脚本写权限）。不要把令牌写进仓库。不要把这份配置部署到已有 Worker `woyun`。
-
-## 自己的生产环境
-
-仓库里没有第二份生产配置。协作者要部署自己的站点时，复制 `wrangler.example.jsonc` 为自己的 `wrangler.jsonc`，填入自己的 `account_id`，以及自己创建的 `PUBLIC_FEED`、`DOT_INBOX` 两个 KV id，把 `name` 改成自己的 Worker 名，然后同样执行：
+根目录 `wrangler.jsonc` 指向现有预览 Worker `woyun-feed-preview`（账号 `2406ce3e27726cda95852f23951dfc93`）。静态目录是 `./public-dist`。KV 绑定是 `PUBLIC_FEED` 与 `DOT_INBOX`。
 
 ```sh
 node frontend/public-build.mjs
 npx wrangler deploy
 ```
 
-这会发布到你自己的账号，不会改写上面的预览 Worker。
+本机需要已登录的 Wrangler，或环境变量 `CLOUDFLARE_API_TOKEN`（Workers 脚本写权限）。把改动推进 Git 不会自动部署。不要把这份配置部署到 Worker `woyun`。
 
-## 密钥
+仓库里没有第二份生产配置。要在自己的账号上跑一份，从 `wrangler.example.jsonc` 复制，填自己的 `account_id` 和两个 KV id。示例里的 Worker 名是 `your-woyun-feed`，保留一个不会撞上 `woyun` 或 `woyun-feed-preview` 的名字。
 
-浏览器不发送收件箱密钥。首页「贴链接」会请求 `/api/dot/pending`，只提交一条 X 链接。未设置下面两把哈希时，`/api/dot/inbox` 和 `/api/dot/pending` 都返回不可用，不回退到公开文件，贴链接也不会写入待筛选。两把密钥必须是不同的 SHA-256 十六进制值，只用 Wrangler secret 写入：
+## 密钥名称
+
+浏览器不发送收件箱密钥。两把哈希必须是不同的 SHA-256 十六进制，只用 Wrangler secret 写入，值不要进仓库：
 
 ```sh
 npx wrangler secret put DOT_DELIVERY_TOKEN_HASH
 npx wrangler secret put DOT_REVIEW_TOKEN_HASH
 ```
 
-原始投递密钥、接收码和 `CLOUDFLARE_API_TOKEN` 只留在本机。`.gitignore` 已忽略 `.env`、`.env.*`、`.dev.vars` 和 `.wrangler/`。不要把它们提交进仓库。
+原始投递密钥、接收码和 `CLOUDFLARE_API_TOKEN` 只留在本机。`.gitignore` 已忽略 `.env`、`.env.*`、`.dev.vars`、`.local/` 和 `.wrangler/`。名称和各定时任务见 [docs/ops-cron.md](docs/ops-cron.md)。
 
-Overheard 用同一把投递密钥把 X 链接送进 `/api/dot/pending`，见 [docs/pending-intake.md](docs/pending-intake.md)。作者在 KOSX 账号池里、且不会进入「昨日最被低估」时，这条会按时间写入公开首页，不按粉丝数排序。首页贴链接、池外作者，以及会进入昨日最被低估的帖，仍只记 pending。过审用接收码，见 [docs/pending-review.md](docs/pending-review.md)；只有 `approved` 会写入公开首页。昨日最被低估必须人工过审。把已经在公开首页上的帖钉进「昨日最被低估精华帖」也用这把接收码，见 [docs/underrated-upload.md](docs/underrated-upload.md)。投递密钥不能钉选。
+## English
 
-更细的预览步骤见 [docs/preview-deploy.md](docs/preview-deploy.md)。
+**Levi flow** is the public name of this cover feed. The soft beta for acquaintances is the preview Worker `woyun-feed-preview`: <https://woyun-feed-preview.hhzovo66.workers.dev/>. A formal domain is still open. This repo’s Wrangler file targets that preview Worker. The production Worker `woyun` stays out of scope until Levi says otherwise.
 
----
-
-# Levi flow
-
-The public homepage is a cover feed: the KOSX strip, the paste-link panel, the local boost count, and the curated cover cards. `public-dist` is the static site served by a Cloudflare Worker.
-
-## Run locally
-
-Node.js 20 or newer.
-
-```sh
-git clone https://github.com/WoYun520/woyun-feed.git
-cd woyun-feed
-node frontend/public-build.mjs
-cd frontend && node serve.js
-```
-
-Open `http://127.0.0.1:3000/`. `serve.js` listens on localhost only. Without `data/live-feed.json`, the public build reuses the committed `public-dist/data/public-feed.json` and does not refetch sources.
-
-The local review page is `http://127.0.0.1:3000/review-admin`, and it is the only review entry. Double-click `打开过审.command`, or start with `打开 Levi flow.command` and open that address. Put the review code in `.local/dot-review-token` (one line) or `DOT_REVIEW_TOKEN`. The browser does not ask for it. The public homepage has no pending-review link, and `#review` or `?review=1` does not open one. See [docs/pending-review.md](docs/pending-review.md).
-
-## Preview deploy
-
-`wrangler.jsonc` targets the existing preview Worker `woyun-feed-preview` (account `2406ce3e27726cda95852f23951dfc93`). Assets come from `./public-dist`. KV bindings are `PUBLIC_FEED` and `DOT_INBOX`; the namespace ids are in that file. Public-source cron stays `0 1,13 * * *` UTC (09:00 and 21:00 Asia/Shanghai). Latest-essence intake is `0 0,4,8,12 * * *` UTC (08:00, 12:00, 16:00, and 20:00 Asia/Shanghai) and does not call the X API.
-
-```sh
-node frontend/public-build.mjs
-npx wrangler deploy
-```
-
-Expected URL: `https://woyun-feed-preview.hhzovo66.workers.dev/`
-
-Wrangler must already be logged in, or `CLOUDFLARE_API_TOKEN` must be set in the environment (Workers script write). Do not commit the token. Do not deploy this config onto the existing Worker named `woyun`.
-
-## Your own production Worker
-
-This repo has no second production config. To publish your own copy, start from `wrangler.example.jsonc`, set your `account_id`, your own `PUBLIC_FEED` and `DOT_INBOX` KV ids, and your Worker `name`, then run the same build and `npx wrangler deploy`. That publishes to your account and does not change the preview Worker above.
-
-## Secrets
-
-The browser does not send inbox secrets. Homepage paste calls `/api/dot/pending` with one X URL. Without the two hashes below, both `/api/dot/inbox` and `/api/dot/pending` stay unavailable and do not fall back to the public file, so paste does not enter the queue. Store two different SHA-256 hex hashes as Worker secrets:
-
-```sh
-npx wrangler secret put DOT_DELIVERY_TOKEN_HASH
-npx wrangler secret put DOT_REVIEW_TOKEN_HASH
-```
-
-Keep the raw delivery token, review code, and `CLOUDFLARE_API_TOKEN` on your machine. `.gitignore` already ignores `.env`, `.env.*`, `.dev.vars`, and `.wrangler/`.
-
-Overheard posts X links to `/api/dot/pending` with that same delivery token. See [docs/pending-intake.md](docs/pending-intake.md). A KOSX pool author is published in chronological order when the post would not enter Yesterday's most underrated. Homepage paste, authors outside the pool, and any post that would enter that section stay `pending`. Approval uses the review code; see [docs/pending-review.md](docs/pending-review.md). That underrated section always needs a human review. There is no follower-count ordering.
-
-Preview details: [docs/preview-deploy.md](docs/preview-deploy.md).
+The Chinese sections are the collaborator guide: public rails, local Mac review at `/review-admin`, cron, and secret names. Detail lives in `docs/architecture.md`, `docs/ops-cron.md`, and `CONTRIBUTING.md`.

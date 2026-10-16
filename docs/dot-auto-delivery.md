@@ -26,11 +26,11 @@
 
 ## 给采集工具的接口约定
 
-- 地址：`https://woyun-feed-preview.woyun520.workers.dev/api/dot/inbox`
+- 地址：`https://woyun-feed-preview.hhzovo66.workers.dev/api/dot/inbox`
 - 方法：`POST`
 - 请求头：`Content-Type: application/json` 和 `Authorization: Bearer <投递密钥>`。密钥不能放进网址、正文或日志。
-- 正文：既有 `woyun-feed:candidates` v1 JSON，且 `collector` 必须保留真实来源 `Dot` 或 `feedgrab`。顶层仅允许 `format`、`version`、`collector`、`collected_at`、`items`、`alternatives` 六个字段。feedgrab 的本机试跑见 [采集接入说明](feedgrab-intake.md)。
-- 素材字段遵守 [采集要求](dot-collection-brief.md)，未知数字、时间保留 `null`，不能把点赞换算成收藏，也不能把建议写成亲自试过的经历。只投递公开、脱敏资料，不发送 Cookie、密码、密钥或私人原件。
+- 正文：既有 `woyun-feed:candidates` v1 JSON，且 `collector` 必须保留真实来源 `Dot` 或 `feedgrab`。顶层仅允许 `format`、`version`、`collector`、`collected_at`、`items`、`alternatives` 六个字段。2026-10-10 的本机试跑见 [采集试跑](history/feedgrab-intake-20261010.md)。
+- 未知数字、时间保留 `null`，不能把点赞换算成收藏，也不能把建议写成亲自试过的经历。只投递公开、脱敏资料，不发送 Cookie、密码、密钥或私人原件。仓库里没有单独的 `dot-collection-brief.md`。
 - `201`：服务收到新批次；`200` 且 `existing: true`：同一内容已收到。两者只代表投递完成，不代表已同步到浏览器、用户认可或公开发布。
 - 回执包含批次 `id`、实际 `received_at`、`item_count`、`existing`。重试发送同一份正文，不更改采集时间来制造新批次。
 - `400/413/415`：修正格式或拆批后再试；`401`：停止并报告连接密钥问题；`429/503` 或网络中断：保留原 JSON，间隔重试最多三次。失败要明确报告，不能声称已送达。

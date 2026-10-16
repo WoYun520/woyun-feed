@@ -1,6 +1,6 @@
 import { makeTopicSyncBaseline, planTopicSync, applyTopicSync as applySync } from './topicSync.js';
 /**
- * 集中数据适配层 · docs/feed-contract.md
+ * 集中数据适配层 · 字段沿革见 docs/history/feed-contract.md
  * 独立管理本地用户反馈（收藏、隐藏、跟进任务、偏好修改），不修改底层数据源。
  * 真实模式读取本机服务，示例模式单独读取演示数据，失败时不替换为示例。
  * 本地存储写入失败向外抛出异常，以便 UI 明确报错并保留用户输入。

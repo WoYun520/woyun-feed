@@ -1,6 +1,6 @@
 /**
  * Levi flow · 前端交互主逻辑
- * 遵从 docs/antigravity-brief.md 及 docs/feed-contract.md
+ * 公开产品说明见 README.md 与 docs/architecture.md。字段沿革见 docs/history/feed-contract.md。
  * 零静默伪造、严谨错误呈现、完备无障碍与焦点管理
  */
 

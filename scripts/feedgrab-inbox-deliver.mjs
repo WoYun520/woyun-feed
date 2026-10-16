@@ -7,7 +7,7 @@ import {canonicalDotPayload} from '../dot-inbox-service.js';
 
 // Reuses the existing private sender/receiver configuration. It cannot select
 // featured items, publish content, read user collections, or expand access.
-const endpoint='https://woyun-feed-preview.woyun520.workers.dev/api/dot/inbox';
+const endpoint='https://woyun-feed-preview.hhzovo66.workers.dev/api/dot/inbox';
 const input=process.argv[2];
 if (!input) throw Error('请提供 candidate-envelope.json 的路径。');
 const path=resolve(input),raw=await readFile(path,'utf8');

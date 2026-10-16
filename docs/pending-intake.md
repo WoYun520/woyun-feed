@@ -10,7 +10,7 @@
 
 已经 `rejected` 的链接不会被重新打开。已经 `approved` 的链接不改原来的过审时间。首页先贴过的同一条，来源记为 `homepage`，之后即使用投递密钥再送一次，也不会自动过审。
 
-**当前仓库改动还没有部署。** 下面的地址要等有人在仓库根目录执行 `npx wrangler deploy` 之后才会出现在预览 Worker `woyun-feed-preview` 上。不要把这次部署打到名为 `woyun` 的 Worker。部署前，对现网地址发 POST 不会进入这套待筛选。
+预览地址是熟人软启动：`https://woyun-feed-preview.hhzovo66.workers.dev/`。把改动推进 Git 不会自动部署。发布只打 Worker `woyun-feed-preview`。不要部署名为 `woyun` 的 Worker。线上是否已经包含某次提交，以最近一次预览部署为准。
 
 ## 给 Overheard 的调用
 
@@ -84,7 +84,7 @@ curl -sS 'https://woyun-feed-preview.hhzovo66.workers.dev/api/dot/pending' \
 node frontend/refresh-kosx-pool.mjs
 ```
 
-部署步骤见 [预览部署](preview-deploy.md)。不要部署名为 `woyun` 的 Worker。这次代码要部署一次之后，账号加入或退出万粉计划才不必为了进料自动过审再次部署。
+部署步骤见 [预览部署](preview-deploy.md)。不要部署名为 `woyun` 的 Worker。进料自动过审读 KV 里的账号池。公开刷新和精华扫榜会更新这份缓存，账号加入或退出之后不必为了进料再部署。首页上的 KOSX 标记仍要等下一次构建部署。
 
 ## 给 Overheard 的结果怎么读
 
