@@ -205,8 +205,10 @@ body:has(.workspace-shell[data-workspace-tab="today"]) { background: var(--home-
 .cover-card[data-cover="media"] > .cover-quote { display: none; flex: 0 0 auto; }
 .cover-card[data-cover="media"]:not(:has(.cover-photo:not([hidden]))) > .cover-quote { display: flex; flex: 1 1 auto; }
 .cover-card[data-cover="media"]:not(:has(.cover-photo:not([hidden]))) .cover-excerpt { display: none; }
-.cover-card[data-cover="media"] > .cover-body,
-.cover-card[data-cover="plain"] > .cover-body { flex: 1 1 auto; }
+.cover-card[data-cover="media"] > .cover-body { flex: 1 1 auto; }
+.cover-card[data-cover="plain"] { height: auto; align-self: start; }
+.cover-card[data-cover="plain"] > .cover-body { flex: 0 0 auto; }
+.cover-card[data-cover="plain"] .cover-actions { margin-top: 0; }
 .cover-card[data-cover="media"]:not(:has(.cover-photo:not([hidden]))) > .cover-body { flex: 0 1 auto; }
 .cover-body { display: flex; flex-direction: column; gap: 8px; padding: 8px 16px 14px; }
 .cover-cue { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 0; color: var(--home-muted, #62675d); font-size: 12px; line-height: 1.5; }

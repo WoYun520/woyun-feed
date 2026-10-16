@@ -338,13 +338,25 @@ function cardEvidence(e, excerpt, mode) {
 // are review evidence. Intake notes such as「全X中文≥1k补仓 | 非池 | 待人工过审 | rank13」
 // are backlog remarks. A real title stays. Either leftover uses the same
 // @handle 的精华帖 face as other essence cards.
-function homepageCardTitle(item) {
+export function homepageCardTitle(item) {
   const raw = typeof item?.title === 'string' ? item.title.trim() : '';
   const title = stripIntakePipelineCopy(raw);
   if (title && !isReviewSignalCopy(title)) return title;
   if (!raw) return '来源未提供标题';
   const handle = itemAuthorHandle(item);
   return handle ? `@${handle} 的精华帖` : '来源未提供标题';
+}
+
+function placeholderCardTitle(item) {
+  const handle = itemAuthorHandle(item);
+  return handle ? `@${handle} 的精华帖` : '来源未提供标题';
+}
+
+// 「@用户 的精华帖」and「来源未提供标题」are faces, not a sentence from the post.
+export function usableCardTitle(item) {
+  const title = homepageCardTitle(item);
+  if (!title || title === '来源未提供标题' || title === placeholderCardTitle(item)) return '';
+  return title;
 }
 
 // Intake sometimes glues a type tag onto a real sentence, as in
@@ -359,7 +371,7 @@ function withoutClassifierTag(line) {
   return tagged.replace(/[：:·\s]+$/u, '').trim();
 }
 
-function homepageCardExcerpt(summary) {
+export function homepageCardExcerpt(summary) {
   const excerpt = stripIntakePipelineCopy(coverExcerpt(summary));
   if (!excerpt) return '';
   return excerpt.split(/\n+/).map(line => {
@@ -369,11 +381,28 @@ function homepageCardExcerpt(summary) {
   }).filter(Boolean).join('\n');
 }
 
+function cardCopies(item, records) {
+  const pool = [item, ...(Array.isArray(records) ? records : [])].filter(entry => entry && typeof entry === 'object');
+  let excerpt = '';
+  let title = homepageCardTitle(item);
+  const replaceTitle = !usableCardTitle(item);
+  for (const candidate of pool) {
+    const nextExcerpt = homepageCardExcerpt(candidate.summary);
+    if (Array.from(nextExcerpt).length > Array.from(excerpt).length) excerpt = nextExcerpt;
+    if (!replaceTitle) continue;
+    const nextTitle = usableCardTitle(candidate);
+    const current = usableCardTitle({...item, title});
+    if (nextTitle && Array.from(nextTitle).length > Array.from(current).length) title = nextTitle;
+  }
+  return {title, excerpt};
+}
+
 function renderPostCard(app, state, entry, group) {
   const post = entry.post, item = post.item;
-  const title = homepageCardTitle(item);
-  const excerpt = homepageCardExcerpt(item.summary);
-  const image = articleCover(item) || coverImage(post);
+  const face = cardCopies(item, post.records);
+  const title = face.title;
+  const excerpt = face.excerpt;
+  const image = [item, ...(post.records || [])].map(articleCover).find(Boolean) || coverImage(post);
   return renderShowcaseCard(app, {
     group, item, title, excerpt, image, originalUrl:post.originalUrl, mediaKey:`${group}:${item.id}`,
     collection:collectionFor(state, post), names:sourceNames(entry, state).join('、'),

@@ -143,6 +143,9 @@ test('homepage essence cards keep a cover image or a quote and never an empty at
   assert.match(css, /\.cover-quote\s*\{[^}]*flex:\s*1\s+1\s+auto/);
   assert.match(css, /\.cover-grid\s*\{[^}]*align-items:\s*stretch/);
   assert.match(css, /\.shape-card, \.cover-card\s*\{[^}]*height:\s*100%/);
+  assert.match(css, /\.cover-card\[data-cover="plain"\]\s*\{[^}]*align-self:\s*start/);
+  assert.match(css, /\.cover-card\[data-cover="plain"\]\s*\{[^}]*height:\s*auto/);
+  assert.match(css, /\.cover-card\[data-cover="plain"\] > \.cover-body\s*\{[^}]*flex:\s*0\s+0\s+auto/);
   assert.match(css, /\.cover-actions\s*\{[^}]*margin-top:\s*auto/);
   assert.match(css, /--shape-cover:\s*2\s*\/\s*1/);
   assert.match(css, /@media \(max-width: 720px\)[\s\S]*\.cover-quote\s*\{[^}]*font-size:\s*22px/);
@@ -889,6 +892,77 @@ test('public cover cards drop pipe-joined intake notes and keep a real excerpt',
   assert.match(keptClean, /data-cover="media"/);
   assert.match(keptClean, /essence-clean\.jpg/);
   assert.match(keptClean, /<p class="cover-excerpt">X下一个风口将会是ESP32，看了阶跃 AI 手机发布会。<\/p>/);
+});
+
+test('a cover card shows a stored excerpt, and an empty excerpt stays on the shelf without a blank quote', () => {
+  const board = {id:'sopilot-ai', name:'AI 推文榜', group:'posts', link_kind:'post', status:'ok', enabled:true};
+  const kosxSource = {id:'sopilot-kosx', name:'KOSX 过审', group:'posts', link_kind:'post', status:'ok', enabled:true};
+  const excerpt = 'Claude Code 防封指南：云电脑上跑并不等于一定安全，群里已经有人反馈帐号被封。';
+  const filled = post('2110682653334868101', '2026-10-10T08:00:00.000Z', {
+    origin:'kosx_approved', author_handle:'KinGao476942', source_refs:['sopilot-kosx'],
+    url:'https://x.com/KinGao476942/status/2110682653334868101',
+    title:'@KinGao476942 的精华帖', summary:excerpt,
+  });
+  const empty = post('2110682653334868100', '2026-10-09T10:42:13.799Z', {
+    origin:'kosx_approved', author_handle:'KinGao476942', source_refs:['sopilot-kosx'],
+    url:'https://x.com/KinGao476942/status/2110682653334868100',
+    title:'@KinGao476942 的精华帖',
+  });
+  empty.summary = '';
+  const approvedBlank = post('2110694725640474759', '2026-10-09T11:30:12.061Z', {
+    origin:'kosx_approved', author_handle:'Saccc_c', review_type:'短帖', source_refs:['sopilot-kosx'],
+    url:'https://x.com/Saccc_c/status/2110694725640474759',
+    title:'@Saccc_c 的精华帖', summary:'全X中文≥1k补仓 | 非池 | 待人工过审 | rank13',
+  });
+  const boardCopy = post('news-sacc', '2026-10-09T11:30:12.000Z', {
+    author_handle:'Saccc_c', source_refs:['sopilot-ai'],
+    url:'https://x.com/Saccc_c/status/2110694725640474759',
+    title:'手把手教你用 Opus 5.5 / Astra + Tripo 制作 3D 游戏',
+    summary:'本周，我用 Opus 5.5 + Tripo + Blender，把《小王子》中的星际旅行做成了一款可以亲自探索的 3D 游戏。',
+  });
+  const placeholderFace = post('2110700000000000001', '2026-10-09T12:00:00.000Z', {
+    origin:'kosx_approved', author_handle:'ai_xiaomu', source_refs:['sopilot-kosx'],
+    url:'https://x.com/ai_xiaomu/status/2110700000000000001',
+    title:'@ai_xiaomu 的精华帖',
+    summary:'这一段是过审时留下的长摘录，讲的是怎样把公开正文留在封面卡上，而不是只留下标题占位。',
+  });
+  const titledSibling = post('news-xiaomu', '2026-10-09T12:00:00.000Z', {
+    author_handle:'ai_xiaomu', source_refs:['sopilot-ai'],
+    url:'https://x.com/ai_xiaomu/status/2110700000000000001',
+    title:'公开正文该留在封面',
+    summary:'短摘录。',
+  });
+  const input = {
+    ...state([filled, empty, approvedBlank, boardCopy, placeholderFace, titledSibling]),
+    sources:[board, kosxSource],
+  };
+  const latest = renderHomeShowcase(app(), input);
+  const filledCard = cardHtml(latest, filled.id);
+  assert.match(filledCard, /data-cover="quote"/);
+  assert.match(filledCard, /Claude Code 防封指南：云电脑上跑并不等于一定安全/);
+  assert.match(filledCard, /@KinGao476942 的精华帖/);
+  const emptyCard = cardHtml(latest, empty.id);
+  assert.match(emptyCard, /data-cover="plain"/);
+  assert.match(emptyCard, /@KinGao476942 的精华帖/);
+  assert.match(emptyCard, /打开原帖/);
+  assert.doesNotMatch(emptyCard, /cover-quote|cover-excerpt|blockquote/);
+  const merged = cardHtml(latest, boardCopy.id);
+  assert.match(merged, /本周，我用 Opus 5.5 \+ Tripo \+ Blender/);
+  assert.match(merged, /手把手教你用 Opus 5.5 \/ Astra \+ Tripo 制作 3D 游戏/);
+  assert.doesNotMatch(merged, /补仓|非池|待人工过审|rank13|全X中文/);
+  const titled = cardHtml(latest, placeholderFace.id);
+  assert.match(titled, /data-cover="quote"/);
+  assert.match(titled, /这一段是过审时留下的长摘录/);
+  assert.match(titled, /公开正文该留在封面/);
+  assert.doesNotMatch(titled, /@ai_xiaomu 的精华帖/);
+  const yesterday = renderHomeShowcase(app('yesterday'), input);
+  assert.match(cardHtml(yesterday, boardCopy.id), /本周，我用 Opus 5.5 \+ Tripo \+ Blender/);
+  assert.match(cardHtml(yesterday, empty.id), /data-cover="plain"/);
+  assert.doesNotMatch(cardHtml(yesterday, empty.id), /cover-quote|cover-excerpt/);
+  const selected = selectHomeShowcase(input);
+  assert.equal(selected.latest.some(entry => entry.post.records.some(record => record.id === empty.id)), true);
+  assert.equal(selected.yesterday.some(entry => entry.post.records.some(record => record.id === empty.id)), true);
+  assert.equal(selected.yesterday.some(entry => entry.post.records.some(record => record.id === approvedBlank.id)), true);
 });
 
 test('essence cards drop stock evidence and bookmark counts, and keep a longer excerpt', () => {

@@ -6,7 +6,7 @@ import { dotInboxHash } from '../dot-inbox-service.js';
 import { DOT_PENDING_DECISION_PATH, DOT_PENDING_PATH, handleDotPendingRequest } from '../dot-pending-service.js';
 import { handlesFromRoster, renderPoolModule } from './refresh-kosx-pool.mjs';
 import { isKosxPoolHandle, KOSX_POOL_HANDLES } from './kosx-pool.js';
-import { kosxPublicItem, kosxPublicSource, originalPostInstant, X_SNOWFLAKE_EPOCH_MS } from './kosx-public-posts.js';
+import { kosxPublicItem, kosxPublicSource, originalPostInstant, withSalvagedFace, X_SNOWFLAKE_EPOCH_MS } from './kosx-public-posts.js';
 import { DOT_UNDERRATED_PATH, handleDotUnderratedRequest } from '../dot-underrated-service.js';
 import { makePublicFeed } from './public-feed-data.js';
 import { normalizeRepositories } from './repository-normalize.js';
@@ -252,6 +252,19 @@ test('public feed drops intake pipeline notes from the title and excerpt', () =>
   const spaced = kosxPublicItem({...row, note:'非池｜待人工过审｜rank 13'});
   assert.equal(spaced.title, '@0xlangeai 的精华帖');
   assert.equal(spaced.summary, '');
+  const empty = kosxPublicItem({...row, author_handle:'KinGao476942', url:'https://x.com/KinGao476942/status/9', note:'全X中文≥1k补仓 | 非池 | 待人工过审 | rank13'});
+  const board = {
+    id:'news-kingao', title:'Claude Code 防封指南',
+    summary:'云电脑上跑 Claude Code 并不等于一定安全，群里已经有人反馈帐号被封。',
+    original_url:empty.original_url,
+  };
+  const salvaged = withSalvagedFace(empty, [board, {...empty, summary:''}]);
+  assert.equal(salvaged.title, 'Claude Code 防封指南');
+  assert.match(salvaged.summary, /并不等于一定安全/);
+  assert.doesNotMatch(`${salvaged.title}\n${salvaged.summary}`, /补仓|非池|待人工过审|rank/);
+  const stillEmpty = withSalvagedFace(empty, [{...empty, summary:'全X中文≥1k补仓 | 非池'}]);
+  assert.equal(stillEmpty.summary, '');
+  assert.equal(stillEmpty.title, '@KinGao476942 的精华帖');
 });
 
 test('pool auto-publish stays off the underrated shelf until a review code marks it reviewed', async () => {

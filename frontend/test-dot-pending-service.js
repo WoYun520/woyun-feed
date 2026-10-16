@@ -91,6 +91,29 @@ test('a homepage paste accepts one X url, dedupes, and never publishes', async (
   assert.equal(env.PUBLIC_FEED.puts || 0, 0);
 });
 
+test('delivery keeps a multiline or overlong excerpt, and body or summary aliases, instead of dropping the post', async () => {
+  const env = await environment();
+  const text = '第一行是正文。\n第二行仍是摘录，不应该被整段丢掉。';
+  const created = await submit(env, {url:postUrl, text, note:'全X中文≥1k补仓 | 非池 | 待人工过审 | rank13'}, {token:delivery});
+  assert.equal(created.status, 201);
+  assert.equal(stored(env)[0].text, text);
+  assert.equal(stored(env)[0].note, '全X中文≥1k补仓 | 非池 | 待人工过审 | rank13');
+  const longEnv = await environment();
+  const long = `${'摘录正文'.repeat(200)}收尾`;
+  const clipped = await submit(longEnv, {url:postUrl, text:long}, {token:delivery});
+  assert.equal(clipped.status, 201);
+  assert.equal(stored(longEnv)[0].text.length, 800);
+  assert.equal(long.startsWith(stored(longEnv)[0].text), true);
+  const aliasEnv = await environment();
+  const body = '文章预览：跟着操作就能跑通本地字幕。'.repeat(3);
+  const alias = await submit(aliasEnv, {url:postUrl, summary:'短备注', body, excerpt:'一句'}, {token:delivery});
+  assert.equal(alias.status, 201);
+  assert.equal(stored(aliasEnv)[0].text, body);
+  const secret = await submit(await environment(), {url:postUrl, text:'token: abcdefghijklmnop'}, {token:delivery});
+  assert.equal(secret.status, 400);
+  assert.equal((await secret.json()).error, 'invalid_text');
+});
+
 test('delivery can attach a note or a batch, and a later duplicate keeps the first record', async () => {
   const env = await environment();
   const note = '群里候选，尚未过审';

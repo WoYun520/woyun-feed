@@ -134,6 +134,8 @@ test('intake keeps pool posts from the last two Beijing days that are not queued
   });
   assert.deepEqual(selected.map(post => post.key), [`x:${duplicate}`, `x:${fresh}`, 'x:2108148604447884806']);
   assert.equal(selected.find(post => post.key === `x:${fresh}`).bookmark_count, 12);
+  assert.equal(selected.find(post => post.key === `x:${fresh}`).text, '摘录');
+  assert.match(selected.find(post => post.key === `x:${fresh}`).note, /公开帖/);
   assert.equal(selected.find(post => post.key === `x:${fresh}`).like_count, 3);
   assert.equal(selectSweepIntake(items, {handles:new Set([pool]), queuedKeys:new Set(), now, cap:1}).length, 1);
 });

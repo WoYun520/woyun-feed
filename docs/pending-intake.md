@@ -26,7 +26,7 @@
   - `bookmark_count`、`like_count`：非负整数。省略表示未知，不会用另一个数去补。
   - `has_article`：`true` 或 `false`，表示这条是不是 X Article 卡。省略表示未知。
   - `cover_url`：文章封面的 https 地址，最长 1500 字。必须能当成网址解析，路径不能是空的。不能带账号密码、端口或片段，也不能是本机、内网，或在地址里夹带密钥（包括查询参数名叫 token、password、api_key 的）。省略表示没有封面。空字符串、`http`、以及带密钥的地址都会拒绝，不会改成别的图。首页只在文章类卡片上使用它，没有封面时不另做假图。
-  - `text`：单行摘录，最长 800 字，用来粗分类型。不要放密钥。
+  - `text`：摘录，最长 800 字，用来粗分类型，也是公开封面卡的正文。可以换行。超过 800 字会截断后收下，不会把整条链接拒掉。`excerpt`、`body`、`summary` 若单独送来，也当作摘录，取最长的一段。不要放密钥。
   - `published_at`、`created_at`：原帖发布时间，必须带时区（例如 X 的 `created_at`，或抓取这条链接时读到的 `published_at`）。省略表示未知。格式不对会拒绝，不会改成别的时间。
 - 过审或账号池写入公开首页时，会带上已保存的 `bookmark_count`、`like_count`、`review_type`、`has_article`、`cover_url`。公开条目的 `published_at` 优先用进料里的 `published_at`，没有再用 `created_at`。两个都没有、且链接是 X 状态编号时，用 snowflake 推算原帖时间（Twitter 纪元 `1288834974657`，毫秒为 `(id >> 22) + 纪元`）。不是 X 状态编号的不编造时间。`source_item_time` 和 `captured_at` 仍是过审时间。这些字段不改变过审或略过的规则，也不会把帖钉进昨日低估栏。原帖时间如果落在「昨日」，账号池仍按首页规则停在待筛选。重复投递不改已经写下的类型、热度、摘录和备注，也不把 `rejected` 改回去。队列里还没有的 `bookmark_count`、`like_count`、`review_type`、`has_article`、`cover_url`、`text`，这次正文带了有效值就补上；已经有的保持原值。已经写下的封面地址不会被后一次替换。收藏数为 `0`、`has_article` 为 `false` 都算已经写下，后来的数字或 `true` 不会替换。已经在队列里的同一条，如果这次带了可用的 `published_at` 或 `created_at`，仍会改写这两个时间。已经过审的，只要补上了信号、封面或改了时间，就按当前队列重写公开首页上的这一条，让公开条目带上收藏数和封面。已经略过的不补封面。过审时间不变，公开条目的 `source_item_time` 和 `captured_at` 仍是过审时间。
 - `url` 必须是 `https://x.com`、`twitter.com` 或 `mobile.twitter.com` 上的 `/{账号}/status/{数字}`。服务收成 `https://x.com/{账号}/status/{数字}`，去重键是状态编号。

@@ -4,6 +4,8 @@
 // with the existing delivery key.
 import { autoApproveStalePending, canonicalPendingPost, enqueueDeliveryPosts, listApprovedKosxRecords, listKosxRecords, publishApprovedFeed, readPublicFeedSnapshot } from '../dot-pending-service.js';
 import { originalPostInstant } from './kosx-public-posts.js';
+import { coverExcerpt } from './src/homeShowcaseView.js';
+import { REVIEW_TEXT_MAX, isReviewSignalCopy, stripIntakePipelineCopy } from './src/reviewQueue.js';
 import { loadKosxPoolHandles } from './kosx-pool-cache.js';
 import { KOSX_POOL_SOURCE } from './kosx-pool.js';
 import {
@@ -42,6 +44,10 @@ export function selectSweepIntake(items, {handles, queuedKeys, now = Date.now(),
     if (!inRecentBeijingDays(instant, now)) continue;
     seen.add(post.key);
     const next = {...post, note:''};
+    const summary = coverExcerpt(stripIntakePipelineCopy(typeof item.summary === 'string' ? item.summary : ''));
+    if (summary && !isReviewSignalCopy(summary)) next.text = summary.slice(0, REVIEW_TEXT_MAX);
+    const title = stripIntakePipelineCopy(typeof item.title === 'string' ? item.title : '');
+    if (title && title !== summary && !isReviewSignalCopy(title) && !/的精华帖$/u.test(title)) next.note = title.slice(0, 400);
     if (typeof item.published_at === 'string' && Number.isFinite(Date.parse(item.published_at))) next.published_at = new Date(item.published_at).toISOString();
     else if (instant) next.published_at = instant;
     const bookmark = fillMissingCounts({}, item);
