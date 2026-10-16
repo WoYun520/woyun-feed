@@ -1,5 +1,5 @@
 import { normalizeCoverUrl } from './src/postMedia.js';
-import { REVIEW_COUNT_MAX, REVIEW_TYPES } from './src/reviewQueue.js';
+import { REVIEW_COUNT_MAX, REVIEW_TYPES, stripIntakePipelineCopy } from './src/reviewQueue.js';
 
 // Approved KOSX links are attached after the public snapshot is built.
 // The scheduled crawl does not know this source, so it cannot fetch or drop it
@@ -73,17 +73,19 @@ export function originalPostInstant(record) {
 
 export function kosxPublicItem(record) {
   if (!record || record.status !== 'approved' || typeof record.reviewed_at !== 'string' || !Number.isFinite(Date.parse(record.reviewed_at))) return null;
-  const note = typeof record.note === 'string' ? record.note.trim() : '';
   const reviewed = new Date(record.reviewed_at).toISOString();
   const posted = originalPostInstant(record);
   // published_at is the original post. source_item_time and captured_at stay
   // on the review clock. The review clock fills published_at only when the
   // row is not an X status and intake did not supply a time.
   const pool = record.approval === 'pool';
+  // A backlog remark such as「全X中文≥1k补仓 | 非池 | 待人工过审 | rank13」
+  // is not a title. The original note stays on the review row.
+  const note = stripIntakePipelineCopy(typeof record.note === 'string' ? record.note : '');
   const title = (note || `@${record.author_handle} 的精华帖`).slice(0, 500);
   // The card excerpt is the delivered post text, or the intake note when text
-  // is absent. Process sentences are not an excerpt and are not stored here.
-  const delivered = typeof record.text === 'string' ? record.text.trim() : '';
+  // is absent. Process sentences and backlog remarks are not stored here.
+  const delivered = stripIntakePipelineCopy(typeof record.text === 'string' ? record.text : '');
   const summary = (delivered || note).slice(0, 1000);
   const bookmark_count = publicCount(record.bookmark_count);
   const like_count = publicCount(record.like_count);

@@ -230,6 +230,30 @@ test('public excerpts use delivered text or note and omit the process sentence',
   assert.match(kosxPublicSource().reading_note, /必须人工过审/);
 });
 
+test('public feed drops intake pipeline notes from the title and excerpt', () => {
+  const intake = '全X中文≥1k补仓 | 非池 | 待人工过审 | rank13';
+  const row = {id:'kosx-9', key:'x:9', url:'https://x.com/0xlangeai/status/9', author_handle:'0xlangeai', status:'approved', reviewed_at:when, source:'delivery', submitted_at:when, approval:'review'};
+  const posted = kosxPublicItem({...row, note:intake, text:'爆火的 Rea 是什么，怎么用。'});
+  assert.equal(posted.title, '@0xlangeai 的精华帖');
+  assert.equal(posted.summary, '爆火的 Rea 是什么，怎么用。');
+  assert.doesNotMatch(`${posted.title}\n${posted.summary}`, /补仓|非池|待人工过审|rank13|全X中文/);
+  const only = kosxPublicItem({...row, note:intake});
+  assert.equal(only.title, '@0xlangeai 的精华帖');
+  assert.equal(only.summary, '');
+  const mixed = kosxPublicItem({...row, note:`三步装好本地字幕\n${intake}`, text:`原文摘录：第一步打开设置。\n${intake}`});
+  assert.equal(mixed.title, '三步装好本地字幕');
+  assert.equal(mixed.summary, '原文摘录：第一步打开设置。');
+  const kept = kosxPublicItem({...row, note:'三步装好本地字幕', text:'原文摘录：第一步打开设置。'});
+  assert.equal(kept.title, '三步装好本地字幕');
+  assert.equal(kept.summary, '原文摘录：第一步打开设置。');
+  const glued = kosxPublicItem({...row, note:`三步装好本地字幕 ${intake}`});
+  assert.equal(glued.title, '三步装好本地字幕');
+  assert.equal(glued.summary, '三步装好本地字幕');
+  const spaced = kosxPublicItem({...row, note:'非池｜待人工过审｜rank 13'});
+  assert.equal(spaced.title, '@0xlangeai 的精华帖');
+  assert.equal(spaced.summary, '');
+});
+
 test('pool auto-publish stays off the underrated shelf until a review code marks it reviewed', async () => {
   const env = await environment();
   const created = await (await submit(env, {url:poolUrl}, {token:delivery})).json();

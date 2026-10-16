@@ -2,10 +2,9 @@ import { CREATOR_CATALOG } from './creatorCatalog.js';
 import { creatorPreferenceKey, readCreatorPreferences } from './creatorTutorials.js';
 import { normalizeCoverUrl, normalizePostImage } from './postMedia.js';
 import { postStatusId } from './postStream.js';
-import { postAuthorLabel } from './topicWorkspace.js';
 import { isKosxPoolHandle } from '../kosx-pool.js';
 import { HOME_KEPT_BOOKMARK_MIN, homeViewName, isArticleClassItem, readBoostTotal, selectHomeShowcase } from './homeShowcase.js';
-import { isReviewSignalCopy } from './reviewQueue.js';
+import { isReviewSignalCopy, stripIntakePipelineCopy } from './reviewQueue.js';
 
 export const KOSX_EMOJI_ALT = 'KOSX 精选计划表情';
 export const KOSX_EMOJI_INTERVAL_MS = 600;
@@ -174,7 +173,7 @@ function sourceNames(entry, state) {
   const raw = entry.post?.sourceNames?.length
     ? entry.post.sourceNames
     : (entry.item?.source_refs || []).map(id => state.sources?.find(source => source.id === id)?.name || id);
-  const names = raw.map(homepageSourceLabel).filter(Boolean);
+  const names = raw.map(homepageSourceLabel).map(name => stripIntakePipelineCopy(name)).filter(Boolean);
   return names.length ? names : ['来源未提供'];
 }
 
@@ -312,10 +311,10 @@ function cardClock(item, fallback) {
 
 function authorCue(item) {
   const handle = itemAuthorHandle(item);
-  const name = typeof item?.author_name === 'string' ? item.author_name.trim() : '';
+  const name = stripIntakePipelineCopy(typeof item?.author_name === 'string' ? item.author_name : '');
   if (handle && name && name.toLowerCase() !== handle.toLowerCase()) return `${name} · @${handle}`;
   if (handle) return `@${handle}`;
-  return postAuthorLabel(item);
+  return name;
 }
 
 function quoteText(excerpt) {
@@ -336,11 +335,14 @@ function cardEvidence(e, excerpt, mode) {
 }
 
 // Classifier blurbs such as「文章卡·收藏5/点赞18·Levi样例·收藏偏低但类型优先」
-// are review evidence. A real title stays. A signal line uses the same
+// are review evidence. Intake notes such as「全X中文≥1k补仓 | 非池 | 待人工过审 | rank13」
+// are backlog remarks. A real title stays. Either leftover uses the same
 // @handle 的精华帖 face as other essence cards.
 function homepageCardTitle(item) {
-  const title = typeof item?.title === 'string' ? item.title.trim() : '';
-  if (!isReviewSignalCopy(title)) return title || '来源未提供标题';
+  const raw = typeof item?.title === 'string' ? item.title.trim() : '';
+  const title = stripIntakePipelineCopy(raw);
+  if (title && !isReviewSignalCopy(title)) return title;
+  if (!raw) return '来源未提供标题';
   const handle = itemAuthorHandle(item);
   return handle ? `@${handle} 的精华帖` : '来源未提供标题';
 }
@@ -358,7 +360,7 @@ function withoutClassifierTag(line) {
 }
 
 function homepageCardExcerpt(summary) {
-  const excerpt = coverExcerpt(summary);
+  const excerpt = stripIntakePipelineCopy(coverExcerpt(summary));
   if (!excerpt) return '';
   return excerpt.split(/\n+/).map(line => {
     const cleaned = withoutClassifierTag(line);
