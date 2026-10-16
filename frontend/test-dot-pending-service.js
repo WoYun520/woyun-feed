@@ -187,9 +187,7 @@ test('invalid urls, mismatched authors, duplicate batches and oversized notes ar
     [{url:'https://example.com/not-a-post'}, 'invalid_url'],
     [{url:postUrl, author_handle:'someoneelse'}, 'invalid_author'],
     [{items:[{url:postUrl}, {url:`https://twitter.com/example/status/${statusId}`}]}, 'duplicate_url'],
-    [{url:postUrl, note:'x'.repeat(401)}, 'invalid_note'],
     [{url:postUrl, note:'密码：abcdefghijklm'}, 'invalid_note'],
-    [{url:postUrl, note:'第一行\n第二行'}, 'invalid_note'],
     [{items:[]}, 'invalid_body'],
     [{items:Array.from({length:DOT_PENDING_BATCH_MAX + 1}, (_, index) => ({url:`https://x.com/example/status/${40000000 + index}`}))}, 'invalid_body'],
   ];
@@ -278,4 +276,39 @@ test('worker routes pending intake before assets and leaves it unavailable witho
   assert.deepEqual(publicCalls, []);
   const asset = await worker.fetch(new Request(`${base}/index.html`), env);
   assert.equal(await asset.text(), 'public asset');
+});
+
+test('a multiline or overlong note is kept as the excerpt instead of refusing the link', async () => {
+  const env = await environment();
+  const body = '第一行是原帖标题。\n第二行才是正文，不应该把整条链接拒掉。';
+  const created = await submit(env, {url:postUrl, note:body}, {token:delivery});
+  assert.equal(created.status, 201);
+  const row = stored(env)[0];
+  assert.equal(row.note, '第一行是原帖标题。');
+  assert.equal(row.text, body);
+  const longEnv = await environment();
+  const long = '很长的原帖正文。'.repeat(120);
+  const clipped = await submit(longEnv, {url:postUrl, note:long}, {token:delivery});
+  assert.equal(clipped.status, 201);
+  const saved = stored(longEnv)[0];
+  assert.equal(saved.note.length, 400);
+  assert.equal(saved.text.length, 800);
+  assert.equal(long.startsWith(saved.text), true);
+  assert.equal(long.startsWith(saved.note), true);
+});
+
+test('a later delivery fills an empty note and excerpt without replacing a real one', async () => {
+  const env = await environment();
+  const first = await submit(env, {url:postUrl}, {token:delivery});
+  assert.equal(first.status, 201);
+  assert.equal(stored(env)[0].note, '');
+  assert.equal(stored(env)[0].text, undefined);
+  const filled = await submit(env, {url:postUrl, note:'三步装好本地字幕', text:'原文摘录：第一步打开设置。'}, {token:delivery});
+  assert.equal(filled.status, 200);
+  assert.equal(stored(env)[0].note, '三步装好本地字幕');
+  assert.equal(stored(env)[0].text, '原文摘录：第一步打开设置。');
+  const kept = await submit(env, {url:postUrl, note:'不要覆盖标题', text:'不要覆盖摘录'}, {token:delivery});
+  assert.equal(kept.status, 200);
+  assert.equal(stored(env)[0].note, '三步装好本地字幕');
+  assert.equal(stored(env)[0].text, '原文摘录：第一步打开设置。');
 });

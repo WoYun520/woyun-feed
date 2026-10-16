@@ -15,7 +15,8 @@ import {
   backoffActive, fillMissingCounts, shouldAutoApprove, sweepWaitMs,
 } from './essence-schedule.js';
 import { selectSweepIntake, runEssenceSweep, backfillEssenceHeat } from './essence-sweep.js';
-import { autoApproveStalePending } from '../dot-pending-service.js';
+import { attachKosxApproved } from './kosx-public-posts.js';
+import { autoApproveStalePending, backfillEssenceFace } from '../dot-pending-service.js';
 
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
@@ -238,6 +239,60 @@ test('heat backfill copies known counts and ignores empty fields', async () => {
   const published = env.PUBLIC_FEED.json().items.find(item => item.origin === 'kosx_approved' && item.original_url === url);
   assert.equal(published.bookmark_count, 1200);
   assert.equal(Object.hasOwn(published, 'like_count'), false);
+});
+
+test('an empty shell keeps the longer board excerpt when the same post is already queued', () => {
+  const id = '2110682653334868100';
+  const url = `https://x.com/${pool}/status/${id}`;
+  const shell = postItem(pool, id, '2026-10-10T01:00:00.000Z', {
+    id:`kosx-${id}`, title:`@${pool} 的精华帖`, summary:'', origin:'kosx_approved',
+  });
+  const board = postItem(pool, id, '2026-10-10T01:00:00.000Z', {
+    id:`board-${id}`, title:'云电脑安全', summary:'云电脑上跑 Claude Code 并不等于一定安全。',
+  });
+  const selected = selectSweepIntake([shell, board], {handles:new Set([pool]), queuedKeys:new Set(), now});
+  assert.equal(selected.length, 1);
+  assert.equal(selected[0].text, '云电脑上跑 Claude Code 并不等于一定安全。');
+  assert.equal(selected[0].note, '云电脑安全');
+});
+
+test('backfill writes a board excerpt onto an empty approved row so the next rebuild keeps it', async () => {
+  const env = await environment();
+  const id = '2110682653334868100';
+  const url = `https://x.com/${pool}/status/${id}`;
+  await handleDotPendingRequest(request('POST', {token:delivery, body:{url, published_at:'2026-10-10T01:00:00.000Z'}}), env);
+  await handleDotPendingRequest(request('POST', {token:review, path:'/api/dot/pending/decision', body:{url, status:'approved'}}), env);
+  const key = `${DOT_PENDING_PREFIX}x:${id}`;
+  const before = JSON.parse(env.DOT_INBOX.values.get(key).raw);
+  assert.equal(before.note, '');
+  assert.equal(before.text, undefined);
+  const published = env.PUBLIC_FEED.json().items.find(item => item.id === before.id);
+  assert.equal(published.summary, '');
+  const remembered = {
+    ...published,
+    title:`@${pool} 的精华帖`,
+    summary:'云电脑上跑 Claude Code 并不等于一定安全。',
+  };
+  const board = {
+    id:`board-${id}`, title:'云电脑安全', summary:'云电脑上跑 Claude Code 并不等于一定安全，群里已经有人反馈帐号被封。',
+    source_refs:['sopilot-all'], link_kind:'post', original_url:url, canonical_url:url,
+    published_at:'2026-10-10T01:00:00.000Z', author_handle:pool,
+  };
+  const refreshed = {...env.PUBLIC_FEED.json(), items:env.PUBLIC_FEED.json().items.filter(item => item.origin !== 'kosx_approved')};
+  const filled = await backfillEssenceFace(env, {extraItems:[remembered, board]});
+  assert.equal(filled.updated, 1);
+  const stored = JSON.parse(env.DOT_INBOX.values.get(key).raw);
+  assert.match(stored.text, /帐号被封/);
+  assert.equal(stored.note, '云电脑安全');
+  const rebuilt = attachKosxApproved(refreshed, [stored]);
+  const card = rebuilt.items.find(item => item.origin === 'kosx_approved' && item.original_url === url);
+  assert.match(card.summary, /帐号被封/);
+  assert.equal(card.title, '云电脑安全');
+  const bare = attachKosxApproved(refreshed, [before], [remembered]);
+  const kept = bare.items.find(item => item.origin === 'kosx_approved' && item.original_url === url);
+  assert.match(kept.summary, /并不等于一定安全/);
+  const untouched = await backfillEssenceFace(env, {extraItems:[board]});
+  assert.equal(untouched.updated, 0);
 });
 
 test('a failed sweep backs off and the next attempt inside the window does not scan again', async () => {

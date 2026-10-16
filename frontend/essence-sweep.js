@@ -2,7 +2,7 @@
 // It does not call api.x.com, a paid X client, or a model. New posts that are
 // not already in that snapshot still arrive through POST /api/dot/pending
 // with the existing delivery key.
-import { autoApproveStalePending, canonicalPendingPost, enqueueDeliveryPosts, listApprovedKosxRecords, listKosxRecords, publishApprovedFeed, readPublicFeedSnapshot } from '../dot-pending-service.js';
+import { autoApproveStalePending, backfillEssenceFace, canonicalPendingPost, enqueueDeliveryPosts, listApprovedKosxRecords, listKosxRecords, publishApprovedFeed, readPublicFeedSnapshot } from '../dot-pending-service.js';
 import { originalPostInstant } from './kosx-public-posts.js';
 import { coverExcerpt } from './src/homeShowcaseView.js';
 import { REVIEW_TEXT_MAX, isReviewSignalCopy, stripIntakePipelineCopy } from './src/reviewQueue.js';
@@ -30,35 +30,49 @@ export function selectSweepIntake(items, {handles, queuedKeys, now = Date.now(),
   const pool = handles instanceof Set ? handles : new Set(Array.isArray(handles) ? handles : []);
   const queued = queuedKeys instanceof Set ? queuedKeys : new Set(Array.isArray(queuedKeys) ? queuedKeys : []);
   const limit = Number.isSafeInteger(cap) && cap > 0 ? cap : ESSENCE_INTAKE_CAP;
-  const seen = new Set();
-  const chosen = [];
+  const chosen = new Map();
   const rows = Array.isArray(items) ? items : [];
   for (const item of rows) {
     if (!item || typeof item !== 'object') continue;
     const post = canonicalPendingPost(item.original_url || item.canonical_url || item.url || '');
-    if (!post || seen.has(post.key) || queued.has(post.key)) continue;
+    if (!post || queued.has(post.key)) continue;
     const named = typeof item.author_handle === 'string' ? item.author_handle : '';
     if (named && named.toLowerCase() !== post.author_handle.toLowerCase()) continue;
     if (!pool.has(post.author_handle.toLowerCase())) continue;
     const instant = originalPostInstant({...item, url:post.url, key:post.key});
     if (!inRecentBeijingDays(instant, now)) continue;
-    seen.add(post.key);
-    const next = {...post, note:''};
     const summary = coverExcerpt(stripIntakePipelineCopy(typeof item.summary === 'string' ? item.summary : ''));
-    if (summary && !isReviewSignalCopy(summary)) next.text = summary.slice(0, REVIEW_TEXT_MAX);
     const title = stripIntakePipelineCopy(typeof item.title === 'string' ? item.title : '');
-    if (title && title !== summary && !isReviewSignalCopy(title) && !/的精华帖$/u.test(title)) next.note = title.slice(0, 400);
-    if (typeof item.published_at === 'string' && Number.isFinite(Date.parse(item.published_at))) next.published_at = new Date(item.published_at).toISOString();
-    else if (instant) next.published_at = instant;
-    const bookmark = fillMissingCounts({}, item);
-    if (bookmark.changed) {
-      if (Object.hasOwn(bookmark.record, 'bookmark_count')) next.bookmark_count = bookmark.record.bookmark_count;
-      if (Object.hasOwn(bookmark.record, 'like_count')) next.like_count = bookmark.record.like_count;
+    const usableSummary = summary && !isReviewSignalCopy(summary) ? summary.slice(0, REVIEW_TEXT_MAX) : '';
+    const usableTitle = title && title !== summary && !isReviewSignalCopy(title) && !/的精华帖$/u.test(title) ? title.slice(0, 400) : '';
+    let row = chosen.get(post.key);
+    if (!row) {
+      const next = {...post, note:''};
+      if (usableSummary) next.text = usableSummary;
+      if (usableTitle) next.note = usableTitle;
+      if (typeof item.published_at === 'string' && Number.isFinite(Date.parse(item.published_at))) next.published_at = new Date(item.published_at).toISOString();
+      else if (instant) next.published_at = instant;
+      const bookmark = fillMissingCounts({}, item);
+      if (bookmark.changed) {
+        if (Object.hasOwn(bookmark.record, 'bookmark_count')) next.bookmark_count = bookmark.record.bookmark_count;
+        if (Object.hasOwn(bookmark.record, 'like_count')) next.like_count = bookmark.record.like_count;
+      }
+      chosen.set(post.key, {post:next, instant:Date.parse(next.published_at || instant || '') || 0});
+      continue;
     }
-    chosen.push({post:next, instant:Date.parse(next.published_at || instant || '') || 0});
+    // The same post can sit on the cover as an empty shell and on a board
+    // with the excerpt. Keep the longer body and the first real title.
+    if (usableSummary.length > (row.post.text || '').length) row.post.text = usableSummary;
+    if (usableTitle && !row.post.note) row.post.note = usableTitle;
+    const bookmark = fillMissingCounts(row.post, item);
+    if (bookmark.changed && bookmark.record) {
+      if (Object.hasOwn(bookmark.record, 'bookmark_count')) row.post.bookmark_count = bookmark.record.bookmark_count;
+      if (Object.hasOwn(bookmark.record, 'like_count')) row.post.like_count = bookmark.record.like_count;
+    }
   }
-  chosen.sort((left, right) => right.instant - left.instant || (left.post.key < right.post.key ? -1 : left.post.key > right.post.key ? 1 : 0));
-  return chosen.slice(0, limit).map(row => row.post);
+  const ranked = [...chosen.values()];
+  ranked.sort((left, right) => right.instant - left.instant || (left.post.key < right.post.key ? -1 : left.post.key > right.post.key ? 1 : 0));
+  return ranked.slice(0, limit).map(row => row.post);
 }
 
 function donorMap(items) {
@@ -171,7 +185,7 @@ export async function backfillEssenceHeat(env, {publish = true, extraItems = []}
 export async function runEssenceSweep(env, options = {}) {
   const now = clockMs(options.now);
   const iso = new Date(now).toISOString();
-  const report = {x_api:ESSENCE_SWEEP_BUDGET.x_api, llm_tokens:ESSENCE_SWEEP_BUDGET.llm_tokens, roster_gets:0, enqueued:0, auto_approved:0, heat_updated:0, scan_skipped:false, scan_failed:false};
+  const report = {x_api:ESSENCE_SWEEP_BUDGET.x_api, llm_tokens:ESSENCE_SWEEP_BUDGET.llm_tokens, roster_gets:0, enqueued:0, auto_approved:0, heat_updated:0, face_updated:0, scan_skipped:false, scan_failed:false};
   const state = await readSweepState(env);
   let changed = false;
   if (backoffActive(state, now)) {
@@ -201,6 +215,11 @@ export async function runEssenceSweep(env, options = {}) {
     report.heat_updated = heat.updated;
     if (heat.updated) changed = true;
   } catch { console.warn(JSON.stringify({event:'essence-heat-backfill-failed'})); }
+  try {
+    const face = await backfillEssenceFace(env, {extraItems:options.extraItems});
+    report.face_updated = face.updated;
+    if (face.updated) changed = true;
+  } catch { console.warn(JSON.stringify({event:'essence-face-backfill-failed'})); }
   if (changed) {
     try { await publishApprovedFeed(env); }
     catch { console.warn(JSON.stringify({event:'essence-sweep-publish-failed'})); }
