@@ -7,7 +7,7 @@ import { UNDERRATED_PIN_KEY, handleDotUnderratedRequest, overlayPublicUnderrated
 import { PUBLIC_FEED_KEY } from './cloud-feed-service.js';
 import { makePublicFeed } from './public-feed-data.js';
 import { normalizeRepositories } from './repository-normalize.js';
-import { HOME_WEEK_BOOKMARK_MIN, beijingDateKey, selectHomeShowcase } from './src/homeShowcase.js';
+import { HOME_LATEST_WINDOW_DAYS, HOME_WEEK_BOOKMARK_MIN, addCalendarDays, beijingDateKey, selectHomeShowcase } from './src/homeShowcase.js';
 import { KOSX_POOL_HANDLES } from './kosx-pool.js';
 import { kosxPublicItem } from './kosx-public-posts.js';
 import { normalizeCoverUrl } from './src/postMedia.js';
@@ -869,7 +869,7 @@ test('delivery stores a cover, copies it onto the public item, and a later deliv
   assert.equal(env.PUBLIC_FEED.json().items.find(item => item.original_url === poolUrl).cover_url, storedCover);
 });
 
-test('an original older than seven Beijing days stays off 最新精华 and can still enter 卧云精选', async () => {
+test('an original outside the three Beijing-day latest window stays off 最新精华 and can still enter 卧云精选', async () => {
   const env = await environment();
   for (let index = 0; index < 18; index += 1) {
     const url = `https://x.com/example/status/2108148604447885${String(index).padStart(3, '0')}`;
@@ -884,15 +884,29 @@ test('an original older than seven Beijing days stays off 最新精华 and can s
   const keptUrl = 'https://x.com/example/status/2108148604447884998';
   await submit(env, {url:keptUrl, published_at:'2026-08-01T00:00:00.000Z', review_type:'文章', bookmark_count:1500});
   await decide(env, {url:keptUrl, status:'approved'});
+  const edgeUrl = 'https://x.com/example/status/2108148604447884997';
+  assert.equal((await submit(env, {url:edgeUrl, published_at:'2026-10-08T00:00:00.000Z', review_type:'文章', bookmark_count:40})).status, 201);
+  await decide(env, {url:edgeUrl, status:'approved'});
+  const outsideUrl = 'https://x.com/example/status/2108148604447884996';
+  assert.equal((await submit(env, {url:outsideUrl, published_at:'2026-10-07T12:00:00.000Z', review_type:'文章', bookmark_count:800})).status, 201);
+  await decide(env, {url:outsideUrl, status:'approved'});
   const item = env.PUBLIC_FEED.json().items.find(entry => entry.original_url === oldUrl);
   assert.equal(item.origin, 'kosx_approved');
   assert.deepEqual(item.source_refs, ['sopilot-kosx']);
   assert.equal(item.source_item_time, decision.reviewed_at);
   assert.equal(item.published_at, '2026-09-01T00:00:00.000Z');
   const home = showcase(env.PUBLIC_FEED.json());
+  assert.equal(HOME_LATEST_WINDOW_DAYS, 3);
+  assert.equal(home.reference.dateKey, '2026-10-10');
+  assert.deepEqual(Array.from({length:HOME_LATEST_WINDOW_DAYS}, (_, index) => addCalendarDays(home.reference.dateKey, -index)), ['2026-10-10', '2026-10-09', '2026-10-08']);
+  assert.equal(home.reference.weekKeys.length, 7);
+  assert.equal(home.latest.some(entry => entry.post.item.original_url === edgeUrl), true);
+  assert.equal(home.latest.some(entry => entry.post.item.original_url === outsideUrl), false);
   assert.equal(home.latest.some(entry => entry.post.item.original_url === oldUrl), false);
   assert.equal(home.latest.some(entry => entry.post.item.original_url === keptUrl), false);
   assert.equal(home.latest.length, 18);
+  assert.equal(home.week.some(entry => entry.post.item.original_url === outsideUrl), true);
+  assert.equal(home.kept.some(entry => entry.post.item.original_url === outsideUrl), false);
   assert.equal(home.kept.some(entry => entry.post.item.original_url === oldUrl), false);
   assert.equal(home.kept.some(entry => entry.post.item.original_url === keptUrl), true);
   assert.match(renderFeed(env.PUBLIC_FEED.json()), /id="home-latest"/);
