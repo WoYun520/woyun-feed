@@ -222,6 +222,22 @@ function resultResponse(results, batched, statusName, created) {
   return json({status:statusName, results}, created ? 201 : 200);
 }
 
+export async function pinReviewedPost(env, url) {
+  const post = canonicalPendingPost(url);
+  if (!post) return {pinned:false, code:'invalid_url', message:'请粘贴有效的 X 链接。'};
+  try {
+    const response = await pinPosts(env, [post], '', false);
+    const body = await response.json();
+    if (response.status === 201 || (response.status === 200 && body?.existing === true)) {
+      return {pinned:true, existing:body.existing === true, message:'已钉进昨日低估栏。'};
+    }
+    return {pinned:false, code:body?.error || 'pin_failed', message:typeof body?.message === 'string' ? body.message : '没有钉进昨日低估栏。'};
+  } catch (error) {
+    if (error instanceof UnderratedError) return {pinned:false, code:error.code, message:error.message};
+    return {pinned:false, code:'underrated_unavailable', message:'昨日低估栏暂时不可用。过审已经写上首页。'};
+  }
+}
+
 async function pinPosts(env, posts, note, batched) {
   const items = await loadPins(env);
   const fresh = posts.filter(post => !items.some(item => item.key === post.key));

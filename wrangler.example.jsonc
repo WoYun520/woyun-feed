@@ -17,5 +17,5 @@
     {"binding": "PUBLIC_FEED", "id": "SET_YOUR_OWN_KV_NAMESPACE_ID"},
     {"binding": "DOT_INBOX", "id": "SET_YOUR_OWN_PRIVATE_INBOX_NAMESPACE_ID"}
   ],
-  "triggers": {"crons": ["0 1,13 * * *"]}
+  "triggers": {"crons": ["0 1,13 * * *", "0 */3 * * *"]}
 }

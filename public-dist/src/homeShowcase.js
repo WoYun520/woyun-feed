@@ -6,6 +6,7 @@ export const HOME_BOOST_TOTAL_KEY = 'personal-feed:home-boost-total:v1';
 export const HOME_BOOST_VISITOR_KEY = 'personal-feed:visitor:v1';
 
 export const HOME_LATEST_LIMIT = 18;
+export const HOME_LATEST_WINDOW_DAYS = 7;
 export const HOME_UNDERSTATED_LIMIT = 2;
 // Levi's floor for 「七日精选」. Same number as the 200 bookmark gate on the material review filters.
 export const HOME_WEEK_BOOKMARK_MIN = 200;
@@ -119,9 +120,22 @@ function latestEssence(entry) {
 }
 
 // Approval writes source_item_time to the review clock and leaves published_at
-// on the original post. 最新精华 uses the later of the two, so a just-approved
-// older original still enters the 18. Yesterday and the week shelf stay on
-// the original post clock.
+// on the original post. Yesterday and the week shelf stay on the original
+// post clock. 最新精华 also uses that original Beijing day, and only keeps
+// the last 7 calendar days. Approval time still sorts rows inside the window.
+function essenceOriginalDay(entry) {
+  const items = [entry?.post?.item, ...(Array.isArray(entry?.post?.records) ? entry.post.records : [])];
+  let day = '';
+  for (const item of items) {
+    if (!isHomepageEssence(item)) continue;
+    const instant = finite(item?.published_at) ? item.published_at : finite(item?.created_at) ? item.created_at : '';
+    if (!instant) continue;
+    const key = beijingDateKey(Date.parse(instant));
+    if (key && key > day) day = key;
+  }
+  return day;
+}
+
 function latestPlacementMs(entry) {
   const clocks = [entry?.time?.ms || 0];
   const items = [entry?.post?.item, ...(Array.isArray(entry?.post?.records) ? entry.post.records : [])];
@@ -274,11 +288,13 @@ export function selectHomeShowcase(state, {now} = {}) {
   const yesterdayEntries = dated.filter(entry => onDay(entry, yesterday) && isHomepageEssence(entry.post.item));
   const weekEntries = dated.filter(entry => weekKeys.includes(beijingDateKey(entry.time.ms)) && isHomepageEssence(entry.post.item));
   const week = pickWeek(weekEntries);
-  // 「最新精华」uses the same homepage-essence line as 「昨日全部」. Order is
-  // when the post joined that line if approval is later than the original,
-  // otherwise the original post time. A short list stays short: public-stream
-  // heat posts do not fill the cap.
-  const latest = dated.filter(latestEssence).sort((a, b) => latestPlacementMs(b) - latestPlacementMs(a) || byRecent(a, b)).slice(0, HOME_LATEST_LIMIT);
+  // 「最新精华」keeps homepage essence whose original Beijing day is inside the
+  // last 7 calendar days, including the reference day. Older approved posts
+  // can still reach 卧云精选 or 七日精选 under those shelves' own rules. They
+  // do not take a latest slot. Inside the window, a later approval still sorts
+  // ahead of an earlier original. Public-stream heat posts do not fill the cap.
+  const latestKeys = dateKey ? Array.from({length:HOME_LATEST_WINDOW_DAYS}, (_, index) => addCalendarDays(dateKey, -index)) : [];
+  const latest = dated.filter(entry => latestEssence(entry) && latestKeys.includes(essenceOriginalDay(entry))).sort((a, b) => latestPlacementMs(b) - latestPlacementMs(a) || byRecent(a, b)).slice(0, HOME_LATEST_LIMIT);
   const under = pickPinnedUnderrated(yesterdayEntries, state?.underratedPins ?? state?.underrated_pins, yesterday);
   const kept = pickKept(dated);
   if (before !== state) throw Error('首页筛选不应替换资料对象。');

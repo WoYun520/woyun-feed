@@ -100,9 +100,13 @@ export function createReviewAdmin({
       const body = await readJson(response);
       if (!response.ok || typeof body.url !== 'string') throw new Error(typeof body.message === 'string' ? body.message : '过审没有完成。');
       state.items = state.items.map(item => item.url === body.url || item.key === body.key ? {...item, ...body} : item);
-      state.message = status === 'approved'
-        ? (underrated_candidate ? '已过审上首页，并记为低估栏候选。尚未钉进昨日低估栏。' : '已过审上首页。')
-        : '已略过，不会出现在公开首页。';
+      state.message = status !== 'approved'
+        ? '已略过，不会出现在公开首页。'
+        : body.pinned
+          ? '已过审上首页，并钉进昨日低估栏。'
+          : underrated_candidate
+            ? (typeof body.pin_message === 'string' && body.pin_message ? body.pin_message : '已过审上首页。原帖日期不是昨日，没有钉进昨日低估栏。')
+            : '已过审上首页。';
     } catch (error) {
       state.error = error?.message || '过审没有完成。';
     } finally {

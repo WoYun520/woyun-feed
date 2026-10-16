@@ -97,8 +97,8 @@ export function decisionBody(input) {
   }
   if (typeof input.url !== 'string' || !input.url || input.url.length > 2000) return {error:'请提交有效的 X 链接。'};
   if (!['approved', 'rejected'].includes(input.status)) return {error:'过审结果只能是通过或略过。'};
-  if (Object.hasOwn(input, 'underrated_candidate') && typeof input.underrated_candidate !== 'boolean') return {error:'进低估栏候选只能是勾选或不勾选。'};
-  if (input.underrated_candidate === true && input.status !== 'approved') return {error:'只有过审通过时才能标成低估栏候选。'};
+  if (Object.hasOwn(input, 'underrated_candidate') && typeof input.underrated_candidate !== 'boolean') return {error:'进低估只能是勾选或不勾选。'};
+  if (input.underrated_candidate === true && input.status !== 'approved') return {error:'只有过审通过时才能钉进低估栏。'};
   if (Object.hasOwn(input, 'review_type') && !REVIEW_TYPES.includes(input.review_type)) return {error:'类型不正确。'};
   const body = {url:input.url, status:input.status};
   if (input.underrated_candidate === true) body.underrated_candidate = true;

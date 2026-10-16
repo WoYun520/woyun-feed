@@ -37,11 +37,11 @@ function renderItem(item, busy) {
     <div class="review-queue-actions">
       ${url ? `<a class="dot-original-link" href="${escape(url)}" target="_blank" rel="noopener noreferrer">打开原帖 <span aria-hidden="true">↗</span></a>` : '<span>原帖链接不可用</span>'}
       <label class="review-type-edit">类型<select data-review-type-select aria-label="修正类型：${escape(author)}"${disabled}>${options}</select></label>
-      <label class="review-underrated-choice"><input type="checkbox" data-review-underrated${disabled}>进低估栏候选</label>
+      <label class="review-underrated-choice"><input type="checkbox" data-review-underrated${disabled}>进低估</label>
       <button type="button" class="btn-primary-action" data-review-decision="approved"${disabled}>过审上首页</button>
       <button type="button" class="btn-quiet" data-review-decision="rejected"${disabled}>略过</button>
     </div>
-    <p class="review-queue-hint">勾选只记在这条过审记录上，不会钉进昨日低估栏。</p>
+    <p class="review-queue-hint">原帖是昨日时，过审通过会钉进昨日低估栏。不是昨日就只上首页。</p>
   </article>`;
 }
 

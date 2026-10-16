@@ -179,6 +179,12 @@ export async function runScheduledUpdate(env, options) {
   let approved=[];
   if (typeof env?.DOT_INBOX?.list==='function') {
     const {listApprovedKosxRecords}=await import('../dot-pending-service.js');
+    const {backfillEssenceHeat}=await import('./essence-sweep.js');
+    const {autoApproveStalePending}=await import('../dot-pending-service.js');
+    try { await backfillEssenceHeat(env, {publish:false, extraItems:refreshed.items}); }
+    catch { console.warn(JSON.stringify({event:'essence-heat-backfill-failed'})); }
+    try { await autoApproveStalePending(env, {publish:false}); }
+    catch { console.warn(JSON.stringify({event:'essence-auto-approve-failed'})); }
     approved=await listApprovedKosxRecords(env);
   }
   const next=attachKosxApproved(refreshed, approved);
