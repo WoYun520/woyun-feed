@@ -67,9 +67,11 @@ flowchart LR
 
 ### 空白封面与占位标题
 
-产品规则叫 `blankPublicCover`：摘录为空，并且没有封面图或视频海报的帖，不放上公开栏。占位标题 `@handle 的精华帖` 可以当卡片标题，只要摘录还在。流程说明、补仓备注和「待人工过审」这类进料字样不当成标题或摘录。
+空白封面由 `frontend/src/coverFace.js` 的 `blankPublicCover` 判定，并且已经拦在公开栏外面。没有可用摘录，并且 `showcaseCoverMedia` 也没有封面图或同一条帖的图片，这张脸就是空白。流程说明、补仓备注和「待人工过审」不当成摘录。同一条帖的另一份副本如果带着摘录，这张脸可以留下。
 
-这一检出里，`selectHomeShowcase` 仍会把空摘录留在栏上，页面画成 `data-cover="plain"`。对应测试是 `frontend/test-home-showcase.js` 里 “an empty excerpt stays on the shelf”。仓库里没有名叫 `blankPublicCover` 的函数。要让公开栏符合这条产品规则，改选择函数和这条测试。
+`selectHomeShowcase` 里的 `showCover` 就是 `!blankPublicCover(entry.post)`。最新精华、昨日全部、七日精选、卧云精选都走这道过滤。昨日最被低估只从已经通过过滤的「昨日全部」里钉，所以空白封面也不进这一栏。测试是 `frontend/test-home-showcase.js` 里的 “blank public covers stay off every homepage rail”。
+
+占位标题 `@handle 的精华帖` 可以当卡片标题，只要摘录还在。样式里仍留着紧凑的 `data-cover="plain"`，给个别边角用；公开栏的选择已经把空白封面排除在外。
 
 ## 内容政策
 
