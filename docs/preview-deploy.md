@@ -1,6 +1,8 @@
 # 预览站构建与部署
 
-本文件只记录 `woyun-feed-preview` 的构建和发布步骤。不要把 API token、投递密钥、接收码或它们的哈希写进仓库。
+本文件只记录 `woyun-feed-preview` 的构建和发布步骤。定时、密钥名称和「扫榜改队列、公开刷新重建快照」见 [ops-cron.md](ops-cron.md)。不要把 API token、投递密钥、接收码或它们的哈希写进仓库。
+
+预览地址已经是熟人软启动：`https://woyun-feed-preview.hhzovo66.workers.dev/`。把改动推进 Git 不会自动部署。
 
 现有空壳 Worker `woyun` 与本预览无关，部署时不要指定那个名字。
 
@@ -12,7 +14,7 @@
 node frontend/public-build.mjs
 ```
 
-成功后会重写 `public-dist`。Worker 静态资源目录就是这个目录；`/data/public-feed.json` 与 `/api/dot/*` 先进入 Worker，其余路径由静态资源处理。
+成功后会重写 `public-dist`。Worker 静态资源目录就是这个目录；`/data/public-feed.json`、`/api/dot/*` 与 `/api/home-boost` 先进入 Worker，其余路径由静态资源处理。
 
 没有本机 `data/live-feed.json` 时，构建改用已提交的 `public-dist/data/public-feed.json`，并沿用其中的发布时间与自动更新标记。这不会重新抓取原站。有本机资料时仍只读取 `data/live-feed.json`。
 

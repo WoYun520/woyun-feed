@@ -31,7 +31,7 @@
 
 每天两次的公开源刷新也会顺手做热度回填和满 3 小时自动过审，但不会为了进队去扫 X。
 
-**当前仓库改动还没有部署。** 不要执行 `npx wrangler deploy`，也不要部署名为 `woyun` 的 Worker。下面的地址要等有人发布预览 Worker `woyun-feed-preview` 之后才能用。
+预览地址是熟人软启动：`https://woyun-feed-preview.hhzovo66.workers.dev/`。把改动推进 Git 不会自动部署。发布只打 Worker `woyun-feed-preview`。不要部署名为 `woyun` 的 Worker。线上是否已经包含某次提交，以最近一次预览部署为准。定时见 [ops-cron.md](ops-cron.md)。
 
 ## 放上公开首页
 
