@@ -6,7 +6,8 @@ import { REVIEW_COUNT_MAX } from './src/reviewQueue.js';
 import { addCalendarDays, beijingDateKey } from './src/homeShowcase.js';
 
 export const PUBLIC_REFRESH_CRON = '0 1,13 * * *';
-export const ESSENCE_SWEEP_CRON = '0 */3 * * *';
+// 00:00, 04:00, 08:00, 12:00 UTC = 08:00, 12:00, 16:00, 20:00 Asia/Shanghai.
+export const ESSENCE_SWEEP_CRON = '0 0,4,8,12 * * *';
 export const ESSENCE_SWEEP_INTERVAL_MS = 3 * 60 * 60 * 1000;
 export const PENDING_AUTO_APPROVE_MS = 3 * 60 * 60 * 1000;
 export const ESSENCE_INTAKE_WINDOW_DAYS = 2;
@@ -14,7 +15,7 @@ export const ESSENCE_INTAKE_CAP = 20;
 export const ESSENCE_SWEEP_BACKOFF_MAX_MS = 24 * 60 * 60 * 1000;
 export const ESSENCE_SWEEP_STATE_KEY = 'essence_sweep:v1';
 
-// Worst case for one 3-hour sweep. Roster is the free impact.kosx.ai member
+// Worst case for one essence sweep. Roster is the free impact.kosx.ai member
 // list, and only when its cache is older than one hour. Lower ESSENCE_INTAKE_CAP
 // to write fewer queue rows. A failed sweep waits 6h, then 12h, then 24h.
 export const ESSENCE_SWEEP_BUDGET = Object.freeze({

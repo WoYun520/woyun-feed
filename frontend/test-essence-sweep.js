@@ -85,10 +85,11 @@ function age(env, url, iso) {
   env.DOT_INBOX.values.set(`${DOT_PENDING_PREFIX}${row.key}`, {raw:JSON.stringify(row), metadata:{status:row.status, submitted_at:iso}});
 }
 
-test('the 3-hour essence sweep is configured beside the twice-daily public refresh', () => {
+test('the essence sweep runs at 08:00, 12:00, 16:00, and 20:00 Asia/Shanghai beside the twice-daily public refresh', () => {
   const wrangler = readFileSync(new URL('../wrangler.jsonc', import.meta.url), 'utf8');
+  const example = readFileSync(new URL('../wrangler.example.jsonc', import.meta.url), 'utf8');
   const worker = readFileSync(new URL('../worker.js', import.meta.url), 'utf8');
-  assert.equal(ESSENCE_SWEEP_CRON, '0 */3 * * *');
+  assert.equal(ESSENCE_SWEEP_CRON, '0 0,4,8,12 * * *');
   assert.equal(PUBLIC_REFRESH_CRON, '0 1,13 * * *');
   assert.equal(ESSENCE_SWEEP_INTERVAL_MS, 3 * 60 * 60 * 1000);
   assert.equal(PENDING_AUTO_APPROVE_MS, 3 * 60 * 60 * 1000);
@@ -97,8 +98,13 @@ test('the 3-hour essence sweep is configured beside the twice-daily public refre
   assert.equal(ESSENCE_SWEEP_BUDGET.llm_tokens, 0);
   assert.equal(ESSENCE_SWEEP_BUDGET.roster_gets, 1);
   assert.equal(ESSENCE_SWEEP_BUDGET.queue_writes, ESSENCE_INTAKE_CAP);
+  assert.match(wrangler, /"name": "woyun-feed-preview"/);
   assert.match(wrangler, /0 1,13 \* \* \*/);
-  assert.match(wrangler, /0 \*\/3 \* \* \*/);
+  assert.match(wrangler, /0 0,4,8,12 \* \* \*/);
+  assert.doesNotMatch(wrangler, /0 \*\/3 \* \* \*/);
+  assert.match(example, /0 1,13 \* \* \*/);
+  assert.match(example, /0 0,4,8,12 \* \* \*/);
+  assert.doesNotMatch(example, /0 \*\/3 \* \* \*/);
   assert.match(worker, /ESSENCE_SWEEP_CRON/);
   assert.match(worker, /runEssenceSweep/);
   assert.equal(sweepWaitMs(0), 0);

@@ -18,7 +18,7 @@ node frontend/public-build.mjs
 
 ## 部署
 
-配置在根目录 `wrangler.jsonc`：Worker 名为 `woyun-feed-preview`，绑定已有 KV `PUBLIC_FEED` 与 `DOT_INBOX`，定时为每天 01:00 与 13:00 UTC（北京时间 09:00、21:00）。本机需要已登录的 Wrangler，或环境变量 `CLOUDFLARE_API_TOKEN`（Workers 脚本写权限）。令牌不要写入文件。
+配置在根目录 `wrangler.jsonc`：Worker 名为 `woyun-feed-preview`，绑定已有 KV `PUBLIC_FEED` 与 `DOT_INBOX`。公开来源定时为每天 01:00 与 13:00 UTC（北京时间 09:00、21:00）。最新精华进队为 UTC `0 0,4,8,12 * * *`（北京时间 08:00、12:00、16:00、20:00）。本机需要已登录的 Wrangler，或环境变量 `CLOUDFLARE_API_TOKEN`（Workers 脚本写权限）。令牌不要写入文件。
 
 ```sh
 npx wrangler deploy

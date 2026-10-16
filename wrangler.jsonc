@@ -26,6 +26,7 @@
     {"binding": "DOT_INBOX", "id": "fd0d1eeaf2ed401cb04bb4089b55847c"}
   ],
   // 01:00 and 13:00 UTC = 09:00 and 21:00 Asia/Shanghai: public source refresh.
-  // 0 */3 * * *: latest-essence intake from the snapshot already in KV. No X API.
-  "triggers": {"crons": ["0 1,13 * * *", "0 */3 * * *"]}
+  // 00:00, 04:00, 08:00, and 12:00 UTC = 08:00, 12:00, 16:00, and 20:00 Asia/Shanghai:
+  // latest-essence intake from the snapshot already in KV. No X API.
+  "triggers": {"crons": ["0 1,13 * * *", "0 0,4,8,12 * * *"]}
 }
