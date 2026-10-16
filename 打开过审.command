@@ -1,9 +1,21 @@
 #!/bin/zsh
 # Levi flow · 本机过审入口
 # 和「打开 Levi flow.command」启动同一个本机服务，浏览器直接打开 /review-admin。
+# 失败时留在这个窗口里：先让启动程序打出原文，再停住等按键，避免终端一闪而过。
 script_path=${0:A}
 root=${script_path:h}
 launch="${root}/frontend/launch.mjs"
+
+pause_if_failed() {
+  local exit_code=$1
+  if (( exit_code == 0 )); then
+    return 0
+  fi
+  print -u2 "打开过审没有完成。请看上面的报错，按任意键关闭这个窗口。"
+  read -k
+  print
+  exit "$exit_code"
+}
 
 typeset -a candidates
 candidates=(
@@ -32,7 +44,8 @@ if [[ -z "${node_bin}" ]]; then
 fi
 if [[ -z "${node_bin}" ]]; then
   print -u2 "需要 Node.js 22 或更新版本，请先安装。"
-  exit 1
+  pause_if_failed 1
 fi
 export LEVI_OPEN_PATH=/review-admin
-exec "${node_bin}" "${launch}"
+"${node_bin}" "${launch}"
+pause_if_failed $?

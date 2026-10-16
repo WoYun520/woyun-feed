@@ -14,7 +14,13 @@
     <p class="form-help">Levi flow · 只在这台电脑</p>
     <h1>本机过审</h1>
     <p class="form-help">按提交日列出北京时间今天或昨天进队的链接，从这里过审上首页或略过，包括贴进来的旧帖。浏览器里不需要粘贴接收码。公开首页没有「待过审」入口。</p>
-    <div id="review-admin-root"><p class="review-queue-status" role="status">正在读取本机过审…</p></div>
+    <style>
+      .review-admin-toolbar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin: 0 0 16px; }
+      .review-admin-toolbar p { margin: 0; color: var(--text-muted, #6a6d65); font-size: 13px; line-height: 1.6; }
+      .review-admin-toolbar .btn-quiet { min-height: 36px; padding: 6px 14px; color: #171917; border: 1px solid #171917; background: #fff; font-weight: 650; }
+      .review-admin-toolbar .btn-quiet:disabled { opacity: .55; }
+    </style>
+    <div id="review-admin-root"><div class="review-admin-toolbar"><button type="button" class="btn-quiet" data-review-refresh>刷新</button><p>打开时拉一次待过审，之后约每 30 秒自动更新，也可以点刷新。页面在后台或正在过审时会跳过自动更新。</p></div><p class="review-queue-status" role="status">正在读取本机过审…</p></div>
   </main>
   <script type="module" src="/src/reviewAdminPage.js"></script>
 </body>
