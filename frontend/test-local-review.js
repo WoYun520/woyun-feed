@@ -93,6 +93,8 @@ test('the local admin page lists and decides without a browser token, and the pu
   assert.match(page.body, /提交日/);
   assert.match(page.body, /北京时间今天或昨天/);
   assert.match(page.body, /\/src\/reviewAdminPage\.js/);
+  assert.match(page.body, /data-review-refresh/);
+  assert.match(page.body, /约每 30 秒自动更新/);
   assert.doesNotMatch(page.body, /type="password"|文章卡·收藏|互动尚低|DOT_REVIEW_TOKEN|只列出原帖日期|正在读取公开待过审/);
   const pending = await request('/api/local-review/pending', 'GET', {Authorization:`Bearer ${'a'.repeat(40)}`});
   assert.equal(pending.status, 200);

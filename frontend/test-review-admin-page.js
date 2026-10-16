@@ -1,0 +1,204 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import { REVIEW_ADMIN_POLL_MS, REVIEW_ADMIN_REFRESH_COPY, createReviewAdmin } from './src/reviewAdminPage.js';
+
+const postUrl = 'https://x.com/example/status/2108148604447883999';
+const signalNote = '文章卡·收藏5/点赞18·Levi样例·收藏偏低但类型优先';
+const item = () => ({
+  id:'kosx-1', url:postUrl, status:'pending', author_handle:'example',
+  submitted_at:new Date().toISOString(), note:signalNote,
+});
+
+const VOID = new Set(['area','base','br','col','embed','hr','img','input','link','meta','source','track','wbr']);
+
+function parseAttrs(raw) {
+  const attrs = {};
+  const re = /([^\s=/]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g;
+  let match;
+  while ((match = re.exec(raw))) attrs[match[1]] = match[2] ?? match[3] ?? match[4] ?? '';
+  return attrs;
+}
+
+function createElement(tag, attrs = {}) {
+  const node = {
+    tagName:String(tag).toLowerCase(), attrs:{...attrs}, children:[], parent:null, listeners:{}, dataset:{},
+    disabled:Object.prototype.hasOwnProperty.call(attrs, 'disabled'), checked:false, value:attrs.value || '',
+  };
+  for (const [key, value] of Object.entries(node.attrs)) {
+    if (!key.startsWith('data-')) continue;
+    const prop = key.slice(5).replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
+    node.dataset[prop] = value;
+  }
+  node.getAttribute = name => Object.prototype.hasOwnProperty.call(node.attrs, name) ? node.attrs[name] : null;
+  node.matches = selector => {
+    const attr = /^\[([^\]=]+?)(?:="([^"]*)")?\]$/.exec(selector);
+    if (!attr || !Object.prototype.hasOwnProperty.call(node.attrs, attr[1])) return false;
+    return attr[2] === undefined || node.attrs[attr[1]] === attr[2];
+  };
+  node.closest = selector => {
+    let current = node;
+    while (current) {
+      if (current.matches?.(selector)) return current;
+      current = current.parent;
+    }
+    return null;
+  };
+  node.querySelectorAll = selector => {
+    const found = [];
+    const walk = current => {
+      for (const child of current.children || []) {
+        if (child.matches(selector)) found.push(child);
+        walk(child);
+      }
+    };
+    walk(node);
+    return found;
+  };
+  node.querySelector = selector => node.querySelectorAll(selector)[0] || null;
+  node.addEventListener = (type, fn) => { (node.listeners[type] ||= []).push(fn); };
+  node.click = () => {
+    if (node.disabled) return;
+    for (const fn of node.listeners.click || []) fn({target:node, currentTarget:node});
+  };
+  return node;
+}
+
+function parseFragment(html) {
+  const root = createElement('#fragment');
+  const stack = [root];
+  const re = /<\/([A-Za-z0-9]+)\s*>|<([A-Za-z0-9]+)([^>]*?)(\/?)>/g;
+  let match;
+  while ((match = re.exec(html))) {
+    if (match[1]) {
+      const tag = match[1].toLowerCase();
+      for (let index = stack.length - 1; index > 0; index -= 1) {
+        if (stack[index].tagName === tag) { stack.length = index; break; }
+      }
+      continue;
+    }
+    const tag = match[2].toLowerCase();
+    const node = createElement(tag, parseAttrs(match[3] || ''));
+    const parent = stack[stack.length - 1];
+    node.parent = parent;
+    parent.children.push(node);
+    if (!match[4] && !VOID.has(tag)) stack.push(node);
+  }
+  return root.children;
+}
+
+function createRoot() {
+  const root = createElement('div');
+  let html = '';
+  Object.defineProperty(root, 'innerHTML', {
+    get() { return html; },
+    set(value) {
+      html = String(value);
+      root.children = parseFragment(html);
+      for (const child of root.children) child.parent = root;
+    },
+  });
+  return root;
+}
+
+async function flush() {
+  for (let step = 0; step < 8; step += 1) await Promise.resolve();
+}
+
+test('local review explains the refresh cadence and does not restore signal copy', async () => {
+  assert.equal(REVIEW_ADMIN_POLL_MS, 30000);
+  assert.match(REVIEW_ADMIN_REFRESH_COPY, /打开时拉一次待过审/);
+  assert.match(REVIEW_ADMIN_REFRESH_COPY, /约每 30 秒自动更新/);
+  assert.match(REVIEW_ADMIN_REFRESH_COPY, /也可以点刷新/);
+  const html = await fs.readFile(new URL('./review-admin.html', import.meta.url), 'utf8');
+  assert.match(html, /data-review-refresh/);
+  assert.match(html, new RegExp(REVIEW_ADMIN_REFRESH_COPY.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  const calls = [];
+  const root = createRoot();
+  const page = createReviewAdmin({
+    root,
+    documentRef:{visibilityState:'visible'},
+    fetchImpl:async (url, options = {}) => {
+      calls.push({url:String(url), method:options.method || 'GET'});
+      return {ok:true, status:200, async json() { return {items:[item()]}; }};
+    },
+  });
+  try {
+  assert.equal(await page.start(), true);
+  assert.deepEqual(calls, [{url:'/api/local-review/pending', method:'GET'}]);
+  assert.match(root.innerHTML, /data-review-refresh>/);
+  assert.match(root.innerHTML, /刷新/);
+  assert.match(root.innerHTML, new RegExp(REVIEW_ADMIN_REFRESH_COPY.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.doesNotMatch(root.innerHTML, /文章卡|收藏偏低|类型优先|互动尚低|Levi样例|review-queue-heat|收藏信号强/);
+  } finally {
+    page.stop();
+  }
+});
+
+test('visible polling and the refresh button reload pending and never decide while busy', async t => {
+  t.mock.timers.enable({apis:['setInterval']});
+  const calls = [];
+  let releaseDecision = () => {};
+  const documentRef = {visibilityState:'visible', hidden:false};
+  const root = createRoot();
+  const page = createReviewAdmin({
+    root,
+    documentRef,
+    clearIntervalImpl() {},
+    fetchImpl:async (url, options = {}) => {
+      calls.push({url:String(url), method:options.method || 'GET'});
+      if (String(url).includes('/decision')) {
+        await new Promise(resolve => { releaseDecision = resolve; });
+        return {ok:true, status:200, async json() { return {url:postUrl, status:'approved', key:'kosx-1'}; }};
+      }
+      return {ok:true, status:200, async json() { return {items:[item()]}; }};
+    },
+  });
+  t.after(() => page.stop());
+  try {
+    await page.start();
+    assert.equal(calls.length, 1);
+    t.mock.timers.tick(REVIEW_ADMIN_POLL_MS - 1);
+    await flush();
+    assert.equal(calls.length, 1);
+    t.mock.timers.tick(1);
+    await flush();
+    assert.deepEqual(calls.map(call => call.url), ['/api/local-review/pending', '/api/local-review/pending']);
+    documentRef.visibilityState = 'hidden';
+    documentRef.hidden = true;
+    t.mock.timers.tick(REVIEW_ADMIN_POLL_MS);
+    await flush();
+    assert.equal(calls.length, 2);
+    assert.equal(await page.refresh({reason:'poll'}), false);
+    documentRef.visibilityState = 'visible';
+    documentRef.hidden = false;
+    root.querySelector('[data-review-refresh]').click();
+    await flush();
+    assert.equal(calls.length, 3);
+    assert.equal(calls.every(call => call.method === 'GET' && call.url === '/api/local-review/pending'), true);
+    const approve = root.querySelector('[data-review-decision="approved"]');
+    assert.ok(approve);
+    approve.click();
+    await flush();
+    assert.equal(page.state.busy, true);
+    assert.equal(calls.filter(call => call.url.includes('/decision')).length, 1);
+    const during = calls.length;
+    t.mock.timers.tick(REVIEW_ADMIN_POLL_MS);
+    await flush();
+    root.querySelector('[data-review-refresh]').click();
+    assert.equal(await page.refresh({reason:'manual'}), false);
+    assert.equal(await page.refresh({reason:'poll'}), false);
+    assert.equal(calls.length, during);
+    releaseDecision();
+    await flush();
+    assert.equal(page.state.busy, false);
+    assert.equal(calls.filter(call => call.method === 'POST').length, 1);
+    t.mock.timers.tick(REVIEW_ADMIN_POLL_MS);
+    await flush();
+    assert.equal(calls.at(-1).url, '/api/local-review/pending');
+    assert.equal(calls.at(-1).method, 'GET');
+    assert.equal(calls.filter(call => call.method === 'POST').length, 1);
+  } finally {
+    t.mock.timers.reset();
+  }
+});

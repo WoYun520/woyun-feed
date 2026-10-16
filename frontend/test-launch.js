@@ -6,7 +6,7 @@ import os from 'node:os';
 import http from 'node:http';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { launchFeed, checkServer } from './launch.mjs';
+import { launchFeed, checkServer, runLaunchCli } from './launch.mjs';
 import { installationId } from './installation.js';
 
 const here=path.dirname(fileURLToPath(import.meta.url));
@@ -72,6 +72,130 @@ test('failed startup and browser-opening failure report failure without claiming
   const good=await fixture(t),result=await launchFeed({...good,openPage:async()=>{}});good.pids.push(result.pid);
   await assert.rejects(launchFeed({...good,openPage:async()=>{throw Error('browser failed');}}),/browser failed/);
   assert.equal(await checkServer(good.port,installationId(good.directory)),'ready');
+});
+
+test('cli forwards LEVI_OPEN_PATH once and still opens the home page without it',async t=>{
+  const source=await fs.readFile(new URL('./launch.mjs',import.meta.url),'utf8');
+  assert.equal([...source.matchAll(/launchOpenPath\(/g)].length,1);
+  const f=await fixture(t),opened=[];
+  const review=await runLaunchCli({
+    env:{LEVI_OPEN_PATH:'/review-admin'},
+    launch:options=>launchFeed({...f,...options,openPage:async url=>opened.push(url)}),
+    log(){},errorLog(){},
+  });
+  f.pids.push(review.result.pid);
+  assert.equal(review.ok,true);
+  assert.deepEqual(opened,[`http://127.0.0.1:${f.port}/review-admin`]);
+  opened.length=0;
+  const home=await runLaunchCli({
+    env:{},
+    launch:options=>launchFeed({...f,...options,openPage:async url=>opened.push(url)}),
+    log(){},errorLog(){},
+  });
+  assert.equal(home.ok,true);
+  assert.equal(home.result.reused,true);
+  assert.deepEqual(opened,[`http://127.0.0.1:${f.port}/`]);
+  let logged='';
+  const failed=await runLaunchCli({
+    env:{LEVI_OPEN_PATH:'/review-admin'},
+    launch:async ({openPath})=>{
+      assert.equal(openPath,'/review-admin');
+      throw Error('端口 3000 正在被其他服务或另一份信息流占用。请先关闭它，再重新打开；不会切换网址或修改已有收藏。');
+    },
+    log(){},errorLog(message){logged+=message;},
+  });
+  assert.equal(failed.ok,false);
+  assert.match(logged,/端口 3000 正在被其他服务或另一份信息流占用/);
+});
+
+function runZshPty(file,zshBin){
+  const helper=`
+import os, pty, select, sys, json, time
+cmd, zsh = sys.argv[1], sys.argv[2]
+pid, fd = pty.fork()
+if pid == 0:
+    os.execv(zsh, [zsh, cmd])
+else:
+    output = b''
+    deadline = time.time() + 4
+    paused = False
+    code = None
+    while time.time() < deadline and code is None:
+        early, status = os.waitpid(pid, os.WNOHANG)
+        ready, _, _ = select.select([fd], [], [], 0.05)
+        if ready:
+            try:
+                chunk = os.read(fd, 4096)
+            except OSError:
+                chunk = b''
+            output += chunk
+        if early != 0:
+            code = os.WEXITSTATUS(status) if os.WIFEXITED(status) else 1
+            break
+        if '按任意键'.encode() in output:
+            paused = True
+            os.write(fd, b'x')
+            _, status = os.waitpid(pid, 0)
+            code = os.WEXITSTATUS(status) if os.WIFEXITED(status) else 1
+            break
+    if code is None:
+        os.kill(pid, 15)
+        code = 124
+    sys.stdout.buffer.write(json.dumps({'paused': paused, 'code': code, 'output': output.decode('utf-8', 'replace')}, ensure_ascii=False).encode())
+`;
+  return new Promise((resolve,reject)=>{
+    const child=spawn('python3',['-c',helper,file,zshBin],{stdio:['ignore','pipe','pipe']});
+    let out='',err='';
+    child.stdout.on('data',chunk=>{out+=chunk;});
+    child.stderr.on('data',chunk=>{err+=chunk;});
+    child.on('error',reject);
+    child.on('exit',status=>{
+      if(status!==0) reject(Error(err||out||`pty helper ${status}`));
+      else resolve(JSON.parse(out));
+    });
+  });
+}
+
+test('review command pauses on launch failure and flow command still exits on its own',async t=>{
+  let resolved='';
+  for (const candidate of ['/bin/zsh','/usr/bin/zsh']) {
+    try { await fs.access(candidate); resolved=candidate; break; } catch {}
+  }
+  if(!resolved) return t.skip();
+  const reviewSource=await fs.readFile(path.resolve(here,'../打开过审.command'),'utf8');
+  const flowSource=await fs.readFile(path.resolve(here,'../打开 Levi flow.command'),'utf8');
+  assert.match(reviewSource,/export LEVI_OPEN_PATH=\/review-admin/);
+  assert.match(reviewSource,/read -k/);
+  assert.doesNotMatch(reviewSource,/(^|\n)\s*exec\s/);
+  assert.match(flowSource,/(^|\n)exec\s/);
+  assert.doesNotMatch(flowSource,/read -k/);
+  assert.doesNotMatch(flowSource,/LEVI_OPEN_PATH/);
+  const f=await fixture(t);
+  const output=path.join(f.root,'seen.json');
+  const writeLaunch=(exitCode,message)=>fs.writeFile(path.join(f.directory,'launch.mjs'),`import fs from 'node:fs';
+    fs.writeFileSync(${JSON.stringify(output)},JSON.stringify({openPath:process.env.LEVI_OPEN_PATH||''}));
+    if(${JSON.stringify(message)}) console.error(${JSON.stringify(message)});
+    process.exit(${exitCode});
+  `);
+  await fs.copyFile(path.resolve(here,'../打开过审.command'),path.join(f.root,'打开过审.command'));
+  await writeLaunch(1,'端口 3000 正在被其他服务或另一份信息流占用。请先关闭它，再重新打开；不会切换网址或修改已有收藏。');
+  const failed=await runZshPty(path.join(f.root,'打开过审.command'),resolved);
+  assert.equal(failed.paused,true,failed.output);
+  assert.notEqual(failed.code,0);
+  assert.match(failed.output,/端口 3000 正在被其他服务或另一份信息流占用/);
+  assert.match(failed.output,/按任意键关闭这个窗口/);
+  assert.equal(JSON.parse(await fs.readFile(output,'utf8')).openPath,'/review-admin');
+  await writeLaunch(0,'');
+  const opened=await runZshPty(path.join(f.root,'打开过审.command'),resolved);
+  assert.equal(opened.paused,false,opened.output);
+  assert.equal(opened.code,0);
+  assert.equal(JSON.parse(await fs.readFile(output,'utf8')).openPath,'/review-admin');
+  await fs.copyFile(path.resolve(here,'../打开 Levi flow.command'),path.join(f.root,'打开 Levi flow.command'));
+  await writeLaunch(0,'');
+  const flow=await runZshPty(path.join(f.root,'打开 Levi flow.command'),resolved);
+  assert.equal(flow.paused,false,flow.output);
+  assert.equal(flow.code,0);
+  assert.equal(JSON.parse(await fs.readFile(output,'utf8')).openPath,'');
 });
 
 test('Mac command resolves a desktop symlink and finds Node with a minimal Finder PATH',{skip:process.platform!=='darwin'},async t=>{

@@ -78,12 +78,19 @@ export async function launchFeed({ directory = frontendDir, port = 3000, timeout
   return { url, reused: initial === 'ready', pid: child?.pid, logFile };
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+export async function runLaunchCli({env = process.env, launch = launchFeed, log = console.log, errorLog = console.error} = {}) {
   try {
-    const result = await launchFeed({openPath:launchOpenPath(process.env.LEVI_OPEN_PATH)});
-    console.log(`${result.reused ? '信息流已在运行，已打开页面。' : '信息流已启动，已打开页面。'}\n${result.url}\n可以关闭这个终端窗口，网站会继续在本机运行。`);
+    const result = await launch({openPath: env.LEVI_OPEN_PATH});
+    log(`${result.reused ? '信息流已在运行，已打开页面。' : '信息流已启动，已打开页面。'}\n${result.url}\n可以关闭这个终端窗口，网站会继续在本机运行。`);
+    return {ok:true, result};
   } catch (error) {
-    console.error(error.message);
-    process.exitCode = 1;
+    const message = error?.message || '信息流未能启动。';
+    errorLog(message);
+    return {ok:false, message};
   }
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const outcome = await runLaunchCli();
+  if (!outcome.ok) process.exitCode = 1;
 }
