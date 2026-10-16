@@ -217,3 +217,36 @@ export function isReviewSignalCopy(value) {
   if (!compact || compact.length > 80) return false;
   return SIGNAL_COPY.test(compact);
 }
+
+// Pipe-joined intake notes such as「全X中文≥1k补仓 | 非池 | 待人工过审 | rank13」
+// are backlog remarks. They are not a public title or excerpt. A real sentence
+// that happens to mention 补仓 stays. Reviewers still see the original note.
+const EXACT_INTAKE = /^(?:非池|待人工过审|人工过审|rank\d+|全[Xx]中文(?:[≥>=＞≧⩾]+\d+[kK]?)?补仓|\d+[kK]?补仓|补仓)$/i;
+const TRAILING_INTAKE = /(?:^|\s)(?:全\s*[Xx]\s*中文(?:\s*[≥>=＞≧⩾]+\s*\d+\s*[kK]?)?\s*补仓|待人工过审|非池|rank\s*\d+|补仓)\s*$/iu;
+
+function isIntakeTag(segment) {
+  const compact = segment.replace(/\s+/g, '').replace(/[。．.！？，,；;、：:]+$/u, '');
+  if (!compact || compact.length > 32) return false;
+  if (/[。！？，,；;、]/.test(compact)) return false;
+  return EXACT_INTAKE.test(compact);
+}
+
+function stripGluedIntake(segment) {
+  let text = segment.trim();
+  let next = text;
+  do {
+    text = next;
+    next = text.replace(TRAILING_INTAKE, '').replace(/[\s|｜丨│]+$/u, '').trim();
+  } while (next && next !== text);
+  return text;
+}
+
+export function stripIntakePipelineCopy(value) {
+  if (typeof value !== 'string') return '';
+  return value.split(/\n+/).map(line => line.split(/[|｜丨│]/)
+    .filter(part => !isIntakeTag(part))
+    .map(stripGluedIntake)
+    .filter(Boolean)
+    .join(' | ')
+    .trim()).filter(Boolean).join('\n').trim();
+}

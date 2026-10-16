@@ -234,6 +234,15 @@ test('a candidate flag cannot be set while rejecting, and bad signals are refuse
   assert.equal(env.DOT_INBOX.writes.filter(entry => entry.key.startsWith(DOT_PENDING_PREFIX)).length, 1);
 });
 
+test('the review desk still shows a backlog intake note', () => {
+  const intake = '全X中文≥1k补仓 | 非池 | 待人工过审 | rank13';
+  const html = renderReviewQueue({connected:true, now:'2026-10-09T03:00:00.000Z', items:[
+    {id:'kosx-9', key:'x:9', url:postUrl, author_handle:'0xlangeai', status:'pending', note:intake, text:'爆火的 Rea 是什么，怎么用。', submitted_at:'2026-10-14T00:00:00.000Z'},
+  ]});
+  assert.match(html, /全X中文≥1k补仓 \| 非池 \| 待人工过审 \| rank13/);
+  assert.match(html, /爆火的 Rea 是什么，怎么用。/);
+});
+
 test('the review queue keeps approve and skip, and does not print signal or evidence lines', () => {
   assert.doesNotMatch(renderDotCandidatesView(), /进低估栏候选/);
   const html = renderReviewQueue({connected:true, now:'2026-10-09T03:00:00.000Z', items:[

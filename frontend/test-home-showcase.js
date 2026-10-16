@@ -809,6 +809,70 @@ test('昨日最被低估 cover cards show a real excerpt under @handle and still
   assert.doesNotMatch(`${band}\n${styledBand}\n${blankCard}`, /文章卡|收藏偏低|类型优先|互动尚低|可执行提示词|Levi样例|文章卡·收藏/);
 });
 
+test('public cover cards drop pipe-joined intake notes and keep a real excerpt', () => {
+  const intake = '全X中文≥1k补仓 | 非池 | 待人工过审 | rank13';
+  const excerpt = '爆火的 Rea 是什么，怎么用，小白怎么上手，都在这篇文章里。跟着操作一遍就知道 Rea 为啥这样设计。';
+  const leaked = post('9501', '2026-10-09T07:20:00.000Z', {
+    origin:'kosx_approved', author_handle:'0xlangeai', review_type:'文章', bookmark_count:1000,
+    url:'https://x.com/0xlangeai/status/9501',
+    title:intake,
+    summary:`${excerpt}\n${intake}`,
+    author_name:intake,
+  });
+  const noteOnly = post('9502', '2026-10-10T06:00:00.000Z', {
+    origin:'kosx_approved', author_handle:'quiet_note',
+    url:'https://x.com/quiet_note/status/9502',
+    title:intake, summary:intake,
+  });
+  const sentence = post('9503', '2026-10-10T05:00:00.000Z', {
+    origin:'kosx_approved', author_handle:'market_note',
+    url:'https://x.com/market_note/status/9503',
+    title:'黄金补仓', summary:'这周给仓位补仓了，记录在这里。',
+  });
+  const clean = post('9504', '2026-10-10T12:29:00.000Z', {
+    origin:'kosx_approved', author_handle:'zmdsb259414', review_type:'文章', has_article:true, bookmark_count:1200,
+    url:'https://x.com/zmdsb259414/status/9504',
+    title:'@zmdsb259414 的精华帖',
+    summary:'X下一个风口将会是ESP32，看了阶跃 AI 手机发布会。',
+    cover_url:'https://cdn.example.com/covers/essence-clean.jpg',
+  });
+  const shelf = {...state([clean, leaked, noteOnly, sentence]), underratedPins:[
+    {id:leaked.id, key:'x:9501', day:'2026-10-09'},
+  ]};
+  const latest = renderHomeShowcase(app(), shelf);
+  const leakedCard = cardHtml(latest, '9501');
+  assert.match(leakedCard, /@0xlangeai 的精华帖/);
+  assert.match(leakedCard, /爆火的 Rea 是什么/);
+  assert.doesNotMatch(leakedCard, /补仓|非池|待人工过审|rank13|全X中文/);
+  const noteCard = cardHtml(latest, '9502');
+  assert.match(noteCard, /@quiet_note 的精华帖/);
+  assert.match(noteCard, /data-cover="plain"/);
+  assert.doesNotMatch(noteCard, /补仓|非池|待人工过审|rank13|全X中文|cover-excerpt|cover-quote/);
+  const sentenceCard = cardHtml(latest, '9503');
+  assert.match(sentenceCard, /黄金补仓/);
+  assert.match(sentenceCard, /这周给仓位补仓了，记录在这里。/);
+  const cleanCard = cardHtml(latest, '9504');
+  assert.match(cleanCard, /data-cover="media"/);
+  assert.match(cleanCard, /essence-clean\.jpg/);
+  assert.match(cleanCard, /@zmdsb259414 的精华帖/);
+  assert.match(cleanCard, /<p class="cover-excerpt">X下一个风口将会是ESP32，看了阶跃 AI 手机发布会。<\/p>/);
+  for (const view of ['yesterday', 'week', 'kept']) {
+    const html = renderHomeShowcase(app(view), shelf);
+    const card = cardHtml(html, '9501');
+    assert.match(card, /爆火的 Rea 是什么/, view);
+    assert.doesNotMatch(card, /补仓|非池|待人工过审|rank13|全X中文/, view);
+  }
+  const underrated = renderHomeShowcase(app(), shelf);
+  const pinned = cardHtml(underrated.slice(underrated.indexOf('id="home-underrated"')), '9501');
+  assert.match(pinned, /@0xlangeai 的精华帖/);
+  assert.match(pinned, /爆火的 Rea 是什么/);
+  assert.doesNotMatch(pinned, /非池|待人工过审|rank13|全X中文/);
+  const keptClean = cardHtml(renderHomeShowcase(app('kept'), shelf), '9504');
+  assert.match(keptClean, /data-cover="media"/);
+  assert.match(keptClean, /essence-clean\.jpg/);
+  assert.match(keptClean, /<p class="cover-excerpt">X下一个风口将会是ESP32，看了阶跃 AI 手机发布会。<\/p>/);
+});
+
 test('essence cards drop stock evidence and bookmark counts, and keep a longer excerpt', () => {
   const long = ['第一行金句，讲清楚这件事。', '第二行还在卡片上。', '第三行只在摘录依据里，避免和套话混在一起。'].join('\n');
   const longerItem = post('9301', '2026-10-10T12:00:00.000Z', {
