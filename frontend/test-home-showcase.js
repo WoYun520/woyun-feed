@@ -130,11 +130,7 @@ test('homepage essence cards keep a cover image or a quote and never an empty at
   assert.match(said, /打开原帖/);
   assert.match(said, />收藏</);
   assert.doesNotMatch(said, /<img|cover-frame|无来源附图/);
-  const empty = cardHtml(html, '9103');
-  assert.match(empty, /data-cover="plain"/);
-  assert.match(empty, /@ai_suxiaole 的精华帖/);
-  assert.match(empty, /打开原帖/);
-  assert.doesNotMatch(empty, /cover-quote|cover-frame|<img|无来源附图|按时间放上首页|来源未提供摘录，请打开原帖/);
+  assert.doesNotMatch(html, /home-card-latest-9103|status\/9103|按时间放上首页/);
   const created = cardHtml(html, '9104');
   assert.match(created, /<time datetime="2026-10-08T08:30:00.000Z">/);
   assert.doesNotMatch(created, /2026-10-13T01:00:00.000Z/);
@@ -696,7 +692,8 @@ test('homepage cards hide leftover process excerpts and keep a real note', () =>
   assert.doesNotMatch(html, /来源未提供摘录，请打开原帖。|无来源附图/);
   assert.match(html, /三步装好本地字幕/);
   assert.match(html, /原文摘录：第一步打开设置。/);
-  for (const id of ['8801', '8802', '8803', '8804']) {
+  assert.doesNotMatch(html, /home-card-latest-8801|home-card-latest-8802/);
+  for (const id of ['8803', '8804']) {
     const card = cardHtml(html, id);
     assert.doesNotMatch(card, /摘录与时间依据|未核对原帖，未实测|cover-bookmarks|收藏 \d/);
   }
@@ -739,11 +736,8 @@ test('昨日最被低估 cards use @handle的精华帖 and drop classifier signa
     {id:mixed.id, key:`x:${mixed.id}`, day:'2026-10-09'},
   ]});
   const band = html.slice(html.indexOf('id="home-underrated"'));
-  const card = cardHtml(band, pinned.id);
-  assert.match(card, new RegExp(`@${handle} 的精华帖`));
-  assert.match(cardHtml(html, pinned.id), new RegExp(`@${handle} 的精华帖`));
+  assert.equal(html.includes(`data-home-card="${pinned.id}"`), false);
   assert.doesNotMatch(html, /文章卡|收藏偏低|类型优先|互动尚低|可执行提示词|Levi样例|文章卡·收藏/);
-  assert.doesNotMatch(card, /文章卡|收藏偏低|类型优先|互动尚低|可执行提示词|Levi样例|文章卡·收藏/);
   const mixedCard = cardHtml(band, mixed.id);
   assert.match(mixedCard, /@other_user 的精华帖/);
   assert.match(mixedCard, /原帖里已经写了三步安装。/);
@@ -865,10 +859,7 @@ test('public cover cards drop pipe-joined intake notes and keep a real excerpt',
   assert.match(leakedCard, /@0xlangeai 的精华帖/);
   assert.match(leakedCard, /爆火的 Rea 是什么/);
   assert.doesNotMatch(leakedCard, /补仓|非池|待人工过审|rank13|全X中文/);
-  const noteCard = cardHtml(latest, '9502');
-  assert.match(noteCard, /@quiet_note 的精华帖/);
-  assert.match(noteCard, /data-cover="plain"/);
-  assert.doesNotMatch(noteCard, /补仓|非池|待人工过审|rank13|全X中文|cover-excerpt|cover-quote/);
+  assert.doesNotMatch(latest, /quiet_note|status\/9502|home-card-latest-9502/);
   const sentenceCard = cardHtml(latest, '9503');
   assert.match(sentenceCard, /黄金补仓/);
   assert.match(sentenceCard, /这周给仓位补仓了，记录在这里。/);
@@ -894,21 +885,28 @@ test('public cover cards drop pipe-joined intake notes and keep a real excerpt',
   assert.match(keptClean, /<p class="cover-excerpt">X下一个风口将会是ESP32，看了阶跃 AI 手机发布会。<\/p>/);
 });
 
-test('a cover card shows a stored excerpt, and an empty excerpt stays on the shelf without a blank quote', () => {
+test('blank public covers stay off every homepage rail, and a donor excerpt or visible media still shows', () => {
   const board = {id:'sopilot-ai', name:'AI 推文榜', group:'posts', link_kind:'post', status:'ok', enabled:true};
   const kosxSource = {id:'sopilot-kosx', name:'KOSX 过审', group:'posts', link_kind:'post', status:'ok', enabled:true};
   const excerpt = 'Claude Code 防封指南：云电脑上跑并不等于一定安全，群里已经有人反馈帐号被封。';
+  const shell = (id, handle, url, published, extra = {}) => {
+    const item = post(id, published, {
+      origin:'kosx_approved', author_handle:handle, source_refs:['sopilot-kosx'],
+      url, title:`@${handle} 的精华帖`, ...extra,
+    });
+    item.summary = '';
+    return item;
+  };
+  const shells = [
+    shell('kosx-2110529367793393945', 'xaiwind', 'https://x.com/xaiwind/status/2110529367793393945', '2026-10-10T06:00:00.000Z'),
+    shell('kosx-2110682653334868100', 'KinGao476942', 'https://x.com/KinGao476942/status/2110682653334868100', '2026-10-09T10:42:13.799Z'),
+    shell('kosx-2110723386133614603', 'supermm518', 'https://x.com/supermm518/status/2110723386133614603', '2026-10-09T12:00:00.000Z', {review_type:'文章', bookmark_count:1200}),
+  ];
   const filled = post('2110682653334868101', '2026-10-10T08:00:00.000Z', {
     origin:'kosx_approved', author_handle:'KinGao476942', source_refs:['sopilot-kosx'],
     url:'https://x.com/KinGao476942/status/2110682653334868101',
     title:'@KinGao476942 的精华帖', summary:excerpt,
   });
-  const empty = post('2110682653334868100', '2026-10-09T10:42:13.799Z', {
-    origin:'kosx_approved', author_handle:'KinGao476942', source_refs:['sopilot-kosx'],
-    url:'https://x.com/KinGao476942/status/2110682653334868100',
-    title:'@KinGao476942 的精华帖',
-  });
-  empty.summary = '';
   const approvedBlank = post('2110694725640474759', '2026-10-09T11:30:12.061Z', {
     origin:'kosx_approved', author_handle:'Saccc_c', review_type:'短帖', source_refs:['sopilot-kosx'],
     url:'https://x.com/Saccc_c/status/2110694725640474759',
@@ -932,20 +930,33 @@ test('a cover card shows a stored excerpt, and an empty excerpt stays on the she
     title:'公开正文该留在封面',
     summary:'短摘录。',
   });
+  const covered = shell('kosx-covered', 'cover_user', 'https://x.com/cover_user/status/2110800000000000002', '2026-10-10T07:00:00.000Z', {
+    review_type:'文章', has_article:true, cover_url:'https://cdn.example.com/covers/kept-face.jpg',
+  });
+  const photo = shell('kosx-photo', 'photo_user', 'https://x.com/photo_user/status/2110800000000000001', '2026-10-10T09:00:00.000Z', {
+    image:{kind:'photo', url:'https://pbs.twimg.com/media/AbcdEFG.jpg', source_url:'https://x.com/photo_user/status/2110800000000000001'},
+  });
+  const hiddenCover = shell('kosx-short-cover', 'short_user', 'https://x.com/short_user/status/2110800000000000003', '2026-10-10T05:00:00.000Z', {
+    review_type:'短帖', cover_url:'https://cdn.example.com/covers/short-hidden.jpg',
+  });
   const input = {
-    ...state([filled, empty, approvedBlank, boardCopy, placeholderFace, titledSibling]),
+    ...state([...shells, filled, approvedBlank, boardCopy, placeholderFace, titledSibling, covered, photo, hiddenCover]),
     sources:[board, kosxSource],
+    underratedPins:shells.map(item => ({id:item.id, key:`x:${item.id.replace(/^kosx-/, '')}`, day:'2026-10-09'})),
   };
   const latest = renderHomeShowcase(app(), input);
   const filledCard = cardHtml(latest, filled.id);
   assert.match(filledCard, /data-cover="quote"/);
   assert.match(filledCard, /Claude Code 防封指南：云电脑上跑并不等于一定安全/);
   assert.match(filledCard, /@KinGao476942 的精华帖/);
-  const emptyCard = cardHtml(latest, empty.id);
-  assert.match(emptyCard, /data-cover="plain"/);
-  assert.match(emptyCard, /@KinGao476942 的精华帖/);
-  assert.match(emptyCard, /打开原帖/);
-  assert.doesNotMatch(emptyCard, /cover-quote|cover-excerpt|blockquote/);
+  for (const item of [...shells, hiddenCover]) {
+    assert.doesNotMatch(latest, new RegExp(item.id));
+    assert.doesNotMatch(latest, new RegExp(item.original_url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  }
+  assert.match(cardHtml(latest, covered.id), /data-cover="media"/);
+  assert.match(cardHtml(latest, covered.id), /kept-face\.jpg/);
+  assert.match(cardHtml(latest, photo.id), /data-cover="media"/);
+  assert.match(cardHtml(latest, photo.id), /pbs\.twimg\.com\/media\/AbcdEFG\.jpg/);
   const merged = cardHtml(latest, boardCopy.id);
   assert.match(merged, /本周，我用 Opus 5.5 \+ Tripo \+ Blender/);
   assert.match(merged, /手把手教你用 Opus 5.5 \/ Astra \+ Tripo 制作 3D 游戏/);
@@ -956,13 +967,25 @@ test('a cover card shows a stored excerpt, and an empty excerpt stays on the she
   assert.match(titled, /公开正文该留在封面/);
   assert.doesNotMatch(titled, /@ai_xiaomu 的精华帖/);
   const yesterday = renderHomeShowcase(app('yesterday'), input);
+  const week = renderHomeShowcase(app('week'), input);
+  const kept = renderHomeShowcase(app('kept'), input);
   assert.match(cardHtml(yesterday, boardCopy.id), /本周，我用 Opus 5.5 \+ Tripo \+ Blender/);
-  assert.match(cardHtml(yesterday, empty.id), /data-cover="plain"/);
-  assert.doesNotMatch(cardHtml(yesterday, empty.id), /cover-quote|cover-excerpt/);
+  for (const html of [yesterday, week, kept]) {
+    for (const item of [...shells, hiddenCover]) {
+      assert.doesNotMatch(html, new RegExp(item.id));
+      assert.doesNotMatch(html, new RegExp(item.original_url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    }
+  }
+  assert.doesNotMatch(latest, /id="home-underrated"/);
   const selected = selectHomeShowcase(input);
-  assert.equal(selected.latest.some(entry => entry.post.records.some(record => record.id === empty.id)), true);
-  assert.equal(selected.yesterday.some(entry => entry.post.records.some(record => record.id === empty.id)), true);
+  for (const item of [...shells, hiddenCover]) {
+    for (const rail of [selected.latest, selected.yesterday, selected.week, selected.underrated, selected.kept]) {
+      assert.equal(rail.some(entry => entry.post.records.some(record => record.id === item.id) || entry.post.item.id === item.id), false, item.id);
+    }
+  }
   assert.equal(selected.yesterday.some(entry => entry.post.records.some(record => record.id === approvedBlank.id)), true);
+  assert.equal(selected.latest.some(entry => entry.post.item.id === covered.id), true);
+  assert.equal(selected.latest.some(entry => entry.post.item.id === photo.id), true);
 });
 
 test('essence cards drop stock evidence and bookmark counts, and keep a longer excerpt', () => {

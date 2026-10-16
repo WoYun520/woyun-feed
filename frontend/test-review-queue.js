@@ -485,7 +485,7 @@ test('approved public items keep intake signals and the original post time for t
   const poolPost = `https://x.com/${poolHandle}/status/2108148604447884105`;
   const yesterdayPool = `https://x.com/${poolHandle}/status/2108148604447884106`;
 
-  assert.equal((await submit(env, {url:highUrl, review_type:'文章', bookmark_count:250, like_count:0, has_article:true, published_at:posted, created_at:'2026-10-01T00:00:00.000Z'})).status, 201);
+  assert.equal((await submit(env, {url:highUrl, note:'高收藏摘录', review_type:'文章', bookmark_count:250, like_count:0, has_article:true, published_at:posted, created_at:'2026-10-01T00:00:00.000Z'})).status, 201);
   const highDecision = await (await decide(env, {url:highUrl, status:'approved'})).json();
   const high = env.PUBLIC_FEED.json().items.find(item => item.original_url === highUrl);
   assert.equal(high.origin, 'kosx_approved');
@@ -497,7 +497,7 @@ test('approved public items keep intake signals and the original post time for t
   assert.equal(high.has_article, true);
   assert.equal(high.review_type, '文章');
 
-  await submit(env, {url:floorUrl, bookmark_count:HOME_WEEK_BOOKMARK_MIN, like_count:4, has_article:true, created_at:'2026-10-07T16:00:00+08:00'});
+  await submit(env, {url:floorUrl, note:'门槛摘录', bookmark_count:HOME_WEEK_BOOKMARK_MIN, like_count:4, has_article:true, created_at:'2026-10-07T16:00:00+08:00'});
   await decide(env, {url:floorUrl, status:'approved'});
   const floor = env.PUBLIC_FEED.json().items.find(item => item.original_url === floorUrl);
   assert.equal(floor.published_at, '2026-10-07T08:00:00.000Z');
@@ -506,14 +506,14 @@ test('approved public items keep intake signals and the original post time for t
   assert.equal(floor.has_article, true);
   assert.equal(floor.review_type, '文章');
 
-  await submit(env, {url:lowUrl, review_type:'教程指南', bookmark_count:HOME_WEEK_BOOKMARK_MIN - 1, like_count:9, has_article:false, published_at:posted});
+  await submit(env, {url:lowUrl, note:'未达门槛的摘录', review_type:'教程指南', bookmark_count:HOME_WEEK_BOOKMARK_MIN - 1, like_count:9, has_article:false, published_at:posted});
   await decide(env, {url:lowUrl, status:'approved'});
   const low = env.PUBLIC_FEED.json().items.find(item => item.original_url === lowUrl);
   assert.equal(low.bookmark_count, HOME_WEEK_BOOKMARK_MIN - 1);
   assert.equal(low.has_article, false);
   assert.equal(low.review_type, '教程指南');
 
-  await submit(env, {url:bareUrl, review_type:'文章', bookmark_count:900, has_article:false});
+  await submit(env, {url:bareUrl, note:'雪花时间摘录', review_type:'文章', bookmark_count:900, has_article:false});
   const bareDecision = await (await decide(env, {url:bareUrl, status:'approved'})).json();
   const bare = env.PUBLIC_FEED.json().items.find(item => item.original_url === bareUrl);
   const bareSnowflake = new Date(Number((BigInt('2108148604447884104') >> 22n) + 1288834974657n)).toISOString();
@@ -524,7 +524,7 @@ test('approved public items keep intake signals and the original post time for t
   assert.equal(bare.has_article, false);
   assert.equal(Object.hasOwn(bare, 'like_count'), false);
 
-  const pooled = await (await submit(env, {url:poolPost, review_type:'教程指南', bookmark_count:320, like_count:11, has_article:false, published_at:posted})).json();
+  const pooled = await (await submit(env, {url:poolPost, note:'池内摘录', review_type:'教程指南', bookmark_count:320, like_count:11, has_article:false, published_at:posted})).json();
   assert.equal(pooled.status, 'approved');
   assert.equal(pooled.approval, 'pool');
   assert.equal(pooled.published, true);
@@ -537,7 +537,7 @@ test('approved public items keep intake signals and the original post time for t
   assert.equal(poolItem.review_type, '教程指南');
   assert.equal(poolItem.has_article, false);
 
-  const held = await (await submit(env, {url:yesterdayPool, review_type:'文章', bookmark_count:500, has_article:true, published_at:'2026-10-09T02:00:00.000Z'})).json();
+  const held = await (await submit(env, {url:yesterdayPool, note:'昨天会进封面', review_type:'文章', bookmark_count:500, has_article:true, published_at:'2026-10-09T02:00:00.000Z'})).json();
   assert.equal(held.status, 'pending');
   assert.equal(held.published, false);
   assert.match(held.message, /昨日最被低估/);
@@ -801,10 +801,9 @@ test('delivery stores a cover, copies it onto the public item, and a later deliv
   const articleCover = page.slice(page.indexOf('class="cover-photo cover-article"'), page.indexOf('</figure>', page.indexOf('class="cover-photo cover-article"')));
   assert.match(articleCover, /cover-article/);
   assert.doesNotMatch(articleCover, /未核对原帖|<figcaption>|文章封面，未核对原帖/);
-  const bareCard = page.slice(page.indexOf(`data-home-card="${bare.id}"`), page.indexOf('</article>', page.indexOf(`data-home-card="${bare.id}"`)));
-  assert.match(bareCard, /data-cover="plain"/);
-  assert.match(bareCard, /打开原帖/);
-  assert.doesNotMatch(bareCard, /无来源附图|<img|cover-quote/);
+  assert.equal(page.includes(`data-home-card="${bare.id}"`), false);
+  assert.equal(week.includes(`data-home-card="${bare.id}"`), false);
+  assert.doesNotMatch(`${page}\n${week}`, /无来源附图/);
 
   const other = 'https://cdn.example.com/covers/later.jpg';
   const keptWrites = env.PUBLIC_FEED.writes.length;
@@ -874,21 +873,21 @@ test('an original outside the three Beijing-day latest window stays off 最新�
   for (let index = 0; index < 18; index += 1) {
     const url = `https://x.com/example/status/2108148604447885${String(index).padStart(3, '0')}`;
     const published_at = `2026-10-09T${String(index).padStart(2, '0')}:15:00.000Z`;
-    assert.equal((await submit(env, {url, published_at, review_type:'文章', bookmark_count:10})).status, 201);
+    assert.equal((await submit(env, {url, note:'窗口内的摘录', published_at, review_type:'文章', bookmark_count:10})).status, 201);
     assert.equal((await decide(env, {url, status:'approved'})).status, 200);
   }
   const oldUrl = 'https://x.com/example/status/2108148604447884999';
-  assert.equal((await submit(env, {url:oldUrl, published_at:'2026-09-01T00:00:00.000Z', review_type:'教程指南', bookmark_count:59})).status, 201);
+  assert.equal((await submit(env, {url:oldUrl, note:'更早的摘录', published_at:'2026-09-01T00:00:00.000Z', review_type:'教程指南', bookmark_count:59})).status, 201);
   const decision = await (await decide(env, {url:oldUrl, status:'approved'})).json();
   assert.equal(decision.published, true);
   const keptUrl = 'https://x.com/example/status/2108148604447884998';
-  await submit(env, {url:keptUrl, published_at:'2026-08-01T00:00:00.000Z', review_type:'文章', bookmark_count:1500});
+  await submit(env, {url:keptUrl, note:'高收藏摘录', published_at:'2026-08-01T00:00:00.000Z', review_type:'文章', bookmark_count:1500});
   await decide(env, {url:keptUrl, status:'approved'});
   const edgeUrl = 'https://x.com/example/status/2108148604447884997';
-  assert.equal((await submit(env, {url:edgeUrl, published_at:'2026-10-08T00:00:00.000Z', review_type:'文章', bookmark_count:40})).status, 201);
+  assert.equal((await submit(env, {url:edgeUrl, note:'窗口边缘摘录', published_at:'2026-10-08T00:00:00.000Z', review_type:'文章', bookmark_count:40})).status, 201);
   await decide(env, {url:edgeUrl, status:'approved'});
   const outsideUrl = 'https://x.com/example/status/2108148604447884996';
-  assert.equal((await submit(env, {url:outsideUrl, published_at:'2026-10-07T12:00:00.000Z', review_type:'文章', bookmark_count:800})).status, 201);
+  assert.equal((await submit(env, {url:outsideUrl, note:'窗口外的摘录', published_at:'2026-10-07T12:00:00.000Z', review_type:'文章', bookmark_count:800})).status, 201);
   await decide(env, {url:outsideUrl, status:'approved'});
   const item = env.PUBLIC_FEED.json().items.find(entry => entry.original_url === oldUrl);
   assert.equal(item.origin, 'kosx_approved');

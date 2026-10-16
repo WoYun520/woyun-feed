@@ -177,7 +177,7 @@ test('delivery pending older than 3 hours is auto-approved without a pin; paste 
   assert.equal((await handleDotPendingRequest(request('POST', {token:delivery, body:{url:stale}}), env)).status, 201);
   assert.equal((await handleDotPendingRequest(request('POST', {token:delivery, body:{url:fresh}}), env)).status, 201);
   assert.equal((await handleDotPendingRequest(request('POST', {body:{url:pasted}}), env)).status, 201);
-  const heldResponse = await (await handleDotPendingRequest(request('POST', {token:delivery, body:{url:held, published_at:'2026-10-09T02:00:00.000Z'}}), env)).json();
+  const heldResponse = await (await handleDotPendingRequest(request('POST', {token:delivery, body:{url:held, note:'昨天会进封面', published_at:'2026-10-09T02:00:00.000Z'}}), env)).json();
   assert.equal(heldResponse.status, 'pending');
   const old = new Date(now - PENDING_AUTO_APPROVE_MS - 1000).toISOString();
   const exact = new Date(now - PENDING_AUTO_APPROVE_MS).toISOString();
