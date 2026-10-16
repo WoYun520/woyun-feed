@@ -1,4 +1,4 @@
-// Three-hour 「最新精华」sweep. It reads the public snapshot and the queue.
+// 「最新精华」sweep at 08:00, 12:00, 16:00, and 20:00 Asia/Shanghai. It reads the public snapshot and the queue.
 // It does not call api.x.com, a paid X client, or a model. New posts that are
 // not already in that snapshot still arrive through POST /api/dot/pending
 // with the existing delivery key.

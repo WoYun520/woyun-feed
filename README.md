@@ -19,7 +19,7 @@ cd frontend && node serve.js
 
 ## 预览部署
 
-根目录 `wrangler.jsonc` 指向现有预览 Worker `woyun-feed-preview`（账号 `2406ce3e27726cda95852f23951dfc93`）。静态目录是 `./public-dist`。KV 绑定是 `PUBLIC_FEED` 与 `DOT_INBOX`，命名空间 id 写在该文件里。定时为每天 01:00 与 13:00 UTC（北京时间 09:00、21:00）。
+根目录 `wrangler.jsonc` 指向现有预览 Worker `woyun-feed-preview`（账号 `2406ce3e27726cda95852f23951dfc93`）。静态目录是 `./public-dist`。KV 绑定是 `PUBLIC_FEED` 与 `DOT_INBOX`，命名空间 id 写在该文件里。公开来源定时为每天 01:00 与 13:00 UTC（北京时间 09:00、21:00）。最新精华进队为 UTC `0 0,4,8,12 * * *`（北京时间 08:00、12:00、16:00、20:00），不调用 X API。
 
 先构建，再部署：
 
@@ -81,7 +81,7 @@ The local review page is `http://127.0.0.1:3000/review-admin`, and it is the onl
 
 ## Preview deploy
 
-`wrangler.jsonc` targets the existing preview Worker `woyun-feed-preview` (account `2406ce3e27726cda95852f23951dfc93`). Assets come from `./public-dist`. KV bindings are `PUBLIC_FEED` and `DOT_INBOX`; the namespace ids are in that file. Public-source cron stays `0 1,13 * * *` UTC (09:00 and 21:00 Asia/Shanghai). Latest-essence intake is `0 */3 * * *` and does not call the X API.
+`wrangler.jsonc` targets the existing preview Worker `woyun-feed-preview` (account `2406ce3e27726cda95852f23951dfc93`). Assets come from `./public-dist`. KV bindings are `PUBLIC_FEED` and `DOT_INBOX`; the namespace ids are in that file. Public-source cron stays `0 1,13 * * *` UTC (09:00 and 21:00 Asia/Shanghai). Latest-essence intake is `0 0,4,8,12 * * *` UTC (08:00, 12:00, 16:00, and 20:00 Asia/Shanghai) and does not call the X API.
 
 ```sh
 node frontend/public-build.mjs
