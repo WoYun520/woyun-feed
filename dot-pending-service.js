@@ -22,7 +22,7 @@ const recordFields = ['id', 'key', 'url', 'author_handle', 'note', 'status', 'su
 const decidedFields = [...recordFields, 'reviewed_at'];
 const signalFields = ['review_type', 'bookmark_count', 'like_count', 'has_article', 'cover_url', 'text'];
 const timeFields = ['published_at', 'created_at'];
-const intakeFields = ['url', 'author_handle', 'note', 'review_type', 'bookmark_count', 'like_count', 'has_article', 'cover_url', 'text', 'published_at', 'created_at'];
+const intakeFields = ['url', 'author_handle', 'note', 'review_type', 'bookmark_count', 'like_count', 'has_article', 'cover_url', 'text', 'excerpt', 'body', 'summary', 'published_at', 'created_at'];
 const hashPattern = /^[a-f0-9]{64}$/i;
 
 class PendingError extends Error {
@@ -113,9 +113,22 @@ function cleanType(value, present) {
 
 function cleanText(value, present) {
   if (!present) return undefined;
-  if (typeof value !== 'string' || value.length > REVIEW_TEXT_MAX || /[\u0000-\u001f\u007f]/.test(value) || containsCredentialText(value)) bad('invalid_text', '摘录过长或不完整。');
-  const text = value.trim();
-  return text || undefined;
+  if (typeof value !== 'string' || containsCredentialText(value)) bad('invalid_text', '摘录过长或不完整。');
+  // A post body is often more than one line, and an X article is longer than
+  // the card. Keep a clipped excerpt instead of refusing the whole link.
+  const text = value.replace(/\r\n?/g, '\n').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '').trim();
+  if (!text) return undefined;
+  return text.length > REVIEW_TEXT_MAX ? text.slice(0, REVIEW_TEXT_MAX).trim() : text;
+}
+
+function deliveredText(value) {
+  let best = '';
+  for (const key of ['text', 'excerpt', 'body', 'summary']) {
+    if (!Object.hasOwn(value, key)) continue;
+    const cleaned = cleanText(value[key], true);
+    if (cleaned && cleaned.length > best.length) best = cleaned;
+  }
+  return best || undefined;
 }
 
 function cleanInstant(value, present) {
@@ -152,7 +165,7 @@ function onePost(value, {allowNote}) {
   const like_count = cleanCount(value.like_count, Object.hasOwn(value, 'like_count'), '点赞数');
   const has_article = cleanArticle(value.has_article, Object.hasOwn(value, 'has_article'));
   const cover_url = cleanCover(value.cover_url, Object.hasOwn(value, 'cover_url'));
-  const text = cleanText(value.text, Object.hasOwn(value, 'text'));
+  const text = deliveredText(value);
   const published_at = cleanInstant(value.published_at, Object.hasOwn(value, 'published_at'));
   const created_at = cleanInstant(value.created_at, Object.hasOwn(value, 'created_at'));
   return {
@@ -221,7 +234,7 @@ function signalsValid(value) {
   }
   if (Object.hasOwn(value, 'has_article') && typeof value.has_article !== 'boolean') return false;
   if (Object.hasOwn(value, 'cover_url') && normalizeCoverUrl(value.cover_url) !== value.cover_url) return false;
-  if (Object.hasOwn(value, 'text') && (typeof value.text !== 'string' || !value.text.trim() || value.text.length > REVIEW_TEXT_MAX || /[\u0000-\u001f\u007f]/.test(value.text) || containsCredentialText(value.text))) return false;
+  if (Object.hasOwn(value, 'text') && (typeof value.text !== 'string' || !value.text.trim() || value.text.length > REVIEW_TEXT_MAX || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(value.text) || containsCredentialText(value.text))) return false;
   for (const field of timeFields) if (Object.hasOwn(value, field) && !timestamp(value[field])) return false;
   const candidate = Object.hasOwn(value, 'underrated_candidate');
   const candidateAt = Object.hasOwn(value, 'underrated_candidate_at');

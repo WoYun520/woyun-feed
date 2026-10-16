@@ -85,13 +85,47 @@ function describeKept() {
 // Standing shelf on the same public stream as 「七日精选」. Article class matches
 // the cover (文章 / 教程指南 / Article card). Excerpt clues stay on the week
 // shelf; local featured and saved rows do not fill this one.
+function postItems(entry) {
+  return [entry?.post?.item, ...(Array.isArray(entry?.post?.records) ? entry.post.records : [])].filter(item => item && typeof item === 'object');
+}
+
+// The stream may display the longest board excerpt while the approved row
+// holds review type and bookmark_count. Shelves read the approved row first,
+// then any other copy of the same post.
+function shelfItem(entry) {
+  return postItems(entry).find(isHomepageEssence) || entry?.post?.item;
+}
+
+function shelfBookmark(entry) {
+  const items = postItems(entry);
+  const ordered = [...items.filter(isHomepageEssence), ...items];
+  for (const item of ordered) {
+    const count = publicBookmarkCount(item);
+    if (count !== null) return count;
+  }
+  return null;
+}
+
+function shelfHeat(entry) {
+  const items = postItems(entry);
+  const ordered = [...items.filter(isHomepageEssence), ...items];
+  for (const item of ordered) {
+    const heat = parsePublicHeat(item?.heat_label);
+    if (heat && heat.value > 0) return heat;
+  }
+  return null;
+}
+
 function pickKept(entries) {
-  const articles = entries.filter(entry => isHomepageEssence(entry.post.item) && isArticleClassItem(entry.post.item));
+  const articles = entries.filter(entry => {
+    const item = shelfItem(entry);
+    return isHomepageEssence(item) && isArticleClassItem(item);
+  });
   const kept = articles.filter(entry => {
-    const count = publicBookmarkCount(entry.post.item);
+    const count = shelfBookmark(entry);
     return count !== null && count >= HOME_KEPT_BOOKMARK_MIN;
   });
-  kept.sort((a, b) => publicBookmarkCount(b.post.item) - publicBookmarkCount(a.post.item) || byRecent(a, b));
+  kept.sort((a, b) => shelfBookmark(b) - shelfBookmark(a) || byRecent(a, b));
   return kept;
 }
 
@@ -167,7 +201,7 @@ function publicBookmarkCount(item) {
 // An article is a public field already on the item, or the existing excerpt
 // signal. Short posts, promos, and pitfall notes stay out even with a high count.
 function weekArticle(entry) {
-  const item = entry?.post?.item;
+  const item = shelfItem(entry);
   const type = typeof item?.review_type === 'string' ? item.review_type : '';
   if (WEEK_REJECT_TYPES.has(type)) return false;
   if (WEEK_ARTICLE_TYPES.has(type) || item?.has_article === true) return true;
@@ -192,13 +226,13 @@ function describeWeek(span, rule, unit) {
 // is the last public field, and it never brings the rest of the window along.
 function pickWeek(entries) {
   const articles = entries.filter(weekArticle);
-  const counted = articles.filter(entry => publicBookmarkCount(entry.post.item) !== null);
+  const counted = articles.filter(entry => shelfBookmark(entry) !== null);
   if (counted.length) {
-    const kept = counted.filter(entry => publicBookmarkCount(entry.post.item) >= HOME_WEEK_BOOKMARK_MIN);
-    kept.sort((a, b) => publicBookmarkCount(b.post.item) - publicBookmarkCount(a.post.item) || byRecent(a, b));
+    const kept = counted.filter(entry => shelfBookmark(entry) >= HOME_WEEK_BOOKMARK_MIN);
+    kept.sort((a, b) => shelfBookmark(b) - shelfBookmark(a) || byRecent(a, b));
     return {entries:kept, rule:'bookmarks', unit:''};
   }
-  const heated = articles.map(entry => ({entry, heat:parsePublicHeat(entry.post.item.heat_label)})).filter(row => row.heat && row.heat.value > 0);
+  const heated = articles.map(entry => ({entry, heat:shelfHeat(entry)})).filter(row => row.heat && row.heat.value > 0);
   const counts = new Map();
   for (const row of heated) counts.set(row.heat.unit, (counts.get(row.heat.unit) || 0) + 1);
   let unit = '', best = 0;
@@ -285,8 +319,11 @@ export function selectHomeShowcase(state, {now} = {}) {
   // Quality folds are already out of `dated`. Pool auto-approvals stay on this
   // list and on the chronological cover; underrated screening reads this list,
   // so a stream post that never joined the essence line cannot enter it.
-  const yesterdayEntries = dated.filter(entry => onDay(entry, yesterday) && isHomepageEssence(entry.post.item));
-  const weekEntries = dated.filter(entry => weekKeys.includes(beijingDateKey(entry.time.ms)) && isHomepageEssence(entry.post.item));
+  // Same membership as 最新精华: an approved row counts even when the visible
+  // card is the longer board excerpt of the same post. An empty excerpt does
+  // not drop the card.
+  const yesterdayEntries = dated.filter(entry => onDay(entry, yesterday) && latestEssence(entry));
+  const weekEntries = dated.filter(entry => weekKeys.includes(beijingDateKey(entry.time.ms)) && latestEssence(entry));
   const week = pickWeek(weekEntries);
   // 「最新精华」keeps homepage essence whose original Beijing day is inside the
   // last 3 calendar days, including the reference day. Older approved posts

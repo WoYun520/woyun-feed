@@ -1,3 +1,4 @@
+import { homepageCardExcerpt, usableCardTitle } from './src/homeShowcaseView.js';
 import { normalizeCoverUrl } from './src/postMedia.js';
 import { REVIEW_COUNT_MAX, REVIEW_TYPES, stripIntakePipelineCopy } from './src/reviewQueue.js';
 
@@ -119,8 +120,42 @@ export function kosxPublicItem(record) {
   };
 }
 
+// An approved row can be published with an empty summary when the queue only
+// had an intake note. A board copy of the same post, or the summary already
+// on the public row, is still the excerpt. 「@用户 的精华帖」is not a title.
+// Internal signal strings stay off.
+export function withSalvagedFace(item, donors) {
+  const list = (Array.isArray(donors) ? donors : []).filter(donor => donor && donor !== item && (donor.original_url === item.original_url || donor.canonical_url === item.original_url));
+  let summary = homepageCardExcerpt(item?.summary);
+  if (!summary) {
+    for (const donor of list) {
+      const candidate = homepageCardExcerpt(donor.summary);
+      if (candidate && Array.from(candidate).length > Array.from(summary).length) summary = candidate;
+    }
+  }
+  let title = usableCardTitle(item);
+  if (!title) {
+    for (const donor of list) {
+      const candidate = usableCardTitle(donor);
+      if (candidate && Array.from(candidate).length > Array.from(title).length) title = candidate;
+    }
+  }
+  if (!summary && !title) return item;
+  return {
+    ...item,
+    ...(summary && !homepageCardExcerpt(item?.summary) ? {summary:summary.slice(0, 1000)} : {}),
+    ...(title && !usableCardTitle(item) ? {title:title.slice(0, 500)} : {}),
+  };
+}
+
 export function attachKosxApproved(feed, records) {
-  const approved = (Array.isArray(records) ? records : []).map(kosxPublicItem).filter(Boolean);
+  const previous = (Array.isArray(feed?.items) ? feed.items : []).filter(isKosxPublicItem);
+  const approved = (Array.isArray(records) ? records : []).map(record => {
+    const item = kosxPublicItem(record);
+    if (!item) return null;
+    const donors = [...(Array.isArray(feed?.items) ? feed.items : []), ...previous].filter(donor => donor?.original_url === item.original_url || donor?.canonical_url === item.original_url);
+    return withSalvagedFace(item, donors);
+  }).filter(Boolean);
   const sources = Array.isArray(feed?.sources) ? feed.sources : [];
   const items = Array.isArray(feed?.items) ? feed.items : [];
   const had = sources.some(source => source?.id === KOSX_PUBLIC_SOURCE_ID) || items.some(isKosxPublicItem);
