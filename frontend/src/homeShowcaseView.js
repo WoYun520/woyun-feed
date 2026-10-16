@@ -1,10 +1,12 @@
 import { CREATOR_CATALOG } from './creatorCatalog.js';
 import { creatorPreferenceKey, readCreatorPreferences } from './creatorTutorials.js';
-import { normalizeCoverUrl, normalizePostImage } from './postMedia.js';
+import { homepageCardExcerpt, homepageCardTitle, itemAuthorHandle, showcaseCoverMedia, usableCardTitle } from './coverFace.js';
 import { postStatusId } from './postStream.js';
 import { isKosxPoolHandle } from '../kosx-pool.js';
-import { HOME_KEPT_BOOKMARK_MIN, homeViewName, isArticleClassItem, readBoostTotal, selectHomeShowcase } from './homeShowcase.js';
-import { isReviewSignalCopy, stripIntakePipelineCopy } from './reviewQueue.js';
+import { HOME_KEPT_BOOKMARK_MIN, homeViewName, readBoostTotal, selectHomeShowcase } from './homeShowcase.js';
+import { stripIntakePipelineCopy } from './reviewQueue.js';
+
+export { coverExcerpt, homepageCardExcerpt, homepageCardTitle, usableCardTitle } from './coverFace.js';
 
 export const KOSX_EMOJI_ALT = 'KOSX 精选计划表情';
 export const KOSX_EMOJI_INTERVAL_MS = 600;
@@ -130,28 +132,6 @@ function withCreatorScope(state) {
   return {...state, creatorCatalog:state?.creatorCatalog || CREATOR_CATALOG, creatorPreferences:preferences};
 }
 
-function coverImage(post) {
-  const records = [post.item, ...(post.records || [])];
-  const record = records.find(item => (postStatusId(item?.original_url) === post.statusId || postStatusId(item?.canonical_url) === post.statusId)
-    && normalizePostImage(item.post_image, post.originalUrl));
-  return record ? normalizePostImage(record.post_image, post.originalUrl) : null;
-}
-
-function isKosxCard(item) {
-  if (!item || typeof item !== 'object') return false;
-  if (item.origin === 'kosx_approved') return true;
-  const refs = item.source_refs;
-  return Array.isArray(refs) && refs.length === 1 && refs[0] === 'sopilot-kosx';
-}
-
-// Article-class KOSX cards use a delivered cover when one was stored.
-// Anything else stays on the text card: a quote, or title and meta.
-function articleCover(item) {
-  if (!isKosxCard(item) || !isArticleClassItem(item)) return null;
-  const url = normalizeCoverUrl(item?.cover_url);
-  return url ? {url, kind:'article_cover'} : null;
-}
-
 function collectionFor(state, post) {
   const savedIds = state.savedItemIds || new Set(), archivedIds = state.archivedItemIds || new Set();
   const matches = item => item && (post.itemIds?.includes(item.id) || item.alias_ids?.some(id => post.itemIds?.includes(id))
@@ -249,46 +229,11 @@ function renderKept(app, state, selection) {
   return `<section class="home-band" id="home-kept" aria-labelledby="home-kept-title"><header class="home-band-heading"><h2 id="home-kept-title">卧云精选精华帖 <small>${entries.length}</small></h2><p class="home-rule">${e(selection.keptNote || '')}</p></header>${entries.length ? renderCards(app, state, entries, 'kept') : `<p class="home-empty">${e(empty)}</p>`}</section>`;
 }
 
-function itemAuthorHandle(item) {
-  if (typeof item?.author_handle === 'string' && /^[A-Za-z0-9_]{1,15}$/.test(item.author_handle)) return item.author_handle;
-  for (const value of [item?.original_url, item?.canonical_url]) {
-    try {
-      const url = new URL(value);
-      if (!['http:', 'https:'].includes(url.protocol)) continue;
-      const host = url.hostname.replace(/^www\./, '').toLowerCase();
-      if (host !== 'x.com' && host !== 'twitter.com') continue;
-      const handle = url.pathname.split('/').filter(Boolean)[0] || '';
-      if (/^[A-Za-z0-9_]{1,15}$/.test(handle) && handle.toLowerCase() !== 'i') return handle;
-    } catch { /* not a post url */ }
-  }
-  return '';
-}
-
 // Pool auto-approve stores kosx_review:"pool". Other cover posts only carry the author,
 // so membership falls back to the same impact.kosx.ai handle list used at intake.
 function kosxPoolBadge(item) {
   if (item?.kosx_review === 'pool' || isKosxPoolHandle(itemAuthorHandle(item))) return '<span class="kosx-pool-badge">KOSX</span>';
   return '';
-}
-
-// Old pool and review rows stored a process sentence as the excerpt. That
-// sentence is not the post. A real note before it stays; the sentence does not.
-function policyRemainder(rest) {
-  const words = /账号池成员的精华帖|按时间放上首页|过审后放上首页|的 X 链接|尚未读取原文|未核对热度|不进入昨日最被低估/g;
-  return !/[A-Za-z0-9\u4e00-\u9fff]/.test(rest.replace(words, ''));
-}
-
-export function coverExcerpt(summary) {
-  const text = typeof summary === 'string' ? summary.trim() : '';
-  if (!text) return '';
-  const clause = /账号池成员的精华帖，按时间放上首页|过审后放上首页(?:的 X 链接)?|尚未读取原文，未核对热度|不进入昨日最被低估/g;
-  let cut = text.length;
-  for (const match of text.matchAll(clause)) {
-    const index = match.index ?? 0;
-    if (index < cut && policyRemainder(text.slice(index))) cut = index;
-  }
-  if (cut === text.length) return text;
-  return text.slice(0, cut).replace(/[。．\s]+$/u, '').trim();
 }
 
 function renderCards(app, state, entries, group) {
@@ -334,53 +279,6 @@ function cardEvidence(e, excerpt, mode) {
   return `<details class="cover-evidence"><summary>摘录与时间依据</summary><p>${e(full)}</p></details>`;
 }
 
-// Classifier blurbs such as「文章卡·收藏5/点赞18·Levi样例·收藏偏低但类型优先」
-// are review evidence. Intake notes such as「全X中文≥1k补仓 | 非池 | 待人工过审 | rank13」
-// are backlog remarks. A real title stays. Either leftover uses the same
-// @handle 的精华帖 face as other essence cards.
-export function homepageCardTitle(item) {
-  const raw = typeof item?.title === 'string' ? item.title.trim() : '';
-  const title = stripIntakePipelineCopy(raw);
-  if (title && !isReviewSignalCopy(title)) return title;
-  if (!raw) return '来源未提供标题';
-  const handle = itemAuthorHandle(item);
-  return handle ? `@${handle} 的精华帖` : '来源未提供标题';
-}
-
-function placeholderCardTitle(item) {
-  const handle = itemAuthorHandle(item);
-  return handle ? `@${handle} 的精华帖` : '来源未提供标题';
-}
-
-// 「@用户 的精华帖」and「来源未提供标题」are faces, not a sentence from the post.
-export function usableCardTitle(item) {
-  const title = homepageCardTitle(item);
-  if (!title || title === '来源未提供标题' || title === placeholderCardTitle(item)) return '';
-  return title;
-}
-
-// Intake sometimes glues a type tag onto a real sentence, as in
-// 「宏观黑板微观树（文章卡）」. The tag is not the excerpt. A classifier
-// blurb such as「文章卡·收藏5/点赞18·Levi样例·收藏偏低但类型优先」still drops.
-function withoutClassifierTag(line) {
-  const text = line.trim();
-  const tagged = text
-    .replace(/\s*[（(]\s*(?:文章卡|Article卡)\s*[）)]\s*$/u, '')
-    .replace(/\s*(?:文章卡|Article卡)\s*$/u, '');
-  if (tagged === text) return text;
-  return tagged.replace(/[：:·\s]+$/u, '').trim();
-}
-
-export function homepageCardExcerpt(summary) {
-  const excerpt = stripIntakePipelineCopy(coverExcerpt(summary));
-  if (!excerpt) return '';
-  return excerpt.split(/\n+/).map(line => {
-    const cleaned = withoutClassifierTag(line);
-    if (!cleaned || isReviewSignalCopy(cleaned)) return '';
-    return cleaned;
-  }).filter(Boolean).join('\n');
-}
-
 function cardCopies(item, records) {
   const pool = [item, ...(Array.isArray(records) ? records : [])].filter(entry => entry && typeof entry === 'object');
   let excerpt = '';
@@ -402,7 +300,7 @@ function renderPostCard(app, state, entry, group) {
   const face = cardCopies(item, post.records);
   const title = face.title;
   const excerpt = face.excerpt;
-  const image = [item, ...(post.records || [])].map(articleCover).find(Boolean) || coverImage(post);
+  const image = showcaseCoverMedia(post);
   return renderShowcaseCard(app, {
     group, item, title, excerpt, image, originalUrl:post.originalUrl, mediaKey:`${group}:${item.id}`,
     collection:collectionFor(state, post), names:sourceNames(entry, state).join('、'),

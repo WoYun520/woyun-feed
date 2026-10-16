@@ -1,4 +1,4 @@
-import { addCalendarDays, beijingDateKey } from './homeShowcase.js';
+import { addCalendarDays, beijingDateKey } from './beijingDate.js';
 
 // Coarse labels for the public pending queue. They suggest a reading order.
 // They do not publish, pin, or verify a post.

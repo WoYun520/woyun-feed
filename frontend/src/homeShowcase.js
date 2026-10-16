@@ -1,5 +1,9 @@
+import { addCalendarDays, beijingDateKey } from './beijingDate.js';
+import { blankPublicCover, isArticleClassItem } from './coverFace.js';
 import { dotPostKey } from './dotCandidates.js';
 import { selectPostStream } from './postStream.js';
+
+export { addCalendarDays, beijingDateKey, isArticleClassItem };
 
 export const KOSX_BOOST_STORAGE_KEY = 'woyun-kosx-boost:v1';
 export const HOME_BOOST_TOTAL_KEY = 'personal-feed:home-boost-total:v1';
@@ -15,23 +19,6 @@ export const HOME_KEPT_BOOKMARK_MIN = 1000;
 const VIEWS = ['latest', 'yesterday', 'week', 'kept'];
 
 const finite = value => typeof value === 'string' && Number.isFinite(Date.parse(value));
-
-export function beijingDateKey(ms) {
-  if (!Number.isFinite(ms)) return '';
-  const parts = new Intl.DateTimeFormat('en-CA', {timeZone:'Asia/Shanghai', year:'numeric', month:'2-digit', day:'2-digit'}).formatToParts(ms);
-  const value = type => parts.find(part => part.type === type)?.value || '';
-  const key = `${value('year')}-${value('month')}-${value('day')}`;
-  return /^\d{4}-\d{2}-\d{2}$/.test(key) ? key : '';
-}
-
-export function addCalendarDays(key, days) {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(key || '');
-  if (!match || !Number.isInteger(days)) return '';
-  const shifted = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]) + days));
-  const month = String(shifted.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(shifted.getUTCDate()).padStart(2, '0');
-  return `${shifted.getUTCFullYear()}-${month}-${day}`;
-}
 
 // Publication time is preferred. A board timestamp or capture time is only a fallback,
 // and the label stays attached so the interface can say which clock it used.
@@ -182,16 +169,7 @@ function latestPlacementMs(entry) {
   return Math.max(...clocks);
 }
 
-const WEEK_ARTICLE_TYPES = new Set(['文章', '教程指南']);
 const WEEK_REJECT_TYPES = new Set(['短帖', '产品安利', '避坑']);
-
-// 文章类 for a cover: an article or tutorial, or an X Article card that is not
-// a short post, promo, or pitfall note. Excerpt clues do not count.
-export function isArticleClassItem(item) {
-  const type = typeof item?.review_type === 'string' ? item.review_type : '';
-  if (WEEK_REJECT_TYPES.has(type)) return false;
-  return WEEK_ARTICLE_TYPES.has(type) || item?.has_article === true;
-}
 
 function publicBookmarkCount(item) {
   const value = item?.bookmark_count;
@@ -204,7 +182,7 @@ function weekArticle(entry) {
   const item = shelfItem(entry);
   const type = typeof item?.review_type === 'string' ? item.review_type : '';
   if (WEEK_REJECT_TYPES.has(type)) return false;
-  if (WEEK_ARTICLE_TYPES.has(type) || item?.has_article === true) return true;
+  if (isArticleClassItem(item)) return true;
   return entry?.post?.instruction?.eligible === true;
 }
 
@@ -319,21 +297,23 @@ export function selectHomeShowcase(state, {now} = {}) {
   // Quality folds are already out of `dated`. Pool auto-approvals stay on this
   // list and on the chronological cover; underrated screening reads this list,
   // so a stream post that never joined the essence line cannot enter it.
-  // Same membership as 最新精华: an approved row counts even when the visible
-  // card is the longer board excerpt of the same post. An empty excerpt does
-  // not drop the card.
-  const yesterdayEntries = dated.filter(entry => onDay(entry, yesterday) && latestEssence(entry));
-  const weekEntries = dated.filter(entry => weekKeys.includes(beijingDateKey(entry.time.ms)) && latestEssence(entry));
+  // Same membership as 最新精华: an approved row counts when any copy of the
+  // same post still has a usable excerpt or a cover the card would show.
+  // A blank face — no usable excerpt and no visible media — does not take a slot.
+  const showCover = entry => !blankPublicCover(entry.post);
+  const yesterdayEntries = dated.filter(entry => onDay(entry, yesterday) && latestEssence(entry) && showCover(entry));
+  const weekEntries = dated.filter(entry => weekKeys.includes(beijingDateKey(entry.time.ms)) && latestEssence(entry) && showCover(entry));
   const week = pickWeek(weekEntries);
   // 「最新精华」keeps homepage essence whose original Beijing day is inside the
   // last 3 calendar days, including the reference day. Older approved posts
   // can still reach 卧云精选 or 七日精选 under those shelves' own rules. They
   // do not take a latest slot. Inside the window, a later approval still sorts
   // ahead of an earlier original. Public-stream heat posts do not fill the cap.
+  // Blank faces stay out of every public rail, including after a snapshot refresh.
   const latestKeys = dateKey ? Array.from({length:HOME_LATEST_WINDOW_DAYS}, (_, index) => addCalendarDays(dateKey, -index)) : [];
-  const latest = dated.filter(entry => latestEssence(entry) && latestKeys.includes(essenceOriginalDay(entry))).sort((a, b) => latestPlacementMs(b) - latestPlacementMs(a) || byRecent(a, b)).slice(0, HOME_LATEST_LIMIT);
+  const latest = dated.filter(entry => latestEssence(entry) && latestKeys.includes(essenceOriginalDay(entry)) && showCover(entry)).sort((a, b) => latestPlacementMs(b) - latestPlacementMs(a) || byRecent(a, b)).slice(0, HOME_LATEST_LIMIT);
   const under = pickPinnedUnderrated(yesterdayEntries, state?.underratedPins ?? state?.underrated_pins, yesterday);
-  const kept = pickKept(dated);
+  const kept = pickKept(dated.filter(showCover));
   if (before !== state) throw Error('首页筛选不应替换资料对象。');
   const weekStart = weekKeys[6] || '', weekEnd = weekKeys[0] || '';
   const span = weekStart && weekEnd ? `${weekStart} 至 ${weekEnd}` : '日期未能确定';
@@ -347,7 +327,8 @@ export function selectHomeShowcase(state, {now} = {}) {
 }
 
 // Pool release holds a post when it would sit on yesterday's essence line and
-// is not a pool auto-approval. The underrated band still shows pins only.
+// is not a pool auto-approval. A blank face is already off that line. The
+// underrated band still shows pins only.
 export function wouldEnterUnderrated(state, itemId) {
   if (typeof itemId !== 'string' || !itemId) return true;
   const selection = selectHomeShowcase(state || {});

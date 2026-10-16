@@ -99,19 +99,23 @@ test('the roster is handles only, sourced from impact, and matches case-insensit
 });
 
 test('pool cover order is chronological and pool posts never enter the underrated shelf', () => {
-  const older = kosxPublicItem({id:'kosx-1', key:'x:1', url:'https://x.com/aaa/status/1', author_handle:'aaa', note:'', status:'approved', reviewed_at:'2026-10-13T01:00:00.000Z', approval:'pool', source:'delivery', submitted_at:when});
-  const newer = kosxPublicItem({id:'kosx-2', key:'x:2', url:'https://x.com/bbb/status/2', author_handle:'bbb', note:'', status:'approved', reviewed_at:'2026-10-14T01:00:00.000Z', approval:'pool', source:'delivery', submitted_at:when});
+  const older = kosxPublicItem({id:'kosx-1', key:'x:1', url:'https://x.com/aaa/status/1', author_handle:'aaa', note:'较早的一条', status:'approved', reviewed_at:'2026-10-13T01:00:00.000Z', approval:'pool', source:'delivery', submitted_at:when});
+  const newer = kosxPublicItem({id:'kosx-2', key:'x:2', url:'https://x.com/bbb/status/2', author_handle:'bbb', note:'较新的一条', status:'approved', reviewed_at:'2026-10-14T01:00:00.000Z', approval:'pool', source:'delivery', submitted_at:when});
+  const blank = kosxPublicItem({id:'kosx-blank', key:'x:9', url:'https://x.com/ccc/status/9', author_handle:'ccc', note:'', status:'approved', reviewed_at:'2026-10-14T02:00:00.000Z', approval:'pool', source:'delivery', submitted_at:when});
   older.latest_followers = 900000;
   newer.latest_followers = 10;
-  const state = {sources:[kosxPublicSource()], allItems:[older, newer], generated_at:'2026-10-14T12:00:00.000Z', profile:{}};
+  blank.latest_followers = 1;
+  const state = {sources:[kosxPublicSource()], allItems:[older, newer, blank], generated_at:'2026-10-14T12:00:00.000Z', profile:{}};
   const home = selectHomeShowcase(state);
   assert.deepEqual(home.latest.map(entry => entry.post.item.id), ['kosx-2', 'kosx-1']);
+  assert.equal(home.latest.some(entry => entry.post.item.id === 'kosx-blank'), false);
   assert.equal(home.yesterday.some(entry => entry.post.item.id === 'kosx-1'), true);
+  assert.equal(home.yesterday.some(entry => entry.post.item.id === 'kosx-blank'), false);
   assert.equal(home.underrated.some(entry => entry.post.item.id === 'kosx-1'), false);
   assert.equal(wouldEnterUnderrated(state, 'kosx-1'), false);
   assert.match(home.underratedNote, /昨日最被低估必须人工过审/);
-  const humanOlder = kosxPublicItem({id:'kosx-1', key:'x:1', url:'https://x.com/aaa/status/1', author_handle:'aaa', note:'', status:'approved', reviewed_at:'2026-10-13T01:00:00.000Z', approval:'review', source:'delivery', submitted_at:when});
-  const humanState = {...state, allItems:[humanOlder, newer]};
+  const humanOlder = kosxPublicItem({id:'kosx-1', key:'x:1', url:'https://x.com/aaa/status/1', author_handle:'aaa', note:'人工过审的一条', status:'approved', reviewed_at:'2026-10-13T01:00:00.000Z', approval:'review', source:'delivery', submitted_at:when});
+  const humanState = {...state, allItems:[humanOlder, newer, blank]};
   const reviewed = selectHomeShowcase(humanState);
   assert.equal(humanOlder.kosx_review, undefined);
   assert.equal(reviewed.yesterday.some(entry => entry.post.item.id === 'kosx-1'), true);
@@ -279,7 +283,9 @@ test('pool auto-publish stays off the underrated shelf until a review code marks
   assert.doesNotMatch(posted.summary, /尚未读取原文|不进入昨日最被低估|过审后放上首页|按时间放上首页/);
   shifted.generated_at = nextBeijingInstant(Date.parse(posted.published_at));
   const blocked = showcase(shifted);
-  assert.equal(blocked.yesterday.some(entry => entry.post.originalUrl === poolUrl), true);
+  assert.equal(shifted.items.some(entry => entry.original_url === poolUrl), true);
+  assert.equal(blocked.yesterday.some(entry => entry.post.originalUrl === poolUrl), false);
+  assert.equal(blocked.latest.some(entry => entry.post.originalUrl === poolUrl), false);
   assert.equal(blocked.underrated.some(entry => entry.post.originalUrl === poolUrl), false);
   const reviewed = await (await decide(env, {url:poolUrl, status:'approved'})).json();
   assert.equal(reviewed.existing, true);
@@ -288,14 +294,15 @@ test('pool auto-publish stays off the underrated shelf until a review code marks
   const after = env.PUBLIC_FEED.json();
   after.generated_at = shifted.generated_at;
   assert.equal(after.items.find(item => item.original_url === poolUrl).kosx_review, undefined);
-  assert.equal(showcase(after).yesterday.some(entry => entry.post.originalUrl === poolUrl), true);
+  assert.equal(showcase(after).yesterday.some(entry => entry.post.originalUrl === poolUrl), false);
+  assert.equal(showcase(after).latest.some(entry => entry.post.originalUrl === poolUrl), false);
   assert.equal(showcase(after).underrated.some(entry => entry.post.originalUrl === poolUrl), false);
-  assert.equal(wouldEnterUnderrated({sources:after.sources, allItems:after.items, profile:after.profile, generated_at:after.generated_at}, after.items.find(item => item.original_url === poolUrl).id), true);
+  assert.equal(wouldEnterUnderrated({sources:after.sources, allItems:after.items, profile:after.profile, generated_at:after.generated_at}, after.items.find(item => item.original_url === poolUrl).id), false);
 });
 
 test('a mixed delivery publishes only pool handles and does not rank them', async () => {
   const env = await environment();
-  const batch = await submit(env, {items:[{url:poolUrl}, {url:outsiderUrl}, {url:secondPoolUrl}]}, {token:delivery});
+  const batch = await submit(env, {items:[{url:poolUrl, note:'池内第一条'}, {url:outsiderUrl}, {url:secondPoolUrl, note:'池内第二条'}]}, {token:delivery});
   const page = await batch.json();
   assert.equal(batch.status, 201);
   assert.equal(page.status, 'partial');
