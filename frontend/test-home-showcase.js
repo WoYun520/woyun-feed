@@ -1,7 +1,7 @@
 import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { HOME_KEPT_BOOKMARK_MIN, HOME_WEEK_BOOKMARK_MIN, addCalendarDays, beijingDateKey, parsePublicHeat, recordKosxBoost, selectHomeShowcase, wouldEnterUnderrated } from './src/homeShowcase.js';
+import { HOME_KEPT_BOOKMARK_MIN, HOME_LATEST_WINDOW_DAYS, HOME_WEEK_BOOKMARK_MIN, addCalendarDays, beijingDateKey, parsePublicHeat, recordKosxBoost, selectHomeShowcase, wouldEnterUnderrated } from './src/homeShowcase.js';
 import { FeedDataAdapter } from './src/dataAdapter.js';
 import { KOSX_EMOJI_ALT, KOSX_EMOJI_FRAMES, KOSX_EMOJI_INTERVAL_MS, coverExcerpt, mountKosxEmoji, renderHomeShowcase, resetKosxEmoji } from './src/homeShowcaseView.js';
 import { renderWorkspaceNavigation } from './src/workspaceShell.js';
@@ -156,10 +156,18 @@ test('beijing yesterday is the calendar day before the published snapshot', () =
   assert.equal(parsePublicHeat('没有数字'), null);
 });
 
-test('an original older than seven Beijing days leaves 最新精华 and can still enter 卧云精选', () => {
+test('an original outside the three Beijing-day latest window leaves 最新精华 and can still enter 卧云精选', () => {
   const newer = Array.from({length:18}, (_, index) => post(String(500000 + index), `2026-10-09T${String(index).padStart(2, '0')}:10:00.000Z`, {
     origin:'kosx_approved', source_item_time:'2026-10-10T12:00:00.000Z', review_type:'文章', bookmark_count:40,
   }));
+  const edge = post('188887', '2026-10-08T00:00:00.000Z', {
+    origin:'kosx_approved', source_refs:['sopilot-kosx'], source_item_time:'2026-10-15T08:00:00.000Z',
+    title:'窗口内最旧一天', review_type:'文章', bookmark_count:40,
+  });
+  const justOutside = post('188886', '2026-10-07T12:00:00.000Z', {
+    origin:'kosx_approved', source_refs:['sopilot-kosx'], source_item_time:'2026-10-15T09:00:00.000Z',
+    title:'窗口外一天', review_type:'文章', bookmark_count:800,
+  });
   const approved = post('188888', '2026-09-01T00:00:00.000Z', {
     origin:'kosx_approved', source_refs:['sopilot-kosx'], source_item_time:'2026-10-15T07:50:21.000Z',
     title:'刚过审的旧原帖', review_type:'教程指南', bookmark_count:59,
@@ -168,17 +176,27 @@ test('an original older than seven Beijing days leaves 最新精华 and can stil
     origin:'kosx_approved', source_refs:['sopilot-kosx'], title:'旧的高收藏文章', review_type:'文章', bookmark_count:2200,
   });
   const hot = post('188889', '2026-10-15T09:00:00.000Z', {heat:'9万 曝光/小时', title:'热榜帖', source_item_time:'2026-10-15T09:00:00.000Z'});
-  const input = state([...newer, approved, keptOld, hot]);
+  const input = state([...newer, edge, justOutside, approved, keptOld, hot]);
   input.sources = [source, {id:'sopilot-kosx', name:'KOSX 过审', group:'posts', link_kind:'post', status:'ok', enabled:true}];
   const selected = selectHomeShowcase(input);
+  assert.equal(HOME_LATEST_WINDOW_DAYS, 3);
+  assert.equal(selected.reference.dateKey, '2026-10-10');
+  assert.deepEqual(Array.from({length:HOME_LATEST_WINDOW_DAYS}, (_, index) => addCalendarDays(selected.reference.dateKey, -index)), ['2026-10-10', '2026-10-09', '2026-10-08']);
+  assert.equal(selected.reference.weekKeys.length, 7);
+  assert.deepEqual(selected.reference.weekKeys, ['2026-10-10', '2026-10-09', '2026-10-08', '2026-10-07', '2026-10-06', '2026-10-05', '2026-10-04']);
+  assert.equal(selected.latest[0].post.item.id, edge.id);
+  assert.equal(selected.latest.some(entry => entry.post.item.id === justOutside.id), false);
   assert.equal(selected.latest.some(entry => entry.post.item.id === approved.id), false);
   assert.equal(selected.latest.some(entry => entry.post.item.id === keptOld.id), false);
   assert.equal(selected.latest.length, 18);
   assert.equal(selected.latest.some(entry => entry.post.item.id === hot.id), false);
+  assert.deepEqual(selected.week.map(entry => entry.post.item.id), [justOutside.id]);
   assert.equal(selected.kept.some(entry => entry.post.item.id === approved.id), false);
+  assert.equal(selected.kept.some(entry => entry.post.item.id === justOutside.id), false);
   assert.equal(selected.kept.some(entry => entry.post.item.id === keptOld.id), true);
   const note = renderHomeShowcase(app(), input);
-  assert.doesNotMatch(note, /刚过审的帖会进这 18 条|最新精华是已经放上公开首页的精华帖|刚过审的旧原帖|旧的高收藏文章/);
+  assert.match(note, /窗口内最旧一天/);
+  assert.doesNotMatch(note, /刚过审的帖会进这 18 条|最新精华是已经放上公开首页的精华帖|刚过审的旧原帖|旧的高收藏文章|窗口外一天/);
   assert.doesNotMatch(note, /热榜帖/);
 });
 
