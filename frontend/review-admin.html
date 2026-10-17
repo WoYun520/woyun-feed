@@ -13,7 +13,7 @@
   <main class="page-container" style="max-width:740px;padding:32px 20px 64px">
     <p class="form-help">Levi flow · 只在这台电脑</p>
     <h1>本机过审</h1>
-    <p class="form-help">按提交日列出北京时间今天或昨天进队的链接，从这里过审上首页或略过，包括贴进来的旧帖。浏览器里不需要粘贴接收码。公开首页没有「待过审」入口。访客意见在下面单独一栏。</p>
+    <p class="form-help">按提交日列出北京时间今天或昨天进队的链接，从这里过审上首页或略过，包括贴进来的旧帖。全部精华在过审下面，可以下架，不会再进待过审。浏览器里不需要粘贴接收码。公开首页没有「待过审」入口。访客意见在最下面单独一栏。</p>
     <style>
       .review-admin-toolbar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin: 0 0 16px; }
       .review-admin-toolbar p { margin: 0; color: var(--text-muted, #6a6d65); font-size: 13px; line-height: 1.6; }
@@ -30,7 +30,7 @@
       .visitor-feedback-contact, .visitor-feedback-meta { margin-top: 8px; }
       .visitor-feedback-item .btn-quiet { min-height: 32px; margin-top: 10px; padding: 4px 12px; }
     </style>
-    <div id="review-admin-root"><div class="review-admin-toolbar"><button type="button" class="btn-quiet" data-review-refresh>刷新</button><p>打开时拉一次待过审和意见反馈，之后约每 30 秒自动更新，也可以点刷新。页面在后台、正在过审或标为已读时会跳过自动更新。</p></div><p class="review-queue-status" role="status">正在读取本机过审…</p><section id="visitor-feedback" class="visitor-feedback" aria-label="意见反馈"><header class="visitor-feedback-heading"><h2>意见反馈</h2><p>公开预览顶栏发来的话，单独放在这里，不进待过审队列。</p></header><p class="visitor-feedback-status" role="status">正在读取意见反馈…</p></section></div>
+    <div id="review-admin-root"><div class="review-admin-toolbar"><button type="button" class="btn-quiet" data-review-refresh>刷新</button><p>打开时拉一次待过审、全部精华和意见反馈，之后约每 30 秒自动更新，也可以点刷新。页面在后台、正在过审、下架或标为已读时会跳过自动更新。</p></div><p class="review-queue-status" role="status">正在读取本机过审…</p><section id="essence-archive-admin" class="visitor-feedback" aria-label="全部精华"><header class="visitor-feedback-heading"><h2>全部精华</h2><p>已经上过公开首页的帖留在这里。下架只从全部精华拿下，不会回到待过审，也不会改首页其他栏。</p></header><p class="visitor-feedback-status" role="status">正在读取全部精华…</p></section><section id="visitor-feedback" class="visitor-feedback" aria-label="意见反馈"><header class="visitor-feedback-heading"><h2>意见反馈</h2><p>公开预览顶栏发来的话，单独放在这里，不进待过审队列。</p></header><p class="visitor-feedback-status" role="status">正在读取意见反馈…</p></section></div>
   </main>
   <script type="module" src="/src/reviewAdminPage.js"></script>
 </body>

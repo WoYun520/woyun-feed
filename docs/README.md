@@ -6,7 +6,7 @@
 
 | 文件 | 内容 |
 | --- | --- |
-| [architecture.md](architecture.md) | 目录、数据流、五条公开栏、空白封面、内容政策 |
+| [architecture.md](architecture.md) | 目录、数据流、首页栏、全部精华、空白封面、内容政策 |
 | [ops-cron.md](ops-cron.md) | 精华扫榜与公开刷新、密钥名称、预览部署 |
 | [preview-deploy.md](preview-deploy.md) | 构建 `public-dist` 再 `wrangler deploy` 的清单 |
 | [pending-intake.md](pending-intake.md) | `POST /api/dot/pending`：贴链接与 Overheard |

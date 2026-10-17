@@ -7,11 +7,13 @@ export const LOCAL_REVIEW_PENDING_PATH = '/api/local-review/pending';
 export const LOCAL_REVIEW_DECISION_PATH = '/api/local-review/decision';
 export const LOCAL_REVIEW_FEEDBACK_PATH = '/api/local-review/feedback';
 export const LOCAL_REVIEW_FEEDBACK_READ_PATH = '/api/local-review/feedback/read';
+export const LOCAL_REVIEW_ARCHIVE_PATH = '/api/local-review/archive';
 export const DEFAULT_REVIEW_ORIGIN = 'https://woyun-feed-preview.hhzovo66.workers.dev';
 const UPSTREAM_PENDING = '/api/dot/pending';
 const UPSTREAM_DECISION = '/api/dot/pending/decision';
 const UPSTREAM_FEEDBACK = '/api/visitor-feedback';
 const UPSTREAM_FEEDBACK_READ = '/api/visitor-feedback/read';
+const UPSTREAM_ARCHIVE = '/api/essence-archive/admin';
 const TOKEN_PATTERN = /^[A-Za-z0-9_-]{32,256}$/;
 const PAGE_LIMIT = 8;
 const ITEM_LIMIT = 300;
@@ -225,6 +227,115 @@ export async function markFeedbackReadForLocalReview({token, origin, fetchImpl, 
     return {status:200, body:safe};
   } catch {
     return {status:502, body:{error:'feedback_unavailable', message:'没有标成已读。'}};
+  }
+}
+
+const ARCHIVE_STAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
+
+function clipText(value, max) {
+  const text = typeof value === 'string' ? value : '';
+  if (/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(text) || Array.from(text).length > max) return null;
+  return text;
+}
+
+function archiveUnavailable(message = '暂时无法读取全部精华。') {
+  return {status:502, body:{error:'archive_unavailable', message}};
+}
+
+function cleanArchiveItem(item, token) {
+  if (!plain(item) || typeof item.removed !== 'boolean') return null;
+  const url = typeof item.url === 'string' ? item.url : '';
+  if (!url || url.length > 2000 || /[\u0000-\u001f\u007f]/.test(url)) return null;
+  const title = clipText(item.title, 500);
+  const excerpt = clipText(item.excerpt, 4000);
+  const author = clipText(item.author, 120);
+  const source = clipText(item.source, 80);
+  const id = clipText(item.id, 80);
+  if (title == null || excerpt == null || author == null || source == null || id == null) return null;
+  const published_at = item.published_at == null || item.published_at === '' ? '' : item.published_at;
+  const approved_at = item.approved_at == null || item.approved_at === '' ? '' : item.approved_at;
+  const removed_at = item.removed_at == null || item.removed_at === '' ? '' : item.removed_at;
+  if ((published_at && !ARCHIVE_STAMP.test(published_at)) || (approved_at && !ARCHIVE_STAMP.test(approved_at)) || (removed_at && !ARCHIVE_STAMP.test(removed_at))) return null;
+  let cover = '';
+  if (typeof item.cover_url === 'string' && item.cover_url) {
+    try {
+      const parsed = new URL(item.cover_url);
+      if (parsed.protocol !== 'https:') return null;
+      cover = parsed.href;
+    } catch { return null; }
+  }
+  return scrub({
+    id, title, excerpt, url, published_at, approved_at, author, source,
+    cover_url:cover, cover_kind:typeof item.cover_kind === 'string' ? item.cover_kind.slice(0, 40) : '',
+    pool:item.pool === true, removed:item.removed, removed_at:item.removed ? removed_at : '',
+  }, token);
+}
+
+export function archivePageQuery(value) {
+  const page = value == null || value === '' ? '1' : String(value);
+  return /^[1-9]\d{0,4}$/.test(page) ? page : '';
+}
+
+export async function listArchiveForLocalReview({token, origin, fetchImpl, page = '1'}) {
+  if (!token) return missingCredential();
+  const requested = archivePageQuery(page);
+  if (!requested) return {status:400, body:{error:'invalid_page', message:'页码不正确。'}};
+  const resolved = reviewOrigin(origin);
+  if (!resolved || typeof fetchImpl !== 'function') return archiveUnavailable();
+  try {
+    const result = await callUpstream(fetchImpl, resolved, token, `${UPSTREAM_ARCHIVE}?page=${requested}`);
+    if (result.status === 401 || result.status === 403) {
+      return {status:401, body:{error:'review_rejected', message:'本机接收码没有通过。请核对 .local/dot-review-token 或 DOT_REVIEW_TOKEN，然后重新打开本机服务。'}};
+    }
+    const list = result.payload;
+    if (result.status !== 200 || !plain(list) || !Array.isArray(list.items) || list.items.length > 30) {
+      return archiveUnavailable(upstreamMessage(list, token) || '暂时无法读取全部精华。');
+    }
+    if (![list.page, list.page_size, list.total, list.pages].every(item => Number.isSafeInteger(item) && item >= 0 && item <= 100000)) {
+      return archiveUnavailable();
+    }
+    const items = [];
+    for (const item of list.items) {
+      const safe = cleanArchiveItem(item, token);
+      if (!safe) return archiveUnavailable();
+      items.push(safe);
+    }
+    return {status:200, body:{page:list.page, page_size:list.page_size, total:list.total, pages:list.pages, items}};
+  } catch {
+    return archiveUnavailable();
+  }
+}
+
+export function archiveDecisionBody(input) {
+  if (!plain(input)) return {error:'请提交要下架或恢复的链接。'};
+  const keys = Object.keys(input);
+  if (keys.length !== 2 || !keys.includes('url') || !keys.includes('removed')) return {error:'请提交要下架或恢复的链接。'};
+  if (typeof input.url !== 'string' || !input.url || input.url.length > 2000) return {error:'请提交有效的 X 链接。'};
+  if (typeof input.removed !== 'boolean') return {error:'下架只能是拿下或留下。'};
+  return {body:{url:input.url, removed:input.removed}};
+}
+
+export async function decideArchiveForLocalReview({token, origin, fetchImpl, input}) {
+  if (!token) return missingCredential();
+  const prepared = archiveDecisionBody(input);
+  if (prepared.error) return {status:400, body:{error:'invalid_body', message:prepared.error}};
+  const resolved = reviewOrigin(origin);
+  if (!resolved || typeof fetchImpl !== 'function') return {status:502, body:{error:'archive_unavailable', message:'没有改成全部精华的上下架。'}};
+  try {
+    const result = await callUpstream(fetchImpl, resolved, token, UPSTREAM_ARCHIVE, {method:'POST', body:prepared.body});
+    if (result.status === 401 || result.status === 403) {
+      return {status:401, body:{error:'review_rejected', message:'本机接收码没有通过。请核对 .local/dot-review-token 或 DOT_REVIEW_TOKEN，然后重新打开本机服务。'}};
+    }
+    const safe = cleanArchiveItem(result.payload, token);
+    if (!safe || safe.removed !== prepared.body.removed) {
+      return {status:result.status >= 400 && result.status < 500 ? result.status : 502, body:{error:'archive_unavailable', message:upstreamMessage(result.payload, token) || '没有改成全部精华的上下架。'}};
+    }
+    if (result.status !== 200) {
+      return {status:result.status, body:{error:typeof result.payload?.error === 'string' ? result.payload.error : 'archive_unavailable', message:upstreamMessage(result.payload, token) || '没有改成全部精华的上下架。'}};
+    }
+    return {status:200, body:safe};
+  } catch {
+    return {status:502, body:{error:'archive_unavailable', message:'没有改成全部精华的上下架。'}};
   }
 }
 

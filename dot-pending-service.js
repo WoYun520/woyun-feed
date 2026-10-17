@@ -702,6 +702,12 @@ async function publishApproved(env) {
   catch { /* Publish still copies a face that is already on this snapshot. */ }
   const feed = attachKosxApproved(current, await listApprovedKosxRecords(env));
   await env.PUBLIC_FEED.put(PUBLIC_FEED_KEY, JSON.stringify(feed));
+  try {
+    const {rememberEssenceArchive} = await import('./frontend/essence-archive-service.js');
+    await rememberEssenceArchive(env, feed);
+  } catch {
+    console.warn(JSON.stringify({event:'essence-archive-remember-failed'}));
+  }
   return feed;
 }
 

@@ -1,7 +1,7 @@
 import { renderReviewQueue, bindReviewQueueEvents } from './reviewQueueView.js';
 
 export const REVIEW_ADMIN_POLL_MS = 30000;
-export const REVIEW_ADMIN_REFRESH_COPY = '打开时拉一次待过审和意见反馈，之后约每 30 秒自动更新，也可以点刷新。页面在后台、正在过审或标为已读时会跳过自动更新。';
+export const REVIEW_ADMIN_REFRESH_COPY = '打开时拉一次待过审、全部精华和意见反馈，之后约每 30 秒自动更新，也可以点刷新。页面在后台、正在过审、下架或标为已读时会跳过自动更新。';
 
 const rootNode = typeof document === 'undefined' ? null : document.querySelector?.('#review-admin-root');
 
@@ -36,6 +36,43 @@ function formatFeedbackTime(value) {
 
 function feedbackItems(items) {
   return (Array.isArray(items) ? items : []).filter(item => item && typeof item.id === 'string' && typeof item.text === 'string' && typeof item.created_at === 'string');
+}
+
+function archiveItems(items) {
+  return (Array.isArray(items) ? items : []).filter(item => item && typeof item.url === 'string' && item.url && typeof item.title === 'string' && typeof item.removed === 'boolean');
+}
+
+function renderArchiveSection(state) {
+  const items = archiveItems(state.archive);
+  const disabled = state.archiveBusy || state.loading ? ' disabled' : '';
+  const page = Number.isSafeInteger(state.archivePage) ? state.archivePage : 1;
+  const pages = Number.isSafeInteger(state.archivePages) ? state.archivePages : 0;
+  const body = state.loading && !items.length
+    ? '<p class="visitor-feedback-status" role="status">正在读取全部精华…</p>'
+    : items.length
+      ? items.map(item => {
+        const when = formatFeedbackTime(item.approved_at || item.published_at);
+        const removed = item.removed === true;
+        const action = removed
+          ? `<button type="button" class="btn-quiet" data-archive-restore="${escapeText(item.url)}"${disabled}>恢复</button>`
+          : `<button type="button" class="btn-quiet" data-archive-remove="${escapeText(item.url)}"${disabled}>下架</button>`;
+        return `<article class="visitor-feedback-item${removed ? ' is-read' : ''}" data-archive-url="${escapeText(item.url)}">
+          <p class="visitor-feedback-time">${escapeText(when || '时间未提供')}${removed ? ' · 已下架' : ''}</p>
+          <p class="visitor-feedback-text">${escapeText(item.title || '来源未提供标题')}</p>
+          ${item.author ? `<p class="visitor-feedback-meta">${escapeText(item.author)}</p>` : ''}
+          ${action}
+        </article>`;
+      }).join('')
+      : '<p class="visitor-feedback-status" role="status">全部精华里还没有帖。</p>';
+  const prev = page > 1 ? `<button type="button" class="btn-quiet" data-archive-page="${page - 1}"${disabled}>上一页</button>` : '';
+  const next = pages && page < pages ? `<button type="button" class="btn-quiet" data-archive-page="${page + 1}"${disabled}>下一页</button>` : '';
+  const pager = prev || next ? `<p class="visitor-feedback-status">${prev}${next}<span>第 ${page} / ${pages} 页</span></p>` : '';
+  return `<section id="essence-archive-admin" class="visitor-feedback" aria-label="全部精华">
+    <header class="visitor-feedback-heading"><h2>全部精华</h2><p>已经上过公开首页的帖留在这里。下架只从全部精华拿下，不会回到待过审，也不会改首页其他栏。</p></header>
+    ${state.archiveMessage ? `<p class="visitor-feedback-status" role="status">${escapeText(state.archiveMessage)}</p>` : ''}
+    ${state.archiveError ? `<p class="visitor-feedback-error" role="alert">${escapeText(state.archiveError)}</p>` : ''}
+    ${pager}${body}
+  </section>`;
 }
 
 function renderFeedbackSection(state) {
@@ -78,7 +115,11 @@ export function createReviewAdmin({
   setIntervalImpl = globalThis.setInterval,
   clearIntervalImpl = globalThis.clearInterval,
 } = {}) {
-  const state = {configured:true, loading:false, error:'', items:[], busy:false, message:'', feedback:[], feedbackError:'', feedbackBusy:false, feedbackMessage:'', feedbackTruncated:false};
+  const state = {
+    configured:true, loading:false, error:'', items:[], busy:false, message:'',
+    archive:[], archiveError:'', archiveBusy:false, archiveMessage:'', archivePage:1, archivePages:0, archiveTotal:0,
+    feedback:[], feedbackError:'', feedbackBusy:false, feedbackMessage:'', feedbackTruncated:false,
+  };
   let refreshing = false;
   let timer = null;
 
@@ -89,9 +130,29 @@ export function createReviewAdmin({
         connected:true, loading:state.loading, error:state.error, items:state.items, busy:state.busy, mode:'local',
       })}`
       : setupNotice();
-    root.innerHTML = `${refreshToolbar(state)}${queue}${state.configured ? renderFeedbackSection(state) : ''}`;
+    root.innerHTML = `${refreshToolbar(state)}${queue}${state.configured ? renderArchiveSection(state) : ''}${state.configured ? renderFeedbackSection(state) : ''}`;
     if (state.configured) {
       bindReviewQueueEvents(root, {onReviewDecision});
+      const archiveButtons = [
+        ...(root.querySelectorAll?.('[data-archive-remove]') || []),
+        ...(root.querySelectorAll?.('[data-archive-restore]') || []),
+        ...(root.querySelectorAll?.('[data-archive-page]') || []),
+      ];
+      for (const button of archiveButtons) {
+        button.addEventListener('click', () => {
+          if (button.disabled) return;
+          const nextPage = button.getAttribute('data-archive-page');
+          if (nextPage) {
+            state.archivePage = Number(nextPage);
+            refresh({reason:'manual'});
+            return;
+          }
+          const remove = button.getAttribute('data-archive-remove');
+          if (remove) onArchiveDecision({url:remove, removed:true});
+          const restore = button.getAttribute('data-archive-restore');
+          if (restore) onArchiveDecision({url:restore, removed:false});
+        });
+      }
       for (const button of root.querySelectorAll?.('[data-feedback-read]') || []) {
         button.addEventListener('click', () => {
           if (button.disabled) return;
@@ -116,7 +177,7 @@ export function createReviewAdmin({
   }
 
   async function refresh({reason = 'manual'} = {}) {
-    if (state.busy || state.feedbackBusy || refreshing) return false;
+    if (state.busy || state.feedbackBusy || state.archiveBusy || refreshing) return false;
     if (reason === 'poll' && pageHidden(documentRef)) return false;
     refreshing = true;
     state.loading = true;
@@ -124,8 +185,9 @@ export function createReviewAdmin({
     state.feedbackError = '';
     paint();
     try {
-      const [pending, feedback] = await Promise.all([
+      const [pending, archive, feedback] = await Promise.all([
         readEndpoint('/api/local-review/pending'),
+        readEndpoint(`/api/local-review/archive?page=${state.archivePage || 1}`),
         readEndpoint('/api/local-review/feedback'),
       ]);
       if (!pending) {
@@ -133,6 +195,7 @@ export function createReviewAdmin({
       } else if (pending.response.status === 503 && pending.body.error === 'review_credential_missing') {
         state.configured = false;
         state.items = [];
+        state.archive = [];
         state.feedback = [];
       } else if (!pending.response.ok || !Array.isArray(pending.body.items)) {
         state.configured = true;
@@ -143,6 +206,22 @@ export function createReviewAdmin({
         state.items = pending.body.items;
       }
       if (state.configured) {
+        if (!archive) {
+          state.archive = [];
+          state.archivePages = 0;
+          state.archiveTotal = 0;
+          state.archiveError = '暂时无法读取全部精华。';
+        } else if (!archive.response.ok || !Array.isArray(archive.body.items)) {
+          state.archive = [];
+          state.archivePages = 0;
+          state.archiveTotal = 0;
+          state.archiveError = typeof archive.body.message === 'string' ? archive.body.message : '暂时无法读取全部精华。';
+        } else {
+          state.archive = archive.body.items;
+          state.archivePage = Number.isSafeInteger(archive.body.page) ? archive.body.page : state.archivePage;
+          state.archivePages = Number.isSafeInteger(archive.body.pages) ? archive.body.pages : 0;
+          state.archiveTotal = Number.isSafeInteger(archive.body.total) ? archive.body.total : state.archive.length;
+        }
         if (!feedback) {
           state.feedback = [];
           state.feedbackError = '暂时无法读取意见反馈。';
@@ -195,8 +274,35 @@ export function createReviewAdmin({
     }
   }
 
+  async function onArchiveDecision({url, removed} = {}) {
+    if (state.busy || state.feedbackBusy || state.archiveBusy || refreshing || !url || typeof removed !== 'boolean') return;
+    state.archiveBusy = true;
+    state.archiveError = '';
+    state.archiveMessage = '';
+    paint();
+    try {
+      const response = await fetchImpl('/api/local-review/archive', {
+        method:'POST',
+        headers:{Accept:'application/json', 'Content-Type':'application/json', 'X-Personal-Feed':'1'},
+        cache:'no-store',
+        body:JSON.stringify({url, removed}),
+      });
+      const body = await readJson(response);
+      if (!response.ok || typeof body.url !== 'string' || body.removed !== removed) {
+        throw new Error(typeof body.message === 'string' ? body.message : '没有改成全部精华的上下架。');
+      }
+      state.archive = archiveItems(state.archive).map(item => item.url === url || item.url === body.url ? {...item, ...body} : item);
+      state.archiveMessage = removed ? '已从全部精华下架。首页其他栏不动，也不会回到待过审。' : '已放回全部精华。';
+    } catch (error) {
+      state.archiveError = error?.message || '没有改成全部精华的上下架。';
+    } finally {
+      state.archiveBusy = false;
+      paint();
+    }
+  }
+
   async function onFeedbackRead(id) {
-    if (state.busy || state.feedbackBusy || refreshing || !id) return;
+    if (state.busy || state.feedbackBusy || state.archiveBusy || refreshing || !id) return;
     state.feedbackBusy = true;
     state.feedbackError = '';
     state.feedbackMessage = '';

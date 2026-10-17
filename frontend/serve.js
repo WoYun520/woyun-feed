@@ -18,7 +18,9 @@ import { ResearchService, researchError } from './research-service.js';
 import { stopCodexReaders } from './codex-reader.js';
 import { RepositoryGuideService } from './repository-guide-service.js';
 import { installationId } from './installation.js';
-import { REVIEW_ADMIN_PATH, decidePendingForLocalReview, listFeedbackForLocalReview, listPendingForLocalReview, loadReviewToken, markFeedbackReadForLocalReview, normalizeReviewToken } from './local-review.js';
+import { LOCAL_REVIEW_ARCHIVE_PATH, REVIEW_ADMIN_PATH, archivePageQuery, decideArchiveForLocalReview, decidePendingForLocalReview, listArchiveForLocalReview, listFeedbackForLocalReview, listPendingForLocalReview, loadReviewToken, markFeedbackReadForLocalReview, normalizeReviewToken } from './local-review.js';
+import { PUBLIC_FEED_KEY } from './cloud-feed-service.js';
+import { handleEssenceArchiveRequest } from './essence-archive-service.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -168,9 +170,52 @@ export function createFeedServer({ service = new FeedService({ dataDir: path.joi
       if (req.headers.origin && req.headers.origin !== `http://${host}`) return json(403, { error: '只接受本页面的请求。' });
       if (req.headers['sec-fetch-site'] === 'cross-site') return json(403, { error: '只接受本页面的请求。' });
       try {
+        if (route === '/api/essence-archive') {
+          const feedPath = path.join(ROOT_DIR, 'public-dist', 'data', 'public-feed.json');
+          const response = await handleEssenceArchiveRequest(new Request(`http://${host}${req.url}`), {
+            PUBLIC_FEED:{get: async key => key === PUBLIC_FEED_KEY ? await fs.promises.readFile(feedPath, 'utf8') : null},
+          });
+          const out = {
+            'Content-Type': response.headers.get('Content-Type') || 'application/json; charset=utf-8',
+            'Cache-Control': 'no-store',
+            'X-Content-Type-Options': 'nosniff',
+          };
+          const allow = response.headers.get('Allow');
+          if (allow) out.Allow = allow;
+          res.writeHead(response.status, out);
+          res.end(req.method === 'HEAD' ? undefined : await response.text());
+          return;
+        }
         if (route === '/api/health' && req.method === 'GET') return json(200, {
           app: 'personal-feed', protocol: 1, installation_id: installationId(FRONTEND_DIR)
         });
+        if (route === LOCAL_REVIEW_ARCHIVE_PATH) {
+          const reviewToken = review && Object.hasOwn(review, 'token') ? normalizeReviewToken(review.token) : loadReviewToken({root:ROOT_DIR});
+          const origin = review?.origin || process.env.DOT_REVIEW_ORIGIN;
+          const fetchImpl = review?.fetch || globalThis.fetch;
+          if (req.method === 'GET') {
+            const requested = new URL(req.url, 'http://127.0.0.1').searchParams;
+            if ([...requested.keys()].some(key => key !== 'page')) return json(400, {error:'invalid_query', message:'这一页只接受页码。'});
+            const page = archivePageQuery(requested.get('page'));
+            if (!page) return json(400, {error:'invalid_page', message:'页码不正确。'});
+            const result = await listArchiveForLocalReview({token:reviewToken, origin, fetchImpl, page});
+            return json(result.status, result.body);
+          }
+          if (req.method !== 'POST') return json(405, {error:'method_not_allowed', message:'不支持此操作。'});
+          if (req.url.includes('?')) return json(400, {error:'invalid_query', message:'下架不接受查询参数。'});
+          if (req.headers['x-personal-feed'] !== '1' || !String(req.headers['content-type'] || '').startsWith('application/json')) return json(403, {error:'请通过本机过审页操作。'});
+          const chunks = []; let size = 0;
+          for await (const chunk of req) {
+            size += chunk.length;
+            if (size > 8000) return json(413, {error:'请求过长。'});
+            chunks.push(chunk);
+          }
+          let input;
+          try { input = JSON.parse(Buffer.concat(chunks).toString('utf8')); }
+          catch { return json(400, {error:'请求格式错误。'}); }
+          const result = await decideArchiveForLocalReview({token:reviewToken, origin, fetchImpl, input});
+          return json(result.status, result.body);
+        }
         if (route === '/api/local-review/pending' || route === '/api/local-review/decision' || route === '/api/local-review/feedback' || route === '/api/local-review/feedback/read') {
           if (req.url.includes('?')) return json(400, {error:'invalid_query', message:'这一页不接受查询参数。'});
           const reviewToken = review && Object.hasOwn(review, 'token') ? normalizeReviewToken(review.token) : loadReviewToken({root:ROOT_DIR});

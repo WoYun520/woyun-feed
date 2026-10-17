@@ -16,11 +16,12 @@ flowchart LR
   browser --> worker
   worker -->|"/api/dot/*、/api/home-boost、/api/visitor-feedback"| pending
   worker -->|GET /data/public-feed.json| feed
+  worker -->|"GET /api/essence-archive?page="| archive["PUBLIC_FEED 全部精华"]
   worker -->|其余路径| assets
   feed -->|缺快照时回退| assets
 ```
 
-`wrangler.jsonc` 里 `run_worker_first` 把这几条交给 Worker：`/data/public-feed.json`、`/api/dot/*`、`/api/home-boost`、`/api/visitor-feedback`。快照键是 `public-feed:current:v1`。KV 读失败时，`/data/public-feed.json` 回退到已发布的静态文件。
+`wrangler.jsonc` 里 `run_worker_first` 把这几条交给 Worker：`/data/public-feed.json`、`/api/dot/*`、`/api/home-boost`、`/api/visitor-feedback`、`/api/essence-archive`、`/api/essence-archive/*`。首页快照键是 `public-feed:current:v1`。全部精华另存在同一块 `PUBLIC_FEED` 的 `essence-archive:v1`，不写进首页那包 JSON。KV 读失败时，`/data/public-feed.json` 回退到已发布的静态文件。归档键还不存在时，全部精华才临时从这份快照分一页。
 
 | 路径 | 模块 | 作用 |
 | --- | --- | --- |
@@ -31,7 +32,10 @@ flowchart LR
 | `/api/home-boost` | `frontend/home-boost-service.js` | 首页已助力计数 |
 | `/api/visitor-feedback` | `visitor-feedback-service.js` | 公开页提交意见；接收码才能列出 |
 | `/api/visitor-feedback/read` | 同上 | 接收码把一条意见标为已读 |
-| `/review-admin` | 只在本机 `frontend/serve.js` | 过审页，另有单独的意见反馈栏。公开预览没有这条 |
+| `/api/essence-archive` | `frontend/essence-archive-service.js` | 全部精华，一页 24 条。公开只读 |
+| `/api/essence-archive/admin` | 同上 | 接收码列出或下架。投递密钥不能改 |
+| `/essence.html` | `frontend/essence.html` | 全部精华页面。首页第一屏不画这一列 |
+| `/review-admin` | 只在本机 `frontend/serve.js` | 过审页。下面是全部精华的下架，再下面是意见反馈。公开预览没有这条 |
 
 私有 KV `DOT_INBOX` 里和协作有关的键：
 
@@ -66,6 +70,16 @@ flowchart LR
 - **昨日最被低估。** 人工钉选，原帖北京日是当前「昨日全部」或它的前一个自然日，按钉选顺序，最多 2 条。可以是空的。抽奖等已被质量规则收起的帖不会因为钉选重新出现。快照整理日滚过一天之后，上一档「昨日全部」上的钉选仍然留在这一栏，直到它再早一天。
 - **七日精选。** 整理日往前共 7 个北京时间自然日（含整理日）里的精华文章。文章指类型是「文章」或「教程指南」、带有 Article 卡，或摘录里已有操作线索。短帖、产品安利、避坑不进。收藏数只读公开条目上的 `bookmark_count`，达到 200（`HOME_WEEK_BOOKMARK_MIN`）才留下。这批文章里只要有可读的收藏数，就不改用曝光或浏览量。整批都没有收藏数时，`pickWeek` 还有热度中位数、再退回按时间留下文章这两步。
 - **卧云精选。** 同一条精华线上的文章，不限日期，`bookmark_count` 达到 1000（`HOME_KEPT_BOOKMARK_MIN`）。没有收藏数的不进。这里没有热度退路。
+
+### 全部精华
+
+「全部精华」不是首页上的第五栏。最新精华、昨日全部、昨日最被低估、七日精选、卧云精选仍按上面的窗口和条数画在首页。全部精华是单独一页 `/essence.html`，从「最新精华」标题旁和页脚的「全部精华」进去。
+
+帖子沿现有过审写上公开精华线时记进 `essence-archive:v1`。成员和最新精华同一条线（`isHomepageEssence`，也就是过审写入的 kosx 路径）。空白封面（`blankPublicCover`）和已经折叠的抽奖、推广不新进归档。没有 30 日窗口，也没有 18 条上限。一页 24 条。排序先看过审时间 `source_item_time`，没有过审时间再用原帖 `published_at`。封面用 `loading="lazy"`。归档最多留下 2000 条；满了就不再收新的，也不把已经留下的挤掉。
+
+这是长期归档。后来的公开刷新不会因为它离开首页快照就删掉。下架在本机 `/review-admin`，只把这一条从全部精华的公开列表拿下，不回到待过审，也不改首页其他栏。误点可以在同一处恢复。公开页没有下架按钮。
+
+这一页不把历史再塞进 `/data/public-feed.json`。首页第一屏仍然只拉首页快照，并只画上面这些栏。
 
 扫榜进队看的是近 2 个北京日（今天和昨天），每轮最多 20 条。那是队列窗口，和首页「最新精华」的 30 日、18 条不是同一个数。
 

@@ -640,7 +640,7 @@ test('default homepage renders cover cards, signature, navigation labels and no 
   assert.match(html, />贴链接</);
   assert.match(html, /placeholder="粘贴 X 精华帖链接"/);
   assert.match(html, /id="kosx-panel" hidden/);
-  assert.match(html, /<footer class="kosx-footer"><img class="kosx-wordmark" src="\/assets\/kosx\/wordmark-ink\.svg" width="187" height="32" alt="KOSX\.ai，橙色圆点"><\/footer>/);
+  assert.match(html, /<footer class="kosx-footer"><img class="kosx-wordmark" src="\/assets\/kosx\/wordmark-ink\.svg" width="187" height="32" alt="KOSX\.ai，橙色圆点"><a class="home-archive-link" href="\/essence\.html">全部精华<\/a><\/footer>/);
   assert.ok(html.indexOf('kosx-strip') < html.indexOf('levi-signature'));
   assert.doesNotMatch(html, /class="home-strap"/);
   assert.match(html, /class="levi-kicker">LEVI</);

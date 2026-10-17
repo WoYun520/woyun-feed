@@ -192,6 +192,10 @@ export async function runScheduledUpdate(env, options) {
   const next=attachKosxApproved(refreshed, approved, previous?.items);
   // A single completed snapshot is published; partial failures keep each source's previous items.
   await env.PUBLIC_FEED.put(PUBLIC_FEED_KEY,JSON.stringify(next));
+  try {
+    const {rememberEssenceArchive}=await import('./essence-archive-service.js');
+    await rememberEssenceArchive(env, next);
+  } catch { console.warn(JSON.stringify({event:'essence-archive-remember-failed'})); }
   console.log(JSON.stringify({event:'public-feed-updated',status:next.refresh.status,items:next.items.length,new_items:next.refresh.new_count,
     successful_sources:next.sources.filter(s=>s.status==='ok').length,failed_sources:next.sources.filter(s=>s.status==='failed').map(s=>s.id),
     completed_at:next.publication.published_at}));
