@@ -19,7 +19,7 @@
 
 1. 留下作者在账号池里、原帖北京日是今天或昨天、队列里还没有的帖。同一状态编号只留一条。已经 `rejected` 的不重新打开。
 2. 每轮最多新写 20 条（`ESSENCE_INTAKE_CAP`）。池内且不会进入「昨日全部」的，走和投递密钥相同的进队路径，当场上首页。
-3. 把来源为 `delivery`、仍是 `pending`、提交时间早于现在超过 3 小时的记录标成 `approved`，`approval` 为 `auto`。刚好 3 小时继续等人。贴链接（`homepage`）不参加。这一步不钉「昨日最被低估」。
+3. 把仍是 `pending`、提交时间早于现在的记录标成 `approved`，`approval` 为 `auto`。来源 `delivery` 要超过 3 小时（`PENDING_AUTO_APPROVE_MS`）。来源 `homepage`（贴链接）要超过 1 小时（`HOMEPAGE_AUTO_APPROVE_MS`）。时间用 `submitted_at`，没有则用 `created_at`。刚好到达对应时长继续等人。内容政策挡下的记录留在 `pending`。这一步不钉「昨日最被低估」。
 4. 把快照里已有的 `bookmark_count` / `like_count` 补进精华线。缺了就空着，不写成 0。封面和摘录也按同样的「只补空缺」回填。
 
 队列这一轮有变化时，扫榜调用 `publishApprovedFeed`，把已过审的精华行接到**现有**快照上。这不是首页快照的整表重建。
@@ -32,18 +32,18 @@ Overheard 若在调用投递口之前自己扫过 X 或模型，那笔开销在�
 
 ### 公开刷新才重建首页快照
 
-公开刷新重读固定公开来源，刷新账号池缓存，顺手做热度回填和满 3 小时自动过审，再把队列里 `approved` 的行接回快照，写入 `PUBLIC_FEED` 的 `public-feed:current:v1`。它不为了进队去扫 X。
+公开刷新重读固定公开来源，刷新账号池缓存，顺手做热度回填和自动过审（投递超过 3 小时，贴链接超过 1 小时），再把队列里 `approved` 的行接回快照，写入 `PUBLIC_FEED` 的 `public-feed:current:v1`。它不为了进队去扫 X。
 
 所以：扫榜更新队列，并在队列有变化时把已过审行接到旧快照上；首页快照的整表更新发生在公开刷新。
 
 ## 软启动仍保留的自动过审
 
-| 来源 | 进队当时 | 满 3 小时 |
+| 来源 | 进队当时 | 之后 |
 | --- | --- | --- |
-| 首页贴链接 `homepage` | 一直 `pending` | 仍不自动公开 |
-| 投递，作者不在账号池 | `pending` | 可以自动上首页，不钉低估 |
+| 首页贴链接 `homepage` | `pending` | 超过 1 小时仍是 `pending` 则自动上首页，不钉低估。刚好 1 小时继续等人 |
+| 投递，作者不在账号池 | `pending` | 超过 3 小时仍是 `pending` 则自动上首页，不钉低估。刚好 3 小时继续等人 |
 | 投递，作者在池内，不会进「昨日全部」 | 当场 `approved`，`approval: pool` | 已经在首页上 |
-| 投递，作者在池内，会进「昨日全部」 | 保持 `pending` | 可以上首页，不自动钉低估 |
+| 投递，作者在池内，会进「昨日全部」 | 保持 `pending` | 超过 3 小时可以上首页，不自动钉低估 |
 
 「昨日最被低估」始终要人工钉。钉选步骤在 [underrated-upload.md](underrated-upload.md)。过审接口在 [pending-review.md](pending-review.md)。
 
