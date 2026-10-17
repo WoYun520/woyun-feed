@@ -10,6 +10,8 @@ export const PUBLIC_REFRESH_CRON = '0 1,13 * * *';
 export const ESSENCE_SWEEP_CRON = '0 0,4,8,12 * * *';
 export const ESSENCE_SWEEP_INTERVAL_MS = 3 * 60 * 60 * 1000;
 export const PENDING_AUTO_APPROVE_MS = 3 * 60 * 60 * 1000;
+// Homepage paste (source homepage / 贴链接). Strictly older than this.
+export const HOMEPAGE_AUTO_APPROVE_MS = 1 * 60 * 60 * 1000;
 export const ESSENCE_INTAKE_WINDOW_DAYS = 2;
 export const ESSENCE_INTAKE_CAP = 20;
 export const ESSENCE_SWEEP_BACKOFF_MAX_MS = 24 * 60 * 60 * 1000;
@@ -40,13 +42,19 @@ export function pendingAgeMs(record, now = Date.now()) {
   return clock - then;
 }
 
-// Homepage paste stays manual. Delivery rows, including ones held because they
-// would enter yesterday's underrated shelf, auto-approve strictly after 3 hours.
-// Equal to 3 hours is still waiting. This does not pin the underrated shelf.
+// Delivery rows, including ones held because they would enter yesterday's
+// underrated shelf, auto-approve strictly after 3 hours. Homepage paste
+// (source homepage) auto-approves strictly after 1 hour when it is still
+// pending. Equal to either threshold is still waiting. Pool release at intake
+// is unchanged. This does not pin the underrated shelf.
 export function shouldAutoApprove(record, now = Date.now()) {
-  if (!record || record.status !== 'pending' || record.source !== 'delivery') return false;
+  if (!record || record.status !== 'pending') return false;
+  let limit = null;
+  if (record.source === 'homepage') limit = HOMEPAGE_AUTO_APPROVE_MS;
+  else if (record.source === 'delivery') limit = PENDING_AUTO_APPROVE_MS;
+  if (limit === null) return false;
   const age = pendingAgeMs(record, now);
-  return age !== null && age > PENDING_AUTO_APPROVE_MS;
+  return age !== null && age > limit;
 }
 
 export function inRecentBeijingDays(instant, now = Date.now(), days = ESSENCE_INTAKE_WINDOW_DAYS) {
