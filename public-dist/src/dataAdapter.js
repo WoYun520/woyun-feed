@@ -23,6 +23,14 @@ import { parseDotCandidates, dotPostKey, makeDotCandidate, validateDotCandidateR
 const DEMO_STORAGE_KEY = 'personal-feed:demo:v1';
 const LIVE_STORAGE_KEY = 'personal-feed:live:v1';
 const MAX_FEED_RESPONSE_CHARS = 10_000_000;
+// 本机 /api/feed 是同机的小响应。公开预览要下载 /data/public-feed.json；
+// 国内到 workers.dev 的 gzip 经常超过 10 秒，提前中断会一直停在旧缓存。
+export const LOCAL_FEED_TIMEOUT_MS = 10_000;
+export const PUBLIC_PREVIEW_FEED_TIMEOUT_MS = 90_000;
+function feedReadTimeoutMs(publicPreview, feedTimeoutMs) {
+  const limit = publicPreview ? PUBLIC_PREVIEW_FEED_TIMEOUT_MS : LOCAL_FEED_TIMEOUT_MS;
+  return Number.isFinite(feedTimeoutMs) && feedTimeoutMs > 0 ? Math.min(feedTimeoutMs, limit) : limit;
+}
 const RETIRED_LIVE_SOURCES = new Set(['x', 'bilibili-hot-search']);
 function kosxLink(value) {
   const key = dotPostKey(typeof value === 'string' ? value.trim() : '');
@@ -90,13 +98,13 @@ const defaultLocalState = {
 };
 
 export class FeedDataAdapter {
-  constructor({ mode = 'live', publicPreview = PUBLIC_PREVIEW, feedTimeoutMs = 10000 } = {}) {
+  constructor({ mode = 'live', publicPreview = PUBLIC_PREVIEW, feedTimeoutMs } = {}) {
     this.mode = mode;
     this.publicPreview = publicPreview;
     this.storageKey = mode === 'demo' ? DEMO_STORAGE_KEY : LIVE_STORAGE_KEY;
     this.feedData = null;
     this.displayedItems = new Map();
-    this.feedTimeoutMs = Number.isFinite(feedTimeoutMs) && feedTimeoutMs > 0 ? Math.min(feedTimeoutMs,10000) : 10000;
+    this.feedTimeoutMs = feedReadTimeoutMs(publicPreview, feedTimeoutMs);
     this.loadStatus = {phase:'loading',fromCache:false,cachedAt:null,lastCheckedAt:null,errorKind:null,cacheWarning:false};
     this._feedRequest = null;
     this._refreshRequest = null;

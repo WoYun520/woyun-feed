@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { FEED_CACHE_KEYS, MAX_FEED_CACHE_CHARS, writeFeedCache } from './src/feedCache.js';
 import { parseBackup } from './src/backup.js';
 
@@ -24,6 +25,46 @@ function prepare() {
 function seed(scope='public-live',data=feed()) {
   const result=writeFeedCache(globalThis.localStorage,scope,data,Date.parse(OLD_AT));assert.equal(result.warning,false);
 }
+
+test('public preview waits 90s for /data/public-feed.json; local and demo stay on the 10s cap', async()=>{
+  const {LOCAL_FEED_TIMEOUT_MS,PUBLIC_PREVIEW_FEED_TIMEOUT_MS}=await import('./src/dataAdapter.js');
+  assert.equal(PUBLIC_PREVIEW_FEED_TIMEOUT_MS,90_000);
+  assert.equal(LOCAL_FEED_TIMEOUT_MS,10_000);
+  assert.equal(new FeedDataAdapter({publicPreview:true}).feedTimeoutMs,90_000);
+  assert.equal(new FeedDataAdapter({publicPreview:true,feedTimeoutMs:120_000}).feedTimeoutMs,90_000);
+  assert.equal(new FeedDataAdapter({publicPreview:true,feedTimeoutMs:20}).feedTimeoutMs,20);
+  assert.equal(new FeedDataAdapter({publicPreview:false}).feedTimeoutMs,10_000);
+  assert.equal(new FeedDataAdapter({mode:'demo',publicPreview:false}).feedTimeoutMs,10_000);
+  assert.equal(new FeedDataAdapter({publicPreview:false,feedTimeoutMs:60_000}).feedTimeoutMs,10_000);
+  assert.equal(new FeedDataAdapter({publicPreview:false,feedTimeoutMs:20}).feedTimeoutMs,20);
+  for (const bad of [0,-1,NaN,Infinity,'90000']) {
+    assert.equal(new FeedDataAdapter({publicPreview:true,feedTimeoutMs:bad}).feedTimeoutMs,90_000);
+    assert.equal(new FeedDataAdapter({publicPreview:false,feedTimeoutMs:bad}).feedTimeoutMs,10_000);
+  }
+  const about=readFileSync(new URL('./public-build.mjs',import.meta.url),'utf8');
+  assert.match(about,new RegExp(`读取超过${PUBLIC_PREVIEW_FEED_TIMEOUT_MS / 1000}秒会停止等待`));
+  assert.doesNotMatch(about,/读取超过10秒会停止等待/);
+  prepare();
+  const delays=[];
+  const realSetTimeout=globalThis.setTimeout;
+  globalThis.setTimeout=(fn,delay,...args)=>{delays.push(delay);return realSetTimeout(fn,delay,...args);};
+  try {
+    globalThis.fetch=async()=>response(feed());
+    await new FeedDataAdapter({publicPreview:true}).loadFeed();
+    assert.ok(delays.includes(PUBLIC_PREVIEW_FEED_TIMEOUT_MS));
+    assert.equal(delays.includes(LOCAL_FEED_TIMEOUT_MS),false);
+    delays.length=0;
+    await new FeedDataAdapter({publicPreview:false}).loadFeed();
+    assert.ok(delays.includes(LOCAL_FEED_TIMEOUT_MS));
+    assert.equal(delays.includes(PUBLIC_PREVIEW_FEED_TIMEOUT_MS),false);
+    delays.length=0;
+    const refreshing=new FeedDataAdapter({publicPreview:false});
+    await refreshing.loadFeed();
+    delays.length=0;
+    await refreshing.refreshFeed();
+    assert.ok(delays.includes(LOCAL_FEED_TIMEOUT_MS*2),'本机更新仍用两倍短时限，不必跟着公开预览等到 90 秒');
+  } finally {globalThis.setTimeout=realSetTimeout;}
+});
 
 test('explicit cache restore is synchronous, does not fetch, and preserves raw source dates and user collections', async()=>{
   const store=prepare(),original=feed();globalThis.fetch=async()=>response(original);
