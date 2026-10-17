@@ -155,15 +155,15 @@ test('beijing yesterday is the calendar day before the published snapshot', () =
   assert.equal(parsePublicHeat('没有数字'), null);
 });
 
-test('an original outside the three Beijing-day latest window leaves 最新精华 and can still enter 卧云精选', () => {
+test('an original outside the five Beijing-day latest window leaves 最新精华 and can still enter 卧云精选', () => {
   const newer = Array.from({length:18}, (_, index) => post(String(500000 + index), `2026-10-09T${String(index).padStart(2, '0')}:10:00.000Z`, {
     origin:'kosx_approved', source_item_time:'2026-10-10T12:00:00.000Z', review_type:'文章', bookmark_count:40,
   }));
-  const edge = post('188887', '2026-10-08T00:00:00.000Z', {
+  const edge = post('188887', '2026-10-06T00:00:00.000Z', {
     origin:'kosx_approved', source_refs:['sopilot-kosx'], source_item_time:'2026-10-15T08:00:00.000Z',
     title:'窗口内最旧一天', review_type:'文章', bookmark_count:40,
   });
-  const justOutside = post('188886', '2026-10-07T12:00:00.000Z', {
+  const justOutside = post('188886', '2026-10-05T12:00:00.000Z', {
     origin:'kosx_approved', source_refs:['sopilot-kosx'], source_item_time:'2026-10-15T09:00:00.000Z',
     title:'窗口外一天', review_type:'文章', bookmark_count:800,
   });
@@ -178,9 +178,9 @@ test('an original outside the three Beijing-day latest window leaves 最新精�
   const input = state([...newer, edge, justOutside, approved, keptOld, hot]);
   input.sources = [source, {id:'sopilot-kosx', name:'KOSX 过审', group:'posts', link_kind:'post', status:'ok', enabled:true}];
   const selected = selectHomeShowcase(input);
-  assert.equal(HOME_LATEST_WINDOW_DAYS, 3);
+  assert.equal(HOME_LATEST_WINDOW_DAYS, 5);
   assert.equal(selected.reference.dateKey, '2026-10-10');
-  assert.deepEqual(Array.from({length:HOME_LATEST_WINDOW_DAYS}, (_, index) => addCalendarDays(selected.reference.dateKey, -index)), ['2026-10-10', '2026-10-09', '2026-10-08']);
+  assert.deepEqual(Array.from({length:HOME_LATEST_WINDOW_DAYS}, (_, index) => addCalendarDays(selected.reference.dateKey, -index)), ['2026-10-10', '2026-10-09', '2026-10-08', '2026-10-07', '2026-10-06']);
   assert.equal(selected.reference.weekKeys.length, 7);
   assert.deepEqual(selected.reference.weekKeys, ['2026-10-10', '2026-10-09', '2026-10-08', '2026-10-07', '2026-10-06', '2026-10-05', '2026-10-04']);
   assert.equal(selected.latest[0].post.item.id, edge.id);
@@ -332,6 +332,8 @@ test('a pin from the day before 昨日全部 still appears on 昨日最被低估
   assert.equal(selected.reference.dateKey, '2026-10-17');
   assert.equal(selected.reference.yesterday, '2026-10-16');
   assert.deepEqual(selected.yesterday.map(entry => entry.post.item.id), [yesterdayPost.id]);
+  assert.equal(selected.latest.some(entry => entry.post.item.id === older.id), true);
+  assert.equal(selected.latest.some(entry => entry.post.item.id === stream.id), false);
   assert.equal(selected.underratedRule, 'empty');
   const pin = (item, day) => ({id:item.id, key:`x:${item.id}`, url:item.original_url, day});
   const shown = selectHomeShowcase({...input, underratedPins:[pin(kin, '2026-10-15'), pin(supermm, '2026-10-15'), pin(yesterdayPost, '2026-10-16')]});
@@ -342,7 +344,13 @@ test('a pin from the day before 昨日全部 still appears on 昨日最被低估
   const html = renderHomeShowcase(app(), {...input, underratedPins:[pin(kin, '2026-10-15')]});
   assert.match(html, /id="home-underrated"/);
   assert.match(html, /KinGao 10-15/);
-  assert.doesNotMatch(html, /10-14 精华|榜单不是精华/);
+  const latestBand = html.slice(html.indexOf('id="home-latest"'), html.indexOf('id="home-underrated"'));
+  const underrated = html.slice(html.indexOf('id="home-underrated"'));
+  assert.match(latestBand, /10-14 精华/);
+  assert.doesNotMatch(latestBand, /榜单不是精华/);
+  assert.match(underrated, /KinGao 10-15/);
+  assert.doesNotMatch(underrated, /10-14 精华|榜单不是精华|supermm 10-15|10-16 精华/);
+  assert.doesNotMatch(html, /榜单不是精华/);
 });
 
 test('public feed pins reach the homepage through the adapter', () => {
