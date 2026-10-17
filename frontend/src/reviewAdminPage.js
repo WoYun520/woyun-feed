@@ -105,7 +105,7 @@ export function createReviewAdmin({
         : body.pinned
           ? '已过审上首页，并钉进昨日低估栏。'
           : underrated_candidate
-            ? (typeof body.pin_message === 'string' && body.pin_message ? body.pin_message : '已过审上首页。原帖日期不是昨日，没有钉进昨日低估栏。')
+            ? (typeof body.pin_message === 'string' && body.pin_message ? body.pin_message : '已过审上首页。原帖日期不是当前「昨日全部」，也不是它的前一个自然日，没有钉进昨日低估栏。')
             : '已过审上首页。';
     } catch (error) {
       state.error = error?.message || '过审没有完成。';

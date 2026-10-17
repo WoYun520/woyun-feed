@@ -712,7 +712,7 @@ async function handleDecision(request, env, review) {
     published:record.status === 'approved',
     ...(pin ? {
       pinned:pin.pinned === true,
-      ...(pin.pinned ? {pin_message:'已过审上首页，并钉进昨日低估栏。'} : {pin_code:pin.code || 'pin_failed', pin_message:notYesterday ? '已过审上首页。原帖日期不是昨日，没有钉进昨日低估栏。' : (pin.message || '已过审上首页。钉选没有完成。')}),
+      ...(pin.pinned ? {pin_message:'已过审上首页，并钉进昨日低估栏。'} : {pin_code:pin.code || 'pin_failed', pin_message:notYesterday ? '已过审上首页。原帖日期不是当前「昨日全部」，也不是它的前一个自然日，没有钉进昨日低估栏。' : (pin.message || '已过审上首页。钉选没有完成。')}),
     } : {}),
   });
 }

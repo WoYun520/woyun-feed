@@ -49,7 +49,7 @@ flowchart LR
 3. 精华扫榜从**已经写在 KV 里的快照**里挑池内帖子进队。它不新开 X 时间线。时间表见 [ops-cron.md](ops-cron.md)。
 4. 投递来源满 3 小时（`PENDING_AUTO_APPROVE_MS`，`3 * 60 * 60 * 1000` 毫秒）仍是 `pending` 的，定时任务标成 `approved`（`approval: auto`）。贴链接不走这 3 小时。自动过审不钉低估栏。账号池进队当场过审不变。
 5. 本机 `/review-admin` 用接收码把 `pending` 标成 `approved` 或 `rejected`。只有 `approved` 出现在公开首页。
-6. 「昨日最被低估」只显示人工钉选、并且这条钉选对得上「昨日全部」的帖。没有钉选时这一栏留空。
+6. 「昨日最被低估」只显示人工钉选，并且这条钉选的原帖日是当前「昨日全部」或它的前一个自然日。没有钉选时这一栏留空。
 
 公开刷新重建首页快照，并把队列里的 `approved` 接回去。只停在 `pending` 的链接不会被接回去。扫榜和公开刷新的分工见 [ops-cron.md](ops-cron.md)。
 
@@ -59,7 +59,7 @@ flowchart LR
 
 - **最新精华。** 精华线里，原帖北京日落在整理日往前 3 个自然日（含整理日）的帖，最多 18 条（`HOME_LATEST_LIMIT`）。栏内排序看放上首页的时间。
 - **昨日全部。** 精华线里，原帖北京日是整理日前一天的帖。账号池自动放上首页的帖也在这里。
-- **昨日最被低估。** 人工钉选，并且落在「昨日全部」里，按钉选顺序，最多 2 条。可以是空的。抽奖等已被质量规则收起的帖不会因为钉选重新出现。
+- **昨日最被低估。** 人工钉选，原帖北京日是当前「昨日全部」或它的前一个自然日，按钉选顺序，最多 2 条。可以是空的。抽奖等已被质量规则收起的帖不会因为钉选重新出现。快照整理日滚过一天之后，上一档「昨日全部」上的钉选仍然留在这一栏，直到它再早一天。
 - **七日精选。** 整理日往前共 7 个北京时间自然日（含整理日）里的精华文章。文章指类型是「文章」或「教程指南」、带有 Article 卡，或摘录里已有操作线索。短帖、产品安利、避坑不进。收藏数只读公开条目上的 `bookmark_count`，达到 200（`HOME_WEEK_BOOKMARK_MIN`）才留下。这批文章里只要有可读的收藏数，就不改用曝光或浏览量。整批都没有收藏数时，`pickWeek` 还有热度中位数、再退回按时间留下文章这两步。
 - **卧云精选。** 同一条精华线上的文章，不限日期，`bookmark_count` 达到 1000（`HOME_KEPT_BOOKMARK_MIN`）。没有收藏数的不进。这里没有热度退路。
 
@@ -69,7 +69,7 @@ flowchart LR
 
 空白封面由 `frontend/src/coverFace.js` 的 `blankPublicCover` 判定，并且已经拦在公开栏外面。没有可用摘录，并且 `showcaseCoverMedia` 也没有封面图或同一条帖的图片，这张脸就是空白。流程说明、补仓备注和「待人工过审」不当成摘录。同一条帖的另一份副本如果带着摘录，这张脸可以留下。
 
-`selectHomeShowcase` 里的 `showCover` 就是 `!blankPublicCover(entry.post)`。最新精华、昨日全部、七日精选、卧云精选都走这道过滤。昨日最被低估只从已经通过过滤的「昨日全部」里钉，所以空白封面也不进这一栏。测试是 `frontend/test-home-showcase.js` 里的 “blank public covers stay off every homepage rail”。
+`selectHomeShowcase` 里的 `showCover` 就是 `!blankPublicCover(entry.post)`。最新精华、昨日全部、七日精选、卧云精选都走这道过滤。昨日最被低估从已经通过过滤的「昨日全部」，以及它前一个自然日的精华线里取钉选，所以空白封面也不进这一栏。测试是 `frontend/test-home-showcase.js` 里的 “blank public covers stay off every homepage rail”。
 
 占位标题 `@handle 的精华帖` 可以当卡片标题，只要摘录还在。样式里仍留着紧凑的 `data-cover="plain"`，给个别边角用；公开栏的选择已经把空白封面排除在外。
 

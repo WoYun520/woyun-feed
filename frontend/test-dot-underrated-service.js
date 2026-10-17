@@ -109,8 +109,10 @@ test('review token pins a public post without approving, and delivery token cann
   assert.equal(listed.items[0].note, 'Levi 已看过');
 });
 
-test('a new pin is accepted from yesterday public posts, including pool approvals on that line', async () => {
-  const olderId = '2108148604447884011';
+test('a new pin is accepted from yesterday or the day before, including pool approvals', async () => {
+  const priorId = '2108148604447884011';
+  const priorUrl = `https://x.com/example/status/${priorId}`;
+  const olderId = '2108148604447884014';
   const olderUrl = `https://x.com/example/status/${olderId}`;
   const todayId = '2108148604447884012';
   const todayUrl = `https://x.com/example/status/${todayId}`;
@@ -118,7 +120,8 @@ test('a new pin is accepted from yesterday public posts, including pool approval
   const env = await environment([
     item(postUrl),
     item(otherUrl, {id:'news-pool', kosx_review:'pool'}),
-    item(olderUrl, {published_at:'2026-10-08T02:00:00.000Z', kosx_review:'pool'}),
+    item(priorUrl, {published_at:'2026-10-08T02:00:00.000Z', kosx_review:'pool'}),
+    item(olderUrl, {published_at:'2026-10-07T02:00:00.000Z'}),
     item(todayUrl, {published_at:'2026-10-10T02:00:00.000Z', kosx_review:'pool'}),
   ]);
   const missing = await call(env, 'POST', {url:missingUrl});
@@ -131,11 +134,18 @@ test('a new pin is accepted from yesterday public posts, including pool approval
     assert.equal(body.error, 'not_yesterday');
     assert.match(body.message, /昨日全部/);
     assert.match(body.message, /2026-10-09/);
+    assert.match(body.message, /2026-10-08/);
+    assert.match(body.message, /更早的日期不能新钉/);
   }
   const mixed = await call(env, 'POST', {urls:[postUrl, olderUrl]});
   assert.equal(mixed.status, 409);
   assert.equal((await mixed.json()).error, 'not_yesterday');
   assert.equal(env.DOT_INBOX.writes.length, 0);
+  const prior = await call(env, 'POST', {url:priorUrl, note:'昨日全部的前一天'});
+  const priorPin = await prior.json();
+  assert.equal(prior.status, 201);
+  assert.equal(priorPin.day, '2026-10-08');
+  assert.equal(priorPin.existing, false);
   const pooled = await call(env, 'POST', {url:otherUrl, note:'池内昨日'});
   const poolPin = await pooled.json();
   assert.equal(pooled.status, 201);
@@ -152,18 +162,18 @@ test('a new pin is accepted from yesterday public posts, including pool approval
   assert.equal(env.PUBLIC_FEED.writes.length, 0);
 });
 
-test('listing and unpin keep working for a pin that is no longer yesterday', async () => {
+test('listing and unpin keep working for a pin outside the two-day window', async () => {
   const staleId = '2108148604447884020';
   const staleUrl = `https://x.com/example/status/${staleId}`;
-  const env = await environment([item(staleUrl, {published_at:'2026-10-08T02:00:00.000Z'})]);
+  const env = await environment([item(staleUrl, {published_at:'2026-10-07T02:00:00.000Z'})]);
   const stale = {
     id:'news-stale', key:`x:${staleId}`, url:staleUrl, author_handle:'example',
-    day:'2026-10-08', pinned_at:'2026-10-08T03:00:00.000Z', note:'旧钉选', reviewer:UNDERRATED_REVIEWER,
+    day:'2026-10-07', pinned_at:'2026-10-07T03:00:00.000Z', note:'旧钉选', reviewer:UNDERRATED_REVIEWER,
   };
   await env.DOT_INBOX.put(UNDERRATED_PIN_KEY, JSON.stringify({items:[stale]}));
   const listed = await (await call(env, 'GET')).json();
   assert.equal(listed.items.length, 1);
-  assert.equal(listed.items[0].day, '2026-10-08');
+  assert.equal(listed.items[0].day, '2026-10-07');
   assert.equal(listed.items[0].note, '旧钉选');
   const again = await call(env, 'POST', {url:staleUrl, note:'后来的备注'});
   const repeat = await again.json();
@@ -179,24 +189,60 @@ test('listing and unpin keep working for a pin that is no longer yesterday', asy
   assert.deepEqual((await (await call(env, 'GET')).json()).items, []);
 });
 
-test('without generated_at, yesterday follows the current Asia/Shanghai clock', async () => {
+test('without generated_at, the pin window follows the current Asia/Shanghai clock', async () => {
   const today = beijingDateKey(Date.now());
   const yesterday = addCalendarDays(today, -1);
-  const older = addCalendarDays(yesterday, -1);
+  const prior = addCalendarDays(yesterday, -1);
+  const older = addCalendarDays(prior, -1);
   const at = day => `${day}T04:00:00.000Z`;
   const yesterdayUrl = 'https://x.com/example/status/2108148604447884101';
-  const olderUrl = 'https://x.com/example/status/2108148604447884102';
+  const priorUrl = 'https://x.com/example/status/2108148604447884102';
+  const olderUrl = 'https://x.com/example/status/2108148604447884103';
   const env = await environment([
     item(yesterdayUrl, {published_at:at(yesterday)}),
+    item(priorUrl, {published_at:at(prior)}),
     item(olderUrl, {published_at:at(older)}),
   ], {generated_at:null});
   const rejected = await call(env, 'POST', {url:olderUrl});
   assert.equal(rejected.status, 409);
   assert.equal((await rejected.json()).error, 'not_yesterday');
+  const priorPin = await (await call(env, 'POST', {url:priorUrl})).json();
+  assert.equal(priorPin.day, prior);
   const created = await call(env, 'POST', {url:yesterdayUrl});
   const pin = await created.json();
   assert.equal(created.status, 201);
   assert.equal(pin.day, yesterday);
+});
+
+test('a snapshot on Beijing 10-17 still pins 10-16 and 10-15, and refuses 10-14', async () => {
+  // 2026-10-16T16:30Z is 2026-10-17 00:30 in Asia/Shanghai, so 昨日全部 is 10-16.
+  const generated_at = '2026-10-16T16:30:00.000Z';
+  const kinUrl = 'https://x.com/KinGao476942/status/2110682653334868100';
+  const supermmUrl = 'https://x.com/supermm518/status/2110723386133614603';
+  const yesterdayUrl = 'https://x.com/example/status/2110682653334868200';
+  const olderUrl = 'https://x.com/example/status/2110682653334868099';
+  const env = await environment([
+    item(kinUrl, {published_at:'2026-10-15T02:00:00.000Z'}),
+    item(supermmUrl, {published_at:'2026-10-15T14:00:00.000Z'}),
+    item(yesterdayUrl, {published_at:'2026-10-16T02:00:00.000Z'}),
+    item(olderUrl, {published_at:'2026-10-14T02:00:00.000Z'}),
+  ], {generated_at});
+  const rejected = await call(env, 'POST', {url:olderUrl});
+  const rejectedBody = await rejected.json();
+  assert.equal(rejected.status, 409);
+  assert.equal(rejectedBody.error, 'not_yesterday');
+  assert.match(rejectedBody.message, /2026-10-14/);
+  assert.match(rejectedBody.message, /2026-10-16/);
+  assert.match(rejectedBody.message, /2026-10-15/);
+  assert.equal(env.DOT_INBOX.writes.length, 0);
+  const pinned = await call(env, 'POST', {urls:[kinUrl, supermmUrl, yesterdayUrl], note:'10-15 仍可钉'});
+  const body = await pinned.json();
+  assert.equal(pinned.status, 201);
+  assert.deepEqual(body.results.map(row => [row.url, row.day, row.existing]), [
+    [kinUrl, '2026-10-15', false],
+    [supermmUrl, '2026-10-15', false],
+    [yesterdayUrl, '2026-10-16', false],
+  ]);
 });
 
 test('a missing or undated public post is not pinned, a yesterday pool post is, and approval does not pin by itself', async () => {
