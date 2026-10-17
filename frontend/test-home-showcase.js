@@ -87,6 +87,32 @@ test('article-class KOSX cards show a delivered cover and a quote when the cover
   assert.match(css, /\.cover-photo\.cover-article figcaption/);
 });
 
+test('a short-post label still paints an X Article cover, while promo and pitfall labels do not', () => {
+  const cover = 'https://pbs.twimg.com/media/HUveR-KWoAAqi-k.jpg';
+  const article = post('4410', '2026-10-10T08:30:00.000Z', {
+    origin:'kosx_approved', review_type:'短帖', has_article:true, bookmark_count:5000,
+    title:'短帖标签的文章', cover_url:cover, summary:'文章正文还在。',
+    url:'https://x.com/jarvis11x/status/4410',
+  });
+  const promo = post('4411', '2026-10-10T08:00:00.000Z', {
+    origin:'kosx_approved', review_type:'产品安利', has_article:true, bookmark_count:5000,
+    title:'安利不显示封面', cover_url:cover, summary:'安利正文。',
+  });
+  const pitfall = post('4412', '2026-10-10T07:30:00.000Z', {
+    origin:'kosx_approved', review_type:'避坑', has_article:true, bookmark_count:5000,
+    title:'避坑不显示封面', cover_url:cover, summary:'避坑正文。',
+  });
+  const input = state([article, promo, pitfall]);
+  const html = renderHomeShowcase(app(), input);
+  assert.match(cardHtml(html, '4410'), /src="https:\/\/pbs\.twimg\.com\/media\/HUveR-KWoAAqi-k\.jpg"/);
+  assert.match(cardHtml(html, '4410'), /class="cover-photo cover-article"/);
+  assert.doesNotMatch(cardHtml(html, '4411'), /pbs\.twimg\.com|cover-photo/);
+  assert.doesNotMatch(cardHtml(html, '4412'), /pbs\.twimg\.com|cover-photo/);
+  const selected = selectHomeShowcase(input);
+  assert.equal(selected.kept.some(entry => entry.post.item.id === '4410'), false);
+  assert.equal(selected.week.some(entry => entry.post.item.id === '4410'), false);
+});
+
 test('homepage essence cards keep a cover image or a quote and never an empty attachment frame', () => {
   const member = 'ai_suxiaole';
   const withCover = post('9101', '2026-10-10T12:21:00.000Z', {

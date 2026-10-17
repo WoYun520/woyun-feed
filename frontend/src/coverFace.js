@@ -3,14 +3,17 @@ import { postStatusId } from './postStream.js';
 import { isReviewSignalCopy, stripIntakePipelineCopy } from './reviewQueue.js';
 
 const ARTICLE_TYPES = new Set(['文章', '教程指南']);
-const REJECT_TYPES = new Set(['短帖', '产品安利', '避坑']);
+const PROMO_TYPES = new Set(['产品安利', '避坑']);
 const KOSX_PUBLIC_SOURCE_ID = 'sopilot-kosx';
 
-// 文章类 for a cover: an article or tutorial, or an X Article card that is not
-// a short post, promo, or pitfall note. Excerpt clues do not count.
+// 文章类 for a cover: an article or tutorial, or an X Article card. A row pasted
+// as 短帖 still counts when has_article is set, so the article cover can paint.
+// 产品安利 and 避坑 stay text cards even if that flag is present. Excerpt clues
+// do not count.
 export function isArticleClassItem(item) {
   const type = typeof item?.review_type === 'string' ? item.review_type : '';
-  if (REJECT_TYPES.has(type)) return false;
+  if (PROMO_TYPES.has(type)) return false;
+  if (type === '短帖') return item?.has_article === true;
   return ARTICLE_TYPES.has(type) || item?.has_article === true;
 }
 

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { webcrypto } from 'node:crypto';
 import { dotInboxHash, handleDotInboxRequest } from '../dot-inbox-service.js';
 import { DOT_PENDING_BATCH_MAX, DOT_PENDING_DECISION_PATH, DOT_PENDING_MAX, DOT_PENDING_PATH, DOT_PENDING_PREFIX, handleDotPendingRequest } from '../dot-pending-service.js';
-import { excerptFromOembedHtml, excerptFromStatusPayload, fetchXStatusText } from './x-status-text.js';
+import { coverFromStatusPayload, excerptFromOembedHtml, excerptFromStatusPayload, faceFromStatusPayload, fetchXStatusText, statusHasArticle } from './x-status-text.js';
 import worker from '../worker.js';
 
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
@@ -335,10 +335,17 @@ test('a public status read fills missing paste text and does not call the paid X
   assert.equal(calls.length, 1);
   assert.equal(calls[0], `https://api.fxtwitter.com/status/${statusId}`);
   assert.equal(calls.some(url => /api\.x\.com|api\.twitter\.com|api\.socialdata\.tools|publish\.twitter\.com/.test(url)), false);
-  env.xStatusFetch = async () => { throw Error('should not read again'); };
+  assert.equal(row.cover_url, undefined);
+  assert.equal(row.has_article, undefined);
+  const photo = 'https://pbs.twimg.com/media/HUuVLsiXYAALwhs.jpg?name=orig';
+  env.xStatusFetch = async () => new Response(JSON.stringify({
+    tweet:{text:'另一段不应覆盖已经写下的正文', media:{photos:[{type:'photo', url:photo}]}},
+  }), {status:200, headers:{'Content-Type':'application/json'}});
   const again = await submit(env, {url:postUrl});
   assert.equal(again.status, 200);
   assert.equal(stored(env)[0].text, row.text);
+  assert.equal(stored(env)[0].cover_url, photo);
+  assert.equal(stored(env)[0].has_article, undefined);
 });
 
 test('a failed public read stays pending, marks the card, and a later read can fill the empty text', async () => {
@@ -368,11 +375,15 @@ test('a failed public read stays pending, marks the card, and a later read can f
   assert.equal((await refused.json()).message, '缺摘录不能上首页');
   assert.equal(stored(env)[0].status, 'pending');
   const delivered = '后来投递的正文，不应该被再读一次覆盖。';
-  env.xStatusFetch = async () => { throw Error('delivered text must not be fetched'); };
+  const photo = 'https://pbs.twimg.com/media/HUuVLsiXYAALwhs.jpg?name=orig';
+  env.xStatusFetch = async () => new Response(JSON.stringify({
+    tweet:{text:'公开读到的另一段不应替换投递正文', media:{photos:[{type:'photo', url:photo}]}},
+  }), {status:200, headers:{'Content-Type':'application/json'}});
   const filled = await submit(env, {url:postUrl, text:delivered}, {token:delivery});
   assert.equal(filled.status, 200);
   assert.equal(stored(env)[0].text, delivered);
   assert.equal(stored(env)[0].text_fill_failed, undefined);
+  assert.equal(stored(env)[0].cover_url, photo);
 });
 
 test('oEmbed, note tweets, and article text decode, and a failed read stays empty', async () => {
@@ -401,4 +412,119 @@ test('oEmbed, note tweets, and article text decode, and a failed read stays empt
   assert.match(calls[1], /token=/);
   assert.equal(await fetchXStatusText('https://example.com/not-a-status', async () => { throw Error('no'); }), '');
   assert.equal(await fetchXStatusText(postUrl, async () => { throw Error('down'); }, {retryDelayMs:0}), '');
+});
+
+test('a public status cover prefers an article image, then a photo, then a video thumbnail', () => {
+  const articleCover = 'https://pbs.twimg.com/media/HUveR-KWoAAqi-k.jpg';
+  const photo = 'https://pbs.twimg.com/media/HUuVLsiXYAALwhs.jpg?name=orig';
+  const thumb = 'https://pbs.twimg.com/amplify_video_thumb/2109860194310057984/img/o1qpYw5cwx_PR2Vy.jpg';
+  const mp4 = 'https://video.twimg.com/amplify_video/2109860194310057984/vid/avc1/1280x720/ei4dK2liLW93YYFe.mp4?tag=29';
+  const article = {
+    tweet:{
+      text:'短状态',
+      twitter_card:'tweet',
+      article:{
+        title:'稳定出片的记录',
+        preview_text:'短预览',
+        cover_media:{media_info:{original_img_url:articleCover}},
+      },
+      media:{photos:[{type:'photo', url:photo}]},
+    },
+  };
+  assert.equal(coverFromStatusPayload(article), articleCover);
+  assert.equal(statusHasArticle(article), true);
+  assert.equal(faceFromStatusPayload(article).article_title, '稳定出片的记录');
+  assert.equal(coverFromStatusPayload({
+    article:{cover_media:{media_info:{original_img_url:articleCover}}, title:'同步卡片'},
+    text:'syndication 正文',
+  }), articleCover);
+  assert.equal(coverFromStatusPayload({
+    tweet:{text:'照片', twitter_card:'summary_large_image', media:{photos:[{type:'photo', url:photo}], videos:[{type:'video', url:mp4, thumbnail_url:thumb}]}},
+  }), photo);
+  assert.equal(statusHasArticle({tweet:{twitter_card:'summary_large_image', text:'照片'}}), false);
+  assert.equal(coverFromStatusPayload({
+    tweet:{text:'视频', twitter_card:'player', media:{videos:[{type:'video', url:mp4, thumbnail_url:thumb}]}},
+  }), thumb);
+  assert.equal(coverFromStatusPayload({
+    card:{binding_values:{photo_image_full_size_original:{image_value:{url:'https://pbs.twimg.com/card_img/card-face.jpg'}}}},
+    text:'卡片',
+  }), 'https://pbs.twimg.com/card_img/card-face.jpg');
+  assert.equal(statusHasArticle({card:{name:'article'}}), true);
+  assert.equal(coverFromStatusPayload({
+    article:{cover_media:{media_info:{original_img_url:'https://pbs.twimg.com/media/secret.jpg?token=abcdefghijklmnop'}}},
+    media:{photos:[{type:'photo', url:photo}]},
+  }), photo);
+  assert.equal(coverFromStatusPayload({
+    media:{photos:[{type:'photo', url:'http://pbs.twimg.com/media/HUuVLsiXYAALwhs.jpg'}]},
+  }), '');
+  assert.equal(coverFromStatusPayload({
+    media:{videos:[{type:'video', url:mp4}]},
+  }), '');
+  assert.equal(faceFromStatusPayload(null).cover_url, '');
+});
+
+test('homepage paste fills an article cover, has_article, and a blank note without replacing a human promo type', async () => {
+  const env = await environment();
+  const articleCover = 'https://pbs.twimg.com/media/HUveR-KWoAAqi-k.jpg';
+  const body = '这一段只是文章正文，用来补上封面卡的摘录，并且比状态行更长一些。';
+  const calls = [];
+  env.xStatusFetch = async endpoint => {
+    calls.push(String(endpoint));
+    return new Response(JSON.stringify({
+      tweet:{
+        text:'短状态 https://x.com/i/article/1',
+        article:{
+          title:'稳定出片的记录',
+          preview_text:'短预览',
+          cover_media:{media_info:{original_img_url:articleCover}},
+          content:{blocks:[{text:body}]},
+        },
+      },
+    }), {status:200, headers:{'Content-Type':'application/json'}});
+  };
+  const created = await submit(env, {url:postUrl});
+  assert.equal(created.status, 201);
+  const row = stored(env)[0];
+  assert.equal(row.text.includes(body), true);
+  assert.equal(row.cover_url, articleCover);
+  assert.equal(row.has_article, true);
+  assert.equal(row.note, '稳定出片的记录');
+  assert.equal(row.review_type, '文章');
+  assert.equal(calls.length, 1);
+  assert.equal(calls.some(url => /api\.socialdata\.tools|api\.x\.com/.test(url)), false);
+  let extra = 0;
+  env.xStatusFetch = async () => { extra += 1; throw Error('cover already stored'); };
+  const again = await submit(env, {url:postUrl});
+  assert.equal(again.status, 200);
+  assert.equal(extra, 0);
+  assert.equal(stored(env)[0].cover_url, articleCover);
+  assert.equal(stored(env)[0].note, '稳定出片的记录');
+
+  const promo = await environment();
+  const promoUrl = 'https://x.com/example/status/2108148604447883988';
+  promo.xStatusFetch = async () => new Response(JSON.stringify({
+    tweet:{
+      text:body,
+      article:{title:'不要改成文章', cover_media:{media_info:{original_img_url:articleCover}}},
+    },
+  }), {status:200, headers:{'Content-Type':'application/json'}});
+  const labeled = await submit(promo, {url:promoUrl, review_type:'产品安利', note:'明确安利', has_article:false}, {token:delivery});
+  assert.equal(labeled.status, 201);
+  const promoRow = stored(promo)[0];
+  assert.equal(promoRow.review_type, '产品安利');
+  assert.equal(promoRow.has_article, false);
+  assert.equal(promoRow.cover_url, articleCover);
+  assert.equal(promoRow.note, '明确安利');
+
+  const pitfall = await environment();
+  const pitfallUrl = 'https://x.com/example/status/2108148604447883987';
+  pitfall.xStatusFetch = async () => new Response(JSON.stringify({
+    tweet:{text:body, article:{title:'避坑标题', cover_media:{media_info:{original_img_url:articleCover}}}},
+  }), {status:200, headers:{'Content-Type':'application/json'}});
+  const keptType = await submit(pitfall, {url:pitfallUrl, review_type:'避坑'}, {token:delivery});
+  assert.equal(keptType.status, 201);
+  assert.equal(stored(pitfall)[0].review_type, '避坑');
+  assert.equal(stored(pitfall)[0].has_article, true);
+  assert.equal(stored(pitfall)[0].cover_url, articleCover);
+  assert.equal(stored(pitfall)[0].note, '避坑标题');
 });
