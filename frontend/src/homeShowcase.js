@@ -106,6 +106,9 @@ function shelfHeat(entry) {
 function pickKept(entries) {
   const articles = entries.filter(entry => {
     const item = shelfItem(entry);
+    // 最新精华 can paint an X Article that is still labeled 短帖. This shelf
+    // keeps that label out, matching the note that short posts do not enter.
+    if (item?.review_type === '短帖') return false;
     return isHomepageEssence(item) && isArticleClassItem(item);
   });
   const kept = articles.filter(entry => {

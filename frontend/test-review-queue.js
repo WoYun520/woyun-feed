@@ -939,3 +939,61 @@ test('an original outside the five Beijing-day latest window stays off 最新精
   assert.equal(home.kept.some(entry => entry.post.item.original_url === keptUrl), true);
   assert.match(renderFeed(env.PUBLIC_FEED.json()), /id="home-latest"/);
 });
+
+test('re-delivery fills a missing article cover on an approved short post and the latest rail paints it', async () => {
+  const env = await environment();
+  const url = 'https://x.com/jarvis11x/status/2111026168526746057';
+  const excerpt = '用Muse做了近500个视频，我终于找到了稳定出片的版本。';
+  const created = await (await submit(env, {
+    url, review_type:'短帖', text:excerpt, note:'@jarvis11x 的精华帖', published_at:'2026-10-10T08:00:00.000Z',
+  })).json();
+  assert.equal(created.review_type, '短帖');
+  assert.equal(Object.hasOwn(created, 'cover_url'), false);
+  assert.equal(Object.hasOwn(created, 'has_article'), false);
+  const approved = await (await decide(env, {url, status:'approved'})).json();
+  assert.equal(approved.published, true);
+  const before = env.PUBLIC_FEED.json().items.find(item => item.original_url === url);
+  assert.equal(before.cover_url, undefined);
+  assert.equal(before.review_type, '短帖');
+  assert.doesNotMatch(renderFeed(env.PUBLIC_FEED.json()), /HUveR-KWoAAqi-k/);
+
+  const cover = 'https://pbs.twimg.com/media/HUveR-KWoAAqi-k.jpg';
+  env.xStatusFetch = async endpoint => {
+    assert.equal(String(endpoint).startsWith('https://api.fxtwitter.com/status/'), true);
+    assert.equal(/socialdata|api\.x\.com/.test(String(endpoint)), false);
+    return new Response(JSON.stringify({
+      tweet:{
+        text:'后来的公开正文不应覆盖',
+        article:{
+          title:'稳定出片的记录',
+          cover_media:{media_info:{original_img_url:cover}},
+          content:{blocks:[{text:'更长的文章正文，不应该替换已经写下的摘录。'}]},
+        },
+      },
+    }), {status:200, headers:{'Content-Type':'application/json'}});
+  };
+  const filled = await (await submit(env, {url})).json();
+  assert.equal(filled.status, 'approved');
+  assert.equal(filled.review_type, '短帖');
+  assert.equal(filled.has_article, true);
+  assert.equal(filled.cover_url, cover);
+  assert.equal(filled.text, excerpt);
+  assert.equal(filled.note, '稳定出片的记录');
+  assert.equal(filled.reviewed_at, approved.reviewed_at);
+  const after = env.PUBLIC_FEED.json().items.find(item => item.original_url === url);
+  assert.equal(after.cover_url, cover);
+  assert.equal(after.has_article, true);
+  assert.equal(after.review_type, '短帖');
+  assert.match(renderFeed(env.PUBLIC_FEED.json()), /src="https:\/\/pbs\.twimg\.com\/media\/HUveR-KWoAAqi-k\.jpg"/);
+
+  let reread = 0;
+  env.xStatusFetch = async () => { reread += 1; throw Error('cover already stored'); };
+  const kept = await (await submit(env, {
+    url, cover_url:'https://pbs.twimg.com/media/HUuVLsiXYAALwhs.jpg', has_article:false, review_type:'避坑', note:'不要改备注',
+  })).json();
+  assert.equal(reread, 0);
+  assert.equal(kept.cover_url, cover);
+  assert.equal(kept.has_article, true);
+  assert.equal(kept.review_type, '短帖');
+  assert.equal(kept.note, '稳定出片的记录');
+});

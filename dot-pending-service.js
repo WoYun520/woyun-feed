@@ -11,7 +11,7 @@ import { REVIEW_COUNT_MAX, REVIEW_TEXT_MAX, REVIEW_TYPES, classifyReviewItem } f
 import { homepageCardExcerpt, usableCardTitle } from './frontend/src/homeShowcaseView.js';
 import { pendingBlankFace, usableExcerptText } from './frontend/src/coverFace.js';
 import { shouldAutoApprove } from './frontend/essence-schedule.js';
-import { fetchXStatusText } from './frontend/x-status-text.js';
+import { fetchXStatusFace } from './frontend/x-status-text.js';
 
 export const MISSING_EXCERPT_MESSAGE = '缺摘录不能上首页';
 export const DOT_PENDING_PATH = '/api/dot/pending';
@@ -525,33 +525,60 @@ function intakeExcerptPresent(value) {
   return ['text', 'summary', 'excerpt', 'body'].some(key => usableExcerptText(value[key]));
 }
 
+function knownArticle(value) {
+  return value?.has_article === true || value?.has_article === false;
+}
+
+function articleNote(title) {
+  if (typeof title !== 'string' || containsCredentialText(title)) return '';
+  const line = title.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, MAX_NOTE);
+  return line && !blankFaceNote(line) ? line : '';
+}
+
 // Homepage paste and delivery often arrive with only a link. Read the public
-// status text when this body and the stored row both lack text, summary,
-// excerpt, and body. An existing text field stays; mergeIntakeTimes still
-// fills an absent one and clears a previous failed-fill mark.
-async function fillAbsentStatusText(env, posts, existing) {
+// status when text or cover_url is still absent on both this body and the
+// stored row. Text, cover_url, and has_article stay fill-if-absent. A real
+// note stays; a blank face note can take the article title once. An existing
+// cover is not replaced. Rejected rows are left unread.
+async function fillAbsentStatusFace(env, posts, existing) {
   const fetchImpl = statusReader(env);
   if (!fetchImpl) return posts;
   return Promise.all(posts.map(async post => {
-    if (intakeExcerptPresent(post)) return post;
     const stored = existing.get(post.key);
-    if (intakeExcerptPresent(stored)) return post;
-    let raw = '';
-    try { raw = await fetchXStatusText(post.url, fetchImpl); }
-    catch { raw = ''; }
-    let text = '';
-    if (raw) {
-      try { text = cleanText(raw, true) || ''; }
-      catch { text = ''; }
+    if (stored?.status === 'rejected') return post;
+    const textMissing = !intakeExcerptPresent(post) && !intakeExcerptPresent(stored);
+    const coverMissing = !normalizeCoverUrl(post.cover_url) && !normalizeCoverUrl(stored?.cover_url);
+    if (!textMissing && !coverMissing) return post;
+    let face = {text:'', cover_url:'', has_article:false, article_title:''};
+    try { face = await fetchXStatusFace(post.url, fetchImpl) || face; }
+    catch { face = {text:'', cover_url:'', has_article:false, article_title:''}; }
+    const next = {...post};
+    if (textMissing) {
+      let text = '';
+      if (face.text) {
+        try { text = cleanText(face.text, true) || ''; }
+        catch { text = ''; }
+      }
+      if (usableExcerptText(text)) {
+        next.text = text;
+        delete next.text_fill_failed;
+      }
     }
-    if (usableExcerptText(text)) {
-      const next = {...post, text};
-      delete next.text_fill_failed;
-      return next;
+    if (coverMissing) {
+      const cover = normalizeCoverUrl(face.cover_url);
+      if (cover) next.cover_url = cover;
     }
-    const face = {...(stored || {}), ...post, note:blankFaceNote(post.note) ? (stored?.note || '') : post.note};
-    if (pendingBlankFace(face)) return {...post, text_fill_failed:true};
-    return post;
+    if (!knownArticle(post) && !knownArticle(stored) && face.has_article === true) next.has_article = true;
+    if (blankFaceNote(post.note) && (!stored || blankFaceNote(stored.note))) {
+      const note = articleNote(face.article_title);
+      if (note) next.note = note;
+    }
+    if (textMissing && !usableExcerptText(next.text)) {
+      const note = blankFaceNote(next.note) ? (stored?.note || '') : next.note;
+      const preview = {...(stored || {}), ...next, note};
+      if (pendingBlankFace(preview)) next.text_fill_failed = true;
+    }
+    return next;
   }));
 }
 
@@ -773,7 +800,7 @@ export async function handleDotPendingRequest(request, env) {
       const stored = await readStored(env, post.key);
       if (stored) existing.set(post.key, stored);
     }
-    const posts = await fillAbsentStatusText(env, parsed.posts, existing);
+    const posts = await fillAbsentStatusFace(env, parsed.posts, existing);
     const {batched} = parsed;
     const created = posts.filter(post => !existing.has(post.key));
     if (created.length && await pendingCount(env) + created.length > DOT_PENDING_MAX) return json({error:'queue_full', message:'待筛选已满，请先处理已有链接。'}, 409);
