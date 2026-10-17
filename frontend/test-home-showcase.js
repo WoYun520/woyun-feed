@@ -279,9 +279,15 @@ test('昨日全部 is homepage essence for that Beijing day, and underrated is p
   assert.deepEqual(pinned.underrated.map(entry => entry.post.item.id), [pooled.id, sourced.id]);
   const one = selectHomeShowcase({...input, underratedPins:[pin(human, '2026-10-09')]});
   assert.deepEqual(one.underrated.map(entry => entry.post.item.id), [human.id]);
-  const missed = selectHomeShowcase({...input, underratedPins:[pin(stream, '2026-10-09'), pin(otherDay, '2026-10-08')]});
+  const prior = selectHomeShowcase({...input, underratedPins:[pin(otherDay, '2026-10-08')]});
+  assert.equal(prior.underratedRule, 'pinned');
+  assert.deepEqual(prior.underrated.map(entry => entry.post.item.id), [otherDay.id]);
+  const older = post('20700111', '2026-10-07T08:00:00.000Z', {origin:'kosx_approved', title:'更早的精华'});
+  const missed = selectHomeShowcase({...input, allItems:[...items, older], underratedPins:[pin(stream, '2026-10-09'), pin(older, '2026-10-07')]});
   assert.equal(missed.underratedRule, 'empty');
   assert.deepEqual(missed.underrated, []);
+  const capped = selectHomeShowcase({...input, underratedPins:[pin(otherDay, '2026-10-08'), pin(human, '2026-10-09'), pin(sourced, '2026-10-09')]});
+  assert.deepEqual(capped.underrated.map(entry => entry.post.item.id), [otherDay.id, human.id]);
   const page = renderHomeShowcase(app('yesterday'), input);
   assert.match(page, /已经放上公开首页的精华帖/);
   assert.match(page, /过审精华/);
@@ -302,6 +308,41 @@ test('昨日全部 is homepage essence for that Beijing day, and underrated is p
   assert.doesNotMatch(pooledBand, /榜单帖/);
   const quiet = renderHomeShowcase(app(), input);
   assert.doesNotMatch(quiet, /id="home-underrated"|昨日最被低估精华帖/);
+});
+
+test('a pin from the day before 昨日全部 still appears on 昨日最被低估', () => {
+  const generated_at = '2026-10-16T16:30:00.000Z';
+  const kin = post('2110682653334868100', '2026-10-15T02:00:00.000Z', {
+    origin:'kosx_approved', author_handle:'KinGao476942', title:'KinGao 10-15',
+    url:'https://x.com/KinGao476942/status/2110682653334868100',
+  });
+  const supermm = post('2110723386133614603', '2026-10-15T14:00:00.000Z', {
+    origin:'kosx_approved', author_handle:'supermm518', title:'supermm 10-15',
+    url:'https://x.com/supermm518/status/2110723386133614603',
+  });
+  const yesterdayPost = post('2110800000000000001', '2026-10-16T02:00:00.000Z', {origin:'kosx_approved', title:'10-16 精华'});
+  const older = post('2110500000000000001', '2026-10-14T02:00:00.000Z', {origin:'kosx_approved', title:'10-14 精华'});
+  const stream = post('2110500000000000002', '2026-10-15T03:00:00.000Z', {title:'榜单不是精华'});
+  const input = {
+    ...state([kin, supermm, yesterdayPost, older, stream]),
+    generated_at,
+    sources:[source, {id:'sopilot-kosx', name:'KOSX 过审', group:'posts', link_kind:'post', status:'ok', enabled:true}],
+  };
+  const selected = selectHomeShowcase(input);
+  assert.equal(selected.reference.dateKey, '2026-10-17');
+  assert.equal(selected.reference.yesterday, '2026-10-16');
+  assert.deepEqual(selected.yesterday.map(entry => entry.post.item.id), [yesterdayPost.id]);
+  assert.equal(selected.underratedRule, 'empty');
+  const pin = (item, day) => ({id:item.id, key:`x:${item.id}`, url:item.original_url, day});
+  const shown = selectHomeShowcase({...input, underratedPins:[pin(kin, '2026-10-15'), pin(supermm, '2026-10-15'), pin(yesterdayPost, '2026-10-16')]});
+  assert.equal(shown.underratedRule, 'pinned');
+  assert.deepEqual(shown.underrated.map(entry => entry.post.item.id), [kin.id, supermm.id]);
+  const priorOnly = selectHomeShowcase({...input, underratedPins:[pin(supermm, '2026-10-15'), pin(older, '2026-10-14'), pin(stream, '2026-10-15')]});
+  assert.deepEqual(priorOnly.underrated.map(entry => entry.post.item.id), [supermm.id]);
+  const html = renderHomeShowcase(app(), {...input, underratedPins:[pin(kin, '2026-10-15')]});
+  assert.match(html, /id="home-underrated"/);
+  assert.match(html, /KinGao 10-15/);
+  assert.doesNotMatch(html, /10-14 精华|榜单不是精华/);
 });
 
 test('public feed pins reach the homepage through the adapter', () => {

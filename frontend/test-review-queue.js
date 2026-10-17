@@ -144,7 +144,7 @@ test('missing type is classified from the note or text, and a later duplicate do
   assert.equal((await fromNote.json()).review_type, '文章');
 });
 
-test('approval pins 进低估 only when the original day is yesterday', async () => {
+test('approval pins 进低估 for yesterday and leaves an older day on the homepage only', async () => {
   const env = await environment();
   const before = showcase(env.PUBLIC_FEED.json());
   await submit(env, {url:postUrl, note:'一篇教程', review_type:'教程指南', bookmark_count:9, like_count:4, has_article:false});
@@ -166,7 +166,7 @@ test('approval pins 进低估 only when the original day is yesterday', async ()
   assert.equal(await overlayPublicUnderratedPins(env.PUBLIC_FEED.raw, env), env.PUBLIC_FEED.raw);
 
   const second = 'https://x.com/example/status/2108148604447884012';
-  await submit(env, {url:second, has_article:true, bookmark_count:20, like_count:10, text:'长文', published_at:'2026-10-08T04:00:00.000Z'});
+  await submit(env, {url:second, has_article:true, bookmark_count:20, like_count:10, text:'长文', published_at:'2026-10-07T04:00:00.000Z'});
   const marked = await decide(env, {url:second, status:'approved', underrated_candidate:true, review_type:'文章'});
   const markedBody = await marked.json();
   assert.equal(markedBody.underrated_candidate, true);
@@ -763,8 +763,11 @@ test('a pool re-delivery fills a missing bookmark_count onto the public item for
 
 test('worker public feed reads do not grow an underrated pin just because a candidate flag exists', async () => {
   const env = await environment();
-  await submit(env, {url:postUrl, has_article:true});
-  assert.equal((await decide(env, {url:postUrl, status:'approved', underrated_candidate:true})).status, 200);
+  await submit(env, {url:postUrl, has_article:true, published_at:'2026-10-07T04:00:00.000Z'});
+  const decided = await (await decide(env, {url:postUrl, status:'approved', underrated_candidate:true})).json();
+  assert.equal(decided.published, true);
+  assert.equal(decided.pinned, false);
+  assert.equal(decided.pin_code, 'not_yesterday');
   const raw = await env.PUBLIC_FEED.get(PUBLIC_FEED_KEY);
   assert.equal(await overlayPublicUnderratedPins(raw, env), raw);
   assert.equal(raw.includes('underrated_pins'), false);

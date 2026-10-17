@@ -9,7 +9,6 @@
 - 满 1 小时仍是 `pending` 时，定时任务会标成 `approved`，`approval` 为 `auto`，并写入公开首页。刚好 1 小时还不算超过。贴链接和投递、池内和池外都参加。这一步不钉「昨日最被低估」。人用接收码先处理的，走 [待筛选过审](pending-review.md)，`approval` 为 `review`。
 
 已经 `rejected` 的链接不会被重新打开。已经 `approved` 的链接不改原来的过审时间。首页先贴过的同一条，来源仍记为 `homepage`。之后即使用投递密钥再送一次，也不会当场过审；满 1 小时仍未人工处理时，和投递一样自动过审。以前已经以 `approval: "pool"` 放上首页的旧行留在线上，这次进料不会新写这种标记。
-
 预览地址是熟人软启动：`https://woyun-feed-preview.hhzovo66.workers.dev/`。把改动推进 Git 不会自动部署。发布只打 Worker `woyun-feed-preview`。不要部署名为 `woyun` 的 Worker。线上是否已经包含某次提交，以最近一次预览部署为准。
 
 ## 给 Overheard 的调用
@@ -96,7 +95,6 @@ node frontend/refresh-kosx-pool.mjs
 - `status: "rejected"`：这条已经被略过，重复 POST 不会把它放回首页。
 
 首页「贴链接」没有 `pool` 和 `published`。它只进入待筛选，来源是 `homepage`。满 1 小时仍未人工处理，也会自动过审。
-
 ## 首页贴链接
 
 浏览器只提交 `{"url":"https://x.com/..."}`，不带 `Authorization`，也不带备注或 `items`。没有投递密钥时，备注和批量都会得到 `401`，提示「带备注或批量提交需要投递密钥。」
@@ -106,5 +104,4 @@ node frontend/refresh-kosx-pool.mjs
 浏览器不保存、不发送投递密钥或接收码。Worker 必须已经配置 `DOT_DELIVERY_TOKEN_HASH` 和 `DOT_REVIEW_TOKEN_HASH`，而且两把哈希不同。缺配置时 `/api/dot/pending` 与 `/api/dot/inbox` 一样返回 `503`，不回退到公开文件。本机 `node frontend/serve.js` 没有这条路由，贴链接在纯静态本地服务上会失败；要打到已部署的预览 Worker。
 
 无密钥的单条提交是公开的：任何能访问该地址的客户端都可以放入一条 X 链接。这个 POST 只能进入待筛选，队列有 300 条上限，不能读取备注，也不当场写公开首页。满 1 小时仍未人工处理时，定时任务会把它标成 `approved`（`approval` 为 `auto`）并写入公开首页。已经过审或已略过的链接再贴一次，不会被退回 `pending`。
-
 过审和从首页撤回见 [待筛选过审](pending-review.md)。
