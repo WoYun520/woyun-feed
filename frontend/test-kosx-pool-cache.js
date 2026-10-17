@@ -98,8 +98,9 @@ test('a stale delivery refreshes the pool, drops follower counts, and then trust
   const body = await created.json();
   assert.equal(created.status, 201);
   assert.equal(body.pool, true);
-  assert.equal(body.published, true);
-  assert.equal(body.approval, 'pool');
+  assert.equal(body.status, 'pending');
+  assert.equal(body.published, false);
+  assert.equal(body.approval, undefined);
   assert.equal(calls, 1);
   const stored = cacheRaw(env);
   assert.equal(stored.includes('863701'), false);
@@ -107,9 +108,10 @@ test('a stale delivery refreshes the pool, drops follower counts, and then trust
   assert.equal(stored.includes('display_name'), false);
   assert.equal(stored.includes('oldcache1'), false);
   assert.match(stored, /poolnewbie1/);
-  const item = env.PUBLIC_FEED.json().items.find(entry => entry.original_url.toLowerCase() === 'https://x.com/poolnewbie1/status/2108148604447883555');
-  assert.equal(JSON.stringify(item).includes('latest_followers'), false);
-  assert.equal(JSON.stringify(item).includes('863701'), false);
+  assert.equal(env.PUBLIC_FEED.json().items.some(entry => entry.original_url?.toLowerCase() === 'https://x.com/poolnewbie1/status/2108148604447883555'), false);
+  const queued = [...env.DOT_INBOX.values.values()].map(entry => entry.raw).join('\n');
+  assert.equal(queued.includes('latest_followers'), false);
+  assert.equal(queued.includes('863701'), false);
   const left = await (await submit(env, post(member, '2108148604447883556'))).json();
   assert.equal(left.pool, false);
   assert.equal(left.status, 'pending');
@@ -125,8 +127,9 @@ test('a failed roster fetch keeps the last cache and still accepts the delivery'
   const body = await created.json();
   assert.equal(created.status, 201);
   assert.equal(body.pool, true);
-  assert.equal(body.published, true);
-  assert.equal(body.approval, 'pool');
+  assert.equal(body.status, 'pending');
+  assert.equal(body.published, false);
+  assert.equal(body.approval, undefined);
   const committed = await (await submit(env, post(member, '2108148604447883556'))).json();
   assert.equal(committed.pool, false);
   assert.equal(committed.published, false);
@@ -146,8 +149,9 @@ test('with no usable cache, a failed roster fetch uses the committed list and do
   const knownBody = await known.json();
   assert.equal(known.status, 201);
   assert.equal(knownBody.pool, true);
-  assert.equal(knownBody.published, true);
-  assert.equal(knownBody.approval, 'pool');
+  assert.equal(knownBody.status, 'pending');
+  assert.equal(knownBody.published, false);
+  assert.equal(knownBody.approval, undefined);
   assert.equal(calls, 2);
   assert.equal(cacheRaw(env).includes('latest_followers'), true);
   const empty = await environment(async () => { throw Error('roster down'); });
@@ -156,7 +160,9 @@ test('with no usable cache, a failed roster fetch uses the committed list and do
   assert.equal(outsider.pool, false);
   const fallback = await (await submit(empty, post(member, '2108148604447883556'))).json();
   assert.equal(fallback.pool, true);
-  assert.equal(fallback.published, true);
+  assert.equal(fallback.status, 'pending');
+  assert.equal(fallback.published, false);
+  assert.equal(fallback.approval, undefined);
   assert.equal(cacheRaw(empty), undefined);
 });
 

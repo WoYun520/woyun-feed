@@ -525,13 +525,18 @@ test('approved public items keep intake signals and the original post time for t
   assert.equal(Object.hasOwn(bare, 'like_count'), false);
 
   const pooled = await (await submit(env, {url:poolPost, note:'池内摘录', review_type:'教程指南', bookmark_count:320, like_count:11, has_article:false, published_at:posted})).json();
-  assert.equal(pooled.status, 'approved');
-  assert.equal(pooled.approval, 'pool');
-  assert.equal(pooled.published, true);
+  assert.equal(pooled.status, 'pending');
+  assert.equal(pooled.approval, undefined);
+  assert.equal(pooled.published, false);
+  assert.equal(pooled.pool, true);
+  assert.equal(env.PUBLIC_FEED.json().items.some(item => item.original_url === poolPost), false);
+  const poolDecision = await (await decide(env, {url:poolPost, status:'approved'})).json();
+  assert.equal(poolDecision.approval, 'review');
   const poolItem = env.PUBLIC_FEED.json().items.find(item => item.original_url === poolPost);
-  assert.equal(poolItem.kosx_review, 'pool');
+  assert.equal(poolItem.kosx_review, undefined);
   assert.equal(poolItem.published_at, posted);
-  assert.notEqual(poolItem.published_at, pooled.reviewed_at);
+  assert.notEqual(poolItem.published_at, poolDecision.reviewed_at);
+  assert.equal(poolItem.source_item_time, poolDecision.reviewed_at);
   assert.equal(poolItem.bookmark_count, 320);
   assert.equal(poolItem.like_count, 11);
   assert.equal(poolItem.review_type, '教程指南');
@@ -540,7 +545,9 @@ test('approved public items keep intake signals and the original post time for t
   const held = await (await submit(env, {url:yesterdayPool, note:'昨天会进封面', review_type:'文章', bookmark_count:500, has_article:true, published_at:'2026-10-09T02:00:00.000Z'})).json();
   assert.equal(held.status, 'pending');
   assert.equal(held.published, false);
-  assert.match(held.message, /昨日最被低估/);
+  assert.equal(held.pool, true);
+  assert.match(held.message, /待筛选/);
+  assert.match(held.message, /1 小时/);
   assert.equal(env.PUBLIC_FEED.json().items.some(item => item.original_url === yesterdayPool), false);
 
   const home = showcase(env.PUBLIC_FEED.json());
@@ -715,9 +722,12 @@ test('a pool re-delivery fills a missing bookmark_count onto the public item for
   const poolHandle = KOSX_POOL_HANDLES[0];
   const url = `https://x.com/${poolHandle}/status/2108148604447884306`;
   const created = await (await submit(env, {url, review_type:'文章', note:'池内文章，热度后补'})).json();
-  assert.equal(created.status, 'approved');
-  assert.equal(created.approval, 'pool');
+  assert.equal(created.status, 'pending');
+  assert.equal(created.approval, undefined);
+  assert.equal(created.published, false);
   assert.equal(Object.hasOwn(created, 'bookmark_count'), false);
+  const approved = await (await decide(env, {url, status:'approved'})).json();
+  assert.equal(approved.approval, 'review');
   const before = env.PUBLIC_FEED.json().items.find(item => item.original_url === url);
   assert.equal(Object.hasOwn(before, 'bookmark_count'), false);
   assert.equal(before.review_type, '文章');
@@ -730,7 +740,7 @@ test('a pool re-delivery fills a missing bookmark_count onto the public item for
   })).json();
   assert.equal(again.existing, true);
   assert.equal(again.status, 'approved');
-  assert.equal(again.reviewed_at, created.reviewed_at);
+  assert.equal(again.reviewed_at, approved.reviewed_at);
   assert.equal(again.bookmark_count, 260);
   assert.equal(again.like_count, 4);
   assert.equal(again.review_type, '文章');
@@ -744,8 +754,8 @@ test('a pool re-delivery fills a missing bookmark_count onto the public item for
   assert.equal(after.has_article, false);
   assert.equal(after.published_at, posted);
   assert.notEqual(after.published_at, before.published_at);
-  assert.equal(after.source_item_time, created.reviewed_at);
-  assert.equal(after.captured_at, created.reviewed_at);
+  assert.equal(after.source_item_time, approved.reviewed_at);
+  assert.equal(after.captured_at, approved.reviewed_at);
   const home = showcase(env.PUBLIC_FEED.json());
   assert.equal(home.weekRule, 'bookmarks');
   assert.equal(home.week.some(entry => entry.post.originalUrl === url && entry.post.item.bookmark_count === 260), true);
@@ -865,9 +875,12 @@ test('delivery stores a cover, copies it onto the public item, and a later deliv
   const pooled = await (await submit(env, {
     url:poolUrl, review_type:'教程指南', bookmark_count:320, cover_url:cover, published_at:'2026-10-08T04:00:00.000Z',
   })).json();
-  assert.equal(pooled.status, 'approved');
-  assert.equal(pooled.approval, 'pool');
+  assert.equal(pooled.status, 'pending');
+  assert.equal(pooled.approval, undefined);
+  assert.equal(pooled.published, false);
   assert.equal(pooled.cover_url, storedCover);
+  assert.equal(env.PUBLIC_FEED.json().items.some(item => item.original_url === poolUrl), false);
+  assert.equal((await decide(env, {url:poolUrl, status:'approved'})).status, 200);
   assert.equal(env.PUBLIC_FEED.json().items.find(item => item.original_url === poolUrl).cover_url, storedCover);
 });
 

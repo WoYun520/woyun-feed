@@ -18,7 +18,7 @@ export function kosxPublicSource() {
     link_kind:'post',
     status:'ok',
     enabled:true,
-    message:'账号池成员的最新精华帖按时间放上首页；其余链接经接收码过审。未读取原文，未核对热度。不按粉丝数排序。',
+    message:'精华帖经接收码过审，或满 1 小时仍未处理时自动过审，再按时间放上首页。账号池进料不当场公开。未读取原文，未核对热度。不按粉丝数排序。',
     reading_note:'这不是 SoPilot 榜单，也不按粉丝数排序。昨日最被低估必须人工过审。',
   };
 }

@@ -124,32 +124,45 @@ test('pool cover order is chronological and pool posts never enter the underrate
   assert.equal(wouldEnterUnderrated(humanState, 'kosx-1'), true);
 });
 
-test('a pool delivery publishes onto the homepage and a repeat keeps the same time', async () => {
+test('a pool delivery stays pending, and review publishes it without changing the original time', async () => {
   const env = await environment();
   const created = await submit(env, {url:`https://twitter.com/${poolHandle.toUpperCase()}/status/2108148604447883555`, note:'池内这条'}, {token:delivery});
   const body = await created.json();
   assert.equal(created.status, 201);
-  assert.equal(body.status, 'approved');
-  assert.equal(body.published, true);
+  assert.equal(body.status, 'pending');
+  assert.equal(body.published, false);
   assert.equal(body.pool, true);
-  assert.equal(body.approval, 'pool');
+  assert.equal(body.approval, undefined);
   assert.equal(body.existing, false);
   assert.equal(body.author_handle.toLowerCase(), poolHandle);
+  assert.match(body.message, /待筛选/);
+  assert.match(body.message, /1 小时/);
+  assert.equal(env.PUBLIC_FEED.writes.length, 0);
+  assert.equal(env.PUBLIC_FEED.json().items.some(entry => entry.original_url?.toLowerCase() === poolUrl), false);
+  const again = await (await submit(env, {url:poolUrl}, {token:delivery})).json();
+  assert.equal(again.existing, true);
+  assert.equal(again.status, 'pending');
+  assert.equal(again.published, false);
+  assert.equal(again.submitted_at, body.submitted_at);
+  assert.equal(env.PUBLIC_FEED.writes.length, 0);
+  const approved = await (await decide(env, {url:poolUrl, status:'approved'})).json();
+  assert.equal(approved.approval, 'review');
+  assert.equal(approved.published, true);
   const feed = env.PUBLIC_FEED.json();
   assert.equal(validCachedFeed(feed), true);
   const item = feed.items.find(entry => entry.original_url.toLowerCase() === poolUrl);
-  assert.equal(item.kosx_review, 'pool');
+  assert.equal(item.kosx_review, undefined);
   assert.equal(item.published_at, snowflakeAt);
-  assert.notEqual(item.published_at, body.reviewed_at);
-  assert.equal(item.source_item_time, body.reviewed_at);
-  assert.equal(item.captured_at, body.reviewed_at);
+  assert.notEqual(item.published_at, approved.reviewed_at);
+  assert.equal(item.source_item_time, approved.reviewed_at);
+  assert.equal(item.captured_at, approved.reviewed_at);
   assert.equal(Object.hasOwn(item, 'latest_followers'), false);
   assert.equal(feed.sources.find(source => source.id === 'sopilot-kosx').ranked, false);
   assert.equal(showcase(feed).latest.some(entry => entry.post.originalUrl.toLowerCase() === poolUrl), true);
-  const again = await (await submit(env, {url:poolUrl}, {token:delivery})).json();
-  assert.equal(again.existing, true);
-  assert.equal(again.status, 'approved');
-  assert.equal(again.reviewed_at, body.reviewed_at);
+  const kept = await (await submit(env, {url:poolUrl}, {token:delivery})).json();
+  assert.equal(kept.existing, true);
+  assert.equal(kept.status, 'approved');
+  assert.equal(kept.reviewed_at, approved.reviewed_at);
   assert.equal(env.PUBLIC_FEED.json().items.find(entry => entry.original_url.toLowerCase() === poolUrl).published_at, snowflakeAt);
 });
 
@@ -195,8 +208,10 @@ test('a post that would enter yesterday underrated stays pending until the revie
   assert.equal(body.status, 'pending');
   assert.equal(body.published, false);
   assert.equal(body.pool, true);
-  assert.match(body.message, /昨日最被低估/);
-  assert.match(body.message, /人工过审/);
+  assert.equal(body.approval, undefined);
+  assert.match(body.message, /待筛选/);
+  assert.match(body.message, /1 小时/);
+  assert.doesNotMatch(body.message, /已按时间放上公开首页/);
   assert.equal(env.PUBLIC_FEED.writes.length, 0);
   assert.equal(env.PUBLIC_FEED.json().items.some(item => item.original_url === poolUrl), false);
   const approved = await decide(env, {url:poolUrl, status:'approved'});
@@ -271,46 +286,43 @@ test('public feed drops intake pipeline notes from the title and excerpt', () =>
   assert.equal(stillEmpty.title, '@KinGao476942 的精华帖');
 });
 
-test('pool auto-publish stays off the underrated shelf until a review code marks it reviewed', async () => {
+test('pool intake stays off the homepage until review, and review does not pin underrated', async () => {
   const env = await environment();
   const created = await (await submit(env, {url:poolUrl}, {token:delivery})).json();
-  assert.equal(created.approval, 'pool');
-  assert.equal(created.message, '账号池成员的精华帖已按时间放上公开首页。');
-  assert.doesNotMatch(created.message, /不进入昨日最被低估/);
-  const shifted = env.PUBLIC_FEED.json();
-  const posted = shifted.items.find(entry => entry.original_url === poolUrl);
-  assert.equal(posted.summary, '');
-  assert.doesNotMatch(posted.summary, /尚未读取原文|不进入昨日最被低估|过审后放上首页|按时间放上首页/);
-  shifted.generated_at = nextBeijingInstant(Date.parse(posted.published_at));
-  const blocked = showcase(shifted);
-  assert.equal(shifted.items.some(entry => entry.original_url === poolUrl), true);
-  assert.equal(blocked.yesterday.some(entry => entry.post.originalUrl === poolUrl), false);
-  assert.equal(blocked.latest.some(entry => entry.post.originalUrl === poolUrl), false);
-  assert.equal(blocked.underrated.some(entry => entry.post.originalUrl === poolUrl), false);
+  assert.equal(created.status, 'pending');
+  assert.equal(created.approval, undefined);
+  assert.equal(created.message, '账号池成员的精华帖已进入待筛选。满 1 小时仍未人工处理会自动过审上公开首页。');
+  assert.doesNotMatch(created.message, /不进入昨日最被低估|已按时间放上公开首页/);
+  assert.equal(env.PUBLIC_FEED.json().items.some(entry => entry.original_url === poolUrl), false);
   const reviewed = await (await decide(env, {url:poolUrl, status:'approved'})).json();
-  assert.equal(reviewed.existing, true);
+  assert.equal(reviewed.existing, false);
   assert.equal(reviewed.approval, 'review');
-  assert.equal(reviewed.reviewed_at, created.reviewed_at);
+  assert.equal(reviewed.published, true);
   const after = env.PUBLIC_FEED.json();
-  after.generated_at = shifted.generated_at;
-  assert.equal(after.items.find(item => item.original_url === poolUrl).kosx_review, undefined);
-  assert.equal(showcase(after).yesterday.some(entry => entry.post.originalUrl === poolUrl), false);
-  assert.equal(showcase(after).latest.some(entry => entry.post.originalUrl === poolUrl), false);
+  const posted = after.items.find(entry => entry.original_url === poolUrl);
+  assert.equal(posted.summary, '');
+  assert.equal(posted.kosx_review, undefined);
+  assert.doesNotMatch(posted.summary, /尚未读取原文|不进入昨日最被低估|过审后放上首页|按时间放上首页/);
+  after.generated_at = nextBeijingInstant(Date.parse(posted.published_at));
   assert.equal(showcase(after).underrated.some(entry => entry.post.originalUrl === poolUrl), false);
-  assert.equal(wouldEnterUnderrated({sources:after.sources, allItems:after.items, profile:after.profile, generated_at:after.generated_at}, after.items.find(item => item.original_url === poolUrl).id), false);
+  assert.equal(wouldEnterUnderrated({sources:after.sources, allItems:after.items, profile:after.profile, generated_at:after.generated_at}, posted.id), false);
 });
 
-test('a mixed delivery publishes only pool handles and does not rank them', async () => {
+test('a mixed delivery leaves pool and outside authors pending until review', async () => {
   const env = await environment();
   const batch = await submit(env, {items:[{url:poolUrl, note:'池内第一条'}, {url:outsiderUrl}, {url:secondPoolUrl, note:'池内第二条'}]}, {token:delivery});
   const page = await batch.json();
   assert.equal(batch.status, 201);
-  assert.equal(page.status, 'partial');
-  assert.deepEqual(page.results.map(row => [row.author_handle, row.status, row.published]), [
-    [poolHandle, 'approved', true],
-    ['example', 'pending', false],
-    [otherPoolHandle, 'approved', true],
+  assert.equal(page.status, 'pending');
+  assert.deepEqual(page.results.map(row => [row.author_handle, row.status, row.published, row.approval]), [
+    [poolHandle, 'pending', false, undefined],
+    ['example', 'pending', false, undefined],
+    [otherPoolHandle, 'pending', false, undefined],
   ]);
+  assert.equal(page.results.filter(row => row.pool).length, 2);
+  assert.equal(env.PUBLIC_FEED.json().items.some(item => item.origin === 'kosx_approved'), false);
+  assert.equal((await decide(env, {url:poolUrl, status:'approved'})).status, 200);
+  assert.equal((await decide(env, {url:secondPoolUrl, status:'approved'})).status, 200);
   const feed = env.PUBLIC_FEED.json();
   assert.equal(feed.items.some(item => item.original_url === outsiderUrl), false);
   const home = showcase(feed);
@@ -320,7 +332,7 @@ test('a mixed delivery publishes only pool handles and does not rank them', asyn
   assert.ok(ids.indexOf(first.id) >= 0 && ids.indexOf(second.id) >= 0);
   assert.equal(first.published_at, second.published_at);
   assert.equal(first.published_at, snowflakeAt);
-  assert.equal(feed.items.filter(item => item.kosx_review === 'pool').length, 2);
+  assert.equal(feed.items.filter(item => item.kosx_review === 'pool').length, 0);
 });
 
 test('original post time prefers intake published_at, then created_at, then the X snowflake', () => {

@@ -116,7 +116,7 @@ function pickKept(entries) {
   return kept;
 }
 
-const UNDERRATED_HUMAN = '昨日最被低估必须人工过审。已经在昨日全部里的帖，以及昨日全部前一个自然日的精华帖，可以钉进这一栏，包括账号池自动放上首页的帖。';
+const UNDERRATED_HUMAN = '昨日最被低估必须人工过审。已经在昨日全部里的帖，以及昨日全部前一个自然日的精华帖，可以钉进这一栏，包括满 1 小时自动过审放上首页的帖。';
 const KOSX_PUBLIC_SOURCE_ID = 'sopilot-kosx';
 
 function pinnedNote() {

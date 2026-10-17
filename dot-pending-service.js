@@ -5,7 +5,6 @@ import { PUBLIC_FEED_KEY, loadPublicSeed } from './frontend/cloud-feed-service.j
 import { attachKosxApproved, kosxPublicItem } from './frontend/kosx-public-posts.js';
 import { KOSX_POOL_HANDLES } from './frontend/kosx-pool.js';
 import { loadKosxPoolHandles } from './frontend/kosx-pool-cache.js';
-import { wouldEnterUnderrated } from './frontend/src/homeShowcase.js';
 import { PRIVATE_CONTENT } from './frontend/public-feed-data.js';
 import { normalizeCoverUrl } from './frontend/src/postMedia.js';
 import { REVIEW_COUNT_MAX, REVIEW_TEXT_MAX, REVIEW_TYPES, classifyReviewItem } from './frontend/src/reviewQueue.js';
@@ -264,8 +263,9 @@ function validRecord(value, storageKey) {
   if (!plain(value) || Object.keys(value).length !== fields.length || fields.some(field => !Object.hasOwn(value, field))) return false;
   if (!signalsValid(value)) return false;
   if (Object.hasOwn(value, 'approval') && !['pool', 'review', 'auto'].includes(value.approval)) return false;
+  // pool was the old instant path and only existed on delivery. auto is the
+  // 1 hour proxy for both delivery and homepage paste.
   if (value?.approval === 'pool' && value.source !== 'delivery') return false;
-  if (value?.approval === 'auto' && value.source !== 'delivery' && value.source !== 'homepage') return false;
   if (!['pending', 'approved', 'rejected'].includes(value.status) || !['homepage', 'delivery'].includes(value.source)) return false;
   if (decided && !timestamp(value.reviewed_at)) return false;
   if (!decided && Object.hasOwn(value, 'reviewed_at')) return false;
@@ -326,16 +326,17 @@ function inPool(handles, value) {
   return typeof value === 'string' && handles.has(value.toLowerCase());
 }
 
-function intakeView(record, {includeNote, existing, held, handles}) {
+function intakeView(record, {includeNote, existing, handles}) {
   const view = {...publicView(record, {includeNote}), existing};
   if (includeNote) {
     view.pool = inPool(handles, record.author_handle);
     view.published = record.status === 'approved';
   }
-  if (held) view.message = '这条会进入昨日最被低估，保持待筛选，需接收码人工过审。';
-  else if (existing && record.status === 'approved') view.message = '这条已经在公开首页。';
+  if (existing && record.status === 'approved') view.message = '这条已经在公开首页。';
   else if (existing && record.status === 'rejected') view.message = '这条已从待筛选里略过。';
-  else if (includeNote && record.approval === 'pool' && record.status === 'approved') view.message = '账号池成员的精华帖已按时间放上公开首页。';
+  else if (includeNote && record.source === 'delivery' && record.status === 'pending' && inPool(handles, record.author_handle)) {
+    view.message = '账号池成员的精华帖已进入待筛选。满 1 小时仍未人工处理会自动过审上公开首页。';
+  }
   return view;
 }
 
@@ -424,52 +425,8 @@ function decidedRecord(stored, status, reviewed_at, approval, {candidate = null,
   return record;
 }
 
-function showcaseState(feed) {
-  return {sources:feed.sources, allItems:feed.items, items:feed.items, profile:feed.profile || {}, generated_at:feed.generated_at};
-}
-
 function canRelease(item) {
   return !!item && !containsCredentialText(item) && !PRIVATE_CONTENT.test(JSON.stringify(item));
-}
-
-// Delivery of a pool handle can publish onto the chronological cover.
-// Homepage paste stays pending at intake (a later sweep may auto-approve it
-// after one hour). Non-members, rejected rows, and anything that would enter
-// 昨日最被低估 stay pending for the review code at intake. Follower counts are not read.
-async function applyPoolRelease(env, posts, existing, delivery, handles) {
-  const held = new Set();
-  const promoted = new Set();
-  if (!delivery) return {held, promoted, published:false};
-  const pendingPool = posts.map(post => existing.get(post.key)).filter(record => record?.source === 'delivery' && record.status === 'pending' && inPool(handles, record.author_handle));
-  const repair = posts.some(post => {
-    const record = existing.get(post.key);
-    return record?.source === 'delivery' && record.status === 'approved' && record.approval === 'pool';
-  });
-  if (!pendingPool.length && !repair) return {held, promoted, published:false};
-  if (typeof env?.PUBLIC_FEED?.get !== 'function' || typeof env?.PUBLIC_FEED?.put !== 'function') unavailable();
-  const reviewed_at = new Date().toISOString();
-  const base = await readPublicFeed(env);
-  const approved = await listApprovedKosxRecords(env);
-  const accepted = [...approved];
-  for (const record of pendingPool) {
-    const trial = decidedRecord(record, 'approved', reviewed_at, null);
-    const item = kosxPublicItem(trial);
-    if (!canRelease(item)) continue;
-    let blocked = true;
-    try { blocked = wouldEnterUnderrated(showcaseState(attachKosxApproved(base, [...accepted, trial])), record.id); }
-    catch { blocked = true; }
-    if (blocked) { held.add(record.key); continue; }
-    const next = decidedRecord(record, 'approved', reviewed_at, 'pool');
-    await env.DOT_INBOX.put(`${DOT_PENDING_PREFIX}${record.key}`, JSON.stringify(next), {
-      metadata:{id:next.id, key:next.key, status:'approved', submitted_at:next.submitted_at, reviewed_at, approval:'pool'},
-    });
-    existing.set(record.key, next);
-    accepted.push(next);
-    promoted.add(record.key);
-  }
-  const published = accepted.length !== approved.length || repair;
-  if (published) await publishApproved(env);
-  return {held, promoted, published};
 }
 
 function queryCursor(url, isRead) {
@@ -517,10 +474,10 @@ function storeRecord(env, record) {
   });
 }
 
-// Same write path as a delivery POST: new rows start pending, pool release may
-// approve them, and a row that would enter yesterday's underrated shelf stays
-// pending. Already queued keys, including rejected, are left alone.
-export async function enqueueDeliveryPosts(env, posts, {handles} = {}) {
+// Same write path as a delivery POST. New rows stay pending, including pool
+// authors. Nothing here writes approval:pool or PUBLIC_FEED. Already queued
+// keys, including rejected, are left alone. The 1 hour auto-approve runs later.
+export async function enqueueDeliveryPosts(env, posts) {
   const incoming = Array.isArray(posts) ? posts.filter(post => post?.key && post.url) : [];
   if (!incoming.length) return {created:[], promoted:[], held:[], full:false};
   const existing = new Map();
@@ -536,18 +493,11 @@ export async function enqueueDeliveryPosts(env, posts, {handles} = {}) {
     await storeRecord(env, record);
     existing.set(post.key, record);
   }
-  let pool = handles instanceof Set ? handles : new Set(KOSX_POOL_HANDLES);
-  if (!(handles instanceof Set)) {
-    try { pool = await loadKosxPoolHandles(env); }
-    catch { pool = new Set(KOSX_POOL_HANDLES); }
-  }
-  const {held, promoted} = await applyPoolRelease(env, incoming, existing, true, pool);
-  return {created:created.map(post => post.key), promoted:[...promoted], held:[...held], full:false};
+  return {created:created.map(post => post.key), promoted:[], held:[], full:false};
 }
 
-// Pending delivery older than 3 hours, and homepage paste older than 1 hour,
-// is approved onto the public feed. Nothing here writes an underrated pin.
-// A row that fails the public content check stays pending.
+// Pending delivery or homepage paste older than 1 hour is approved onto the
+// public feed, including account-pool authors. Nothing here writes an underrated pin.
 export async function autoApproveStalePending(env, {now = Date.now(), publish = true} = {}) {
   const due = (await listKosxRecords(env)).filter(record => shouldAutoApprove(record, now));
   if (!due.length) return {approved:[]};
@@ -712,7 +662,7 @@ async function handleDecision(request, env, review) {
     published:record.status === 'approved',
     ...(pin ? {
       pinned:pin.pinned === true,
-      ...(pin.pinned ? {pin_message:'已过审上首页，并钉进昨日低估栏。'} : {pin_code:pin.code || 'pin_failed', pin_message:notYesterday ? '已过审上首页。原帖日期不是当前「昨日全部」，也不是它的前一个自然日，没有钉进昨日低估栏。' : (pin.message || '已过审上首页。钉选没有完成。')}),
+      ...(pin.pinned ? {pin_message:'已过审上首页，并钉进昨日低估栏。'} : {pin_code:pin.code || 'pin_failed', pin_message:notYesterday ? '已过审上首页。原帖日期不是昨日，没有钉进昨日低估栏。' : (pin.message || '已过审上首页。钉选没有完成。')}),
     } : {}),
   });
 }
@@ -786,10 +736,9 @@ export async function handleDotPendingRequest(request, env) {
       try { handles = await loadKosxPoolHandles(env); }
       catch { handles = new Set(KOSX_POOL_HANDLES); }
     }
-    const {held, promoted, published} = await applyPoolRelease(env, posts, existing, delivery, handles);
-    if (refreshed.length && !published) await publishApproved(env);
-    const results = posts.map(post => intakeView(existing.get(post.key), {includeNote:delivery, existing:!created.includes(post), held:held.has(post.key), handles}));
-    const changed = created.length || promoted.size;
+    if (refreshed.length) await publishApproved(env);
+    const results = posts.map(post => intakeView(existing.get(post.key), {includeNote:delivery, existing:!created.includes(post), handles}));
+    const changed = created.length;
     if (!batched) return json(results[0], changed ? 201 : 200);
     const status = results.every(row => row.status === 'approved') ? 'approved' : results.some(row => row.status === 'approved') ? 'partial' : 'pending';
     return json({status, results}, changed ? 201 : 200);
