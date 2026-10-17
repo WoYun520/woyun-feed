@@ -1,3 +1,4 @@
+import { pendingBlankFace } from './coverFace.js';
 import { REVIEW_TYPES, isReviewSignalCopy, pendingLocalReviewItems, pendingReviewItems, presentReviewItem, sortReviewQueue } from './reviewQueue.js';
 
 const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[char]));
@@ -25,7 +26,9 @@ function visibleCopy(value) {
 function renderItem(item, busy) {
   const presented = presentReviewItem(item);
   const url = safeStatusUrl(item.url);
+  const blank = pendingBlankFace(item);
   const disabled = busy ? ' disabled' : '';
+  const approveDisabled = busy || blank ? ' disabled' : '';
   const author = typeof item.author_handle === 'string' && item.author_handle ? `@${item.author_handle.replace(/^@/, '')}` : '作者未提供';
   const reviewType = presented.review_type;
   const note = visibleCopy(item.note);
@@ -34,11 +37,12 @@ function renderItem(item, busy) {
   return `<article class="review-queue-item" data-review-url="${escape(url || item.url || '')}" data-review-type="${escape(reviewType)}">
     <p class="review-queue-title">${escape(author)}${note ? ` · ${escape(note)}` : ''}</p>
     ${excerpt && excerpt !== note ? `<p class="review-queue-excerpt">${escape(excerpt)}</p>` : ''}
+    ${blank ? '<p class="review-queue-missing">缺摘录，过审后不会上公开首页</p>' : ''}
     <div class="review-queue-actions">
       ${url ? `<a class="dot-original-link" href="${escape(url)}" target="_blank" rel="noopener noreferrer">打开原帖 <span aria-hidden="true">↗</span></a>` : '<span>原帖链接不可用</span>'}
       <label class="review-type-edit">类型<select data-review-type-select aria-label="修正类型：${escape(author)}"${disabled}>${options}</select></label>
       <label class="review-underrated-choice"><input type="checkbox" data-review-underrated${disabled}>进低估</label>
-      <button type="button" class="btn-primary-action" data-review-decision="approved"${disabled}>过审上首页</button>
+      <button type="button" class="btn-primary-action" data-review-decision="approved"${approveDisabled}>过审上首页</button>
       <button type="button" class="btn-quiet" data-review-decision="rejected"${disabled}>略过</button>
     </div>
     <p class="review-queue-hint">原帖是昨日时，过审通过会钉进昨日低估栏。不是昨日就只上首页。</p>

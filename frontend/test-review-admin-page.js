@@ -7,7 +7,7 @@ const postUrl = 'https://x.com/example/status/2108148604447883999';
 const signalNote = '文章卡·收藏5/点赞18·Levi样例·收藏偏低但类型优先';
 const item = () => ({
   id:'kosx-1', url:postUrl, status:'pending', author_handle:'example',
-  submitted_at:new Date().toISOString(), note:signalNote,
+  submitted_at:new Date().toISOString(), note:signalNote, text:'对照步骤把本地字幕跑通。',
 });
 
 const VOID = new Set(['area','base','br','col','embed','hr','img','input','link','meta','source','track','wbr']);

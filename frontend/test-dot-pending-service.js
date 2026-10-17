@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { webcrypto } from 'node:crypto';
 import { dotInboxHash, handleDotInboxRequest } from '../dot-inbox-service.js';
 import { DOT_PENDING_BATCH_MAX, DOT_PENDING_MAX, DOT_PENDING_PATH, DOT_PENDING_PREFIX, handleDotPendingRequest } from '../dot-pending-service.js';
+import { excerptFromOembedHtml, fetchXStatusText } from './x-status-text.js';
 import worker from '../worker.js';
 
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
@@ -311,4 +312,42 @@ test('a later delivery fills an empty note and excerpt without replacing a real 
   assert.equal(kept.status, 200);
   assert.equal(stored(env)[0].note, '三步装好本地字幕');
   assert.equal(stored(env)[0].text, '原文摘录：第一步打开设置。');
+});
+
+test('a public status read fills missing paste text and does not call the paid X API', async () => {
+  const env = await environment();
+  const tweet = '云电脑上跑并不等于一定安全，群里已经有人反馈帐号被封。';
+  const calls = [];
+  env.xStatusFetch = async endpoint => {
+    calls.push(String(endpoint));
+    return new Response(JSON.stringify({
+      html:`<blockquote class="twitter-tweet"><p lang="zh">${tweet.replace(/，/g, '&#65292;')}</p>&mdash; Name (@example)</blockquote>`,
+    }), {status:200, headers:{'Content-Type':'application/json'}});
+  };
+  const created = await submit(env, {url:postUrl});
+  assert.equal(created.status, 201);
+  const row = stored(env)[0];
+  assert.equal(row.note, '');
+  assert.equal(row.source, 'homepage');
+  assert.equal(row.text.includes('并不等于一定安全'), true);
+  assert.equal(calls.length, 1);
+  assert.match(calls[0], /^https:\/\/publish\.twitter\.com\/oembed\?/);
+  assert.equal(calls.some(url => /api\.x\.com|api\.twitter\.com/.test(url)), false);
+  env.xStatusFetch = async () => { throw Error('should not read again'); };
+  const again = await submit(env, {url:postUrl});
+  assert.equal(again.status, 200);
+  assert.equal(stored(env)[0].text, row.text);
+});
+
+test('oEmbed and syndication excerpts decode, and a failed read stays empty', async () => {
+  assert.equal(excerptFromOembedHtml('<blockquote><p>第一行<br>第二行 &amp; 继续</p></blockquote>'), '第一行\n第二行 & 继续');
+  assert.equal(excerptFromOembedHtml(''), '');
+  const tweet = '公开正文该留在封面卡上。';
+  const fetched = await fetchXStatusText(postUrl, async endpoint => {
+    if (String(endpoint).includes('publish.twitter.com')) return new Response('no', {status:404});
+    return new Response(JSON.stringify({text:tweet}), {status:200});
+  });
+  assert.equal(fetched, tweet);
+  assert.equal(await fetchXStatusText('https://example.com/not-a-status', async () => { throw Error('no'); }), '');
+  assert.equal(await fetchXStatusText(postUrl, async () => { throw Error('down'); }), '');
 });
