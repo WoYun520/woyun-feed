@@ -196,9 +196,13 @@ async function readPublicFeed(env) {
 }
 
 // Same clock as the homepage: feed generated_at when present, otherwise now.
-function homepageYesterday(feed) {
+// A new pin may use 「昨日全部」 or the calendar day before it, so a post can
+// still be pinned after the snapshot rolls forward one day. Older days stay closed.
+function homepagePinDays(feed) {
   const today = beijingDateKey(referenceClock({generated_at:feed?.generated_at}).ms);
-  return today ? addCalendarDays(today, -1) : '';
+  const yesterday = today ? addCalendarDays(today, -1) : '';
+  const prior = yesterday ? addCalendarDays(yesterday, -1) : '';
+  return {yesterday, prior};
 }
 
 function resolvePublic(feed, post) {
@@ -208,10 +212,12 @@ function resolvePublic(feed, post) {
   const time = postTime(item);
   const day = time.ms ? beijingDateKey(time.ms) : '';
   if (!day) bad('undated', '这条公开帖没有可判断日期的时间，不能钉进昨日低估栏。');
-  const yesterday = homepageYesterday(feed);
-  if (day !== yesterday) {
-    const target = yesterday ? `当前「昨日全部」是 ${yesterday}（北京时间）` : '当前整理日无法确定「昨日全部」';
-    throw new UnderratedError(409, 'not_yesterday', `这条公开帖的原帖日期是 ${day}（北京时间）。${target}。钉选只接受已经在昨日全部里的帖。`);
+  const {yesterday, prior} = homepagePinDays(feed);
+  if (!yesterday || (day !== yesterday && day !== prior)) {
+    const target = yesterday && prior
+      ? `当前「昨日全部」是 ${yesterday}（北京时间），它的前一个自然日 ${prior} 也可以钉`
+      : '当前整理日无法确定「昨日全部」';
+    throw new UnderratedError(409, 'not_yesterday', `这条公开帖的原帖日期是 ${day}（北京时间）。${target}。更早的日期不能新钉。`);
   }
   const id = typeof item.id === 'string' && item.id.length <= 200 && !/[\u0000-\u001f\u007f]/.test(item.id) ? item.id : post.id;
   return {id, key:post.key, url:post.url, author_handle:post.author_handle, day};
