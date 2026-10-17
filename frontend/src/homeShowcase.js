@@ -116,7 +116,7 @@ function pickKept(entries) {
   return kept;
 }
 
-const UNDERRATED_HUMAN = '昨日最被低估必须人工过审。已经在昨日全部里的帖可以钉进这一栏，包括账号池自动放上首页的帖。';
+const UNDERRATED_HUMAN = '昨日最被低估必须人工过审。已经在昨日全部里的帖可以钉进这一栏，包括满 1 小时自动过审放上首页的帖。';
 const KOSX_PUBLIC_SOURCE_ID = 'sopilot-kosx';
 
 function pinnedNote() {
@@ -326,9 +326,10 @@ export function selectHomeShowcase(state, {now} = {}) {
   };
 }
 
-// Pool release holds a post when it would sit on yesterday's essence line and
-// is not a pool auto-approval. A blank face is already off that line. The
-// underrated band still shows pins only.
+// A legacy pool auto-approval (kosx_review "pool") is already on yesterday's
+// essence line and is not a new underrated hold. A blank face is already off
+// that line. The underrated band still shows pins only. Intake no longer
+// writes approval:pool.
 export function wouldEnterUnderrated(state, itemId) {
   if (typeof itemId !== 'string' || !itemId) return true;
   const selection = selectHomeShowcase(state || {});

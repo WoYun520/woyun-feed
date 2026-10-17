@@ -196,7 +196,7 @@ function renderSignature() {
 
 function yesterdayNote(selection) {
   const day = selection.reference.yesterday || '未能确定';
-  return `昨日全部是整理日的前一个北京时间自然日（${day}）里、已经放上公开首页的精华帖，按原帖发布时间从新到旧。包括过审写入公开首页的帖，以及账号池自动放上首页的帖。信息流里其他带日期的帖不放进来。已收起抽奖或推广信号 ${selection.counts.folded} 条。未核对原帖，未实测。`;
+  return `昨日全部是整理日的前一个北京时间自然日（${day}）里、已经放上公开首页的精华帖，按原帖发布时间从新到旧。包括接收码过审和满 1 小时自动过审写入公开首页的帖。信息流里其他带日期的帖不放进来。已收起抽奖或推广信号 ${selection.counts.folded} 条。未核对原帖，未实测。`;
 }
 
 function renderLatest(app, state, selection) {

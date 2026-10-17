@@ -1,4 +1,4 @@
-// Live 万粉计划 membership for intake auto-approve.
+// Live 万粉计划 membership. Intake reports pool:true and does not publish.
 // Handles only. latest_followers is never written to KV or the public feed.
 import { KOSX_HANDLE_PATTERN, KOSX_POOL_SOURCE, handlesFromRoster } from './kosx-pool-roster.js';
 import { KOSX_POOL_HANDLES } from './kosx-pool.js';

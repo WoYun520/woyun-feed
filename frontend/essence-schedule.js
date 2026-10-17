@@ -9,7 +9,7 @@ export const PUBLIC_REFRESH_CRON = '0 1,13 * * *';
 // 00:00, 04:00, 08:00, 12:00 UTC = 08:00, 12:00, 16:00, 20:00 Asia/Shanghai.
 export const ESSENCE_SWEEP_CRON = '0 0,4,8,12 * * *';
 export const ESSENCE_SWEEP_INTERVAL_MS = 3 * 60 * 60 * 1000;
-export const PENDING_AUTO_APPROVE_MS = 3 * 60 * 60 * 1000;
+export const PENDING_AUTO_APPROVE_MS = 60 * 60 * 1000;
 export const ESSENCE_INTAKE_WINDOW_DAYS = 2;
 export const ESSENCE_INTAKE_CAP = 20;
 export const ESSENCE_SWEEP_BACKOFF_MAX_MS = 24 * 60 * 60 * 1000;
@@ -40,11 +40,12 @@ export function pendingAgeMs(record, now = Date.now()) {
   return clock - then;
 }
 
-// Homepage paste stays manual. Delivery rows, including ones held because they
-// would enter yesterday's underrated shelf, auto-approve strictly after 3 hours.
-// Equal to 3 hours is still waiting. This does not pin the underrated shelf.
+// Delivery and homepage paste, including account-pool authors, auto-approve
+// strictly after 1 hour. Equal to 1 hour is still waiting. Intake does not
+// approve a pool row on the spot. This does not pin the underrated shelf.
 export function shouldAutoApprove(record, now = Date.now()) {
-  if (!record || record.status !== 'pending' || record.source !== 'delivery') return false;
+  if (!record || record.status !== 'pending') return false;
+  if (record.source !== 'delivery' && record.source !== 'homepage') return false;
   const age = pendingAgeMs(record, now);
   return age !== null && age > PENDING_AUTO_APPROVE_MS;
 }

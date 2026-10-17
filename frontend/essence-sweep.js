@@ -140,7 +140,7 @@ async function intakeFromPublicSnapshot(env, options) {
   const feed = await readPublicFeedSnapshot(env);
   const queued = new Set((await listKosxRecords(env)).map(record => record.key));
   const posts = selectSweepIntake(feed.items, {handles, queuedKeys:queued, now, cap:ESSENCE_INTAKE_CAP});
-  const saved = await enqueueDeliveryPosts(env, posts, {handles});
+  const saved = await enqueueDeliveryPosts(env, posts);
   return {created:saved.created.length, held:saved.held.length, full:saved.full === true, roster_gets, x_api:0};
 }
 
