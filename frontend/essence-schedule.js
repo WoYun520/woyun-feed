@@ -40,20 +40,12 @@ export function pendingAgeMs(record, now = Date.now()) {
   return clock - then;
 }
 
-function poolDelivery(record, handles) {
-  if (!(handles instanceof Set) || record?.source !== 'delivery') return false;
-  const handle = typeof record.author_handle === 'string' ? record.author_handle.toLowerCase() : '';
-  return !!handle && handles.has(handle);
-}
-
-// Homepage paste and delivery from outside the account pool auto-approve
-// strictly after 1 hour. Equal to 1 hour is still waiting. Delivery whose
-// author is in `handles` stays pending for a human. This does not pin the
-// underrated shelf.
-export function shouldAutoApprove(record, now = Date.now(), handles = null) {
+// Delivery and homepage paste, including account-pool authors, auto-approve
+// strictly after 1 hour. Equal to 1 hour is still waiting. Intake does not
+// approve a pool row on the spot. This does not pin the underrated shelf.
+export function shouldAutoApprove(record, now = Date.now()) {
   if (!record || record.status !== 'pending') return false;
   if (record.source !== 'delivery' && record.source !== 'homepage') return false;
-  if (poolDelivery(record, handles)) return false;
   const age = pendingAgeMs(record, now);
   return age !== null && age > PENDING_AUTO_APPROVE_MS;
 }

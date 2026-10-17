@@ -547,8 +547,7 @@ test('approved public items keep intake signals and the original post time for t
   assert.equal(held.published, false);
   assert.equal(held.pool, true);
   assert.match(held.message, /待筛选/);
-  assert.match(held.message, /人工过审/);
-  assert.doesNotMatch(held.message, /自动过审/);
+  assert.match(held.message, /1 小时/);
   assert.equal(env.PUBLIC_FEED.json().items.some(item => item.original_url === yesterdayPool), false);
 
   const home = showcase(env.PUBLIC_FEED.json());

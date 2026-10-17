@@ -168,7 +168,7 @@ test('a sweep enqueues from the snapshot without calling the X API', async () =>
   assert.equal(env.PUBLIC_FEED.json().items.some(item => item.original_url === row.url && item.origin === 'kosx_approved'), false);
 });
 
-test('homepage paste and outside delivery older than 1 hour auto-approve; pool delivery stays for a human', async () => {
+test('delivery, homepage paste, and pool rows older than 1 hour auto-approve without a pin', async () => {
   const env = await environment();
   const stale = 'https://x.com/example/status/2108148604447884821';
   const fresh = 'https://x.com/example/status/2108148604447884822';
@@ -193,22 +193,19 @@ test('homepage paste and outside delivery older than 1 hour auto-approve; pool d
   assert.equal(shouldAutoApprove({status:'pending', source:'homepage', submitted_at:old}, now), true);
   assert.equal(shouldAutoApprove({status:'pending', source:'homepage', submitted_at:exact}, now), false);
   assert.equal(shouldAutoApprove({status:'pending', source:'delivery', created_at:old}, now), true);
-  const handles = new Set([pool]);
-  assert.equal(shouldAutoApprove({status:'pending', source:'delivery', author_handle:pool, submitted_at:old}, now, handles), false);
-  assert.equal(shouldAutoApprove({status:'pending', source:'homepage', author_handle:pool, submitted_at:old}, now, handles), true);
   const done = await autoApproveStalePending(env, {now});
-  assert.deepEqual(done.approved.sort(), ['x:2108148604447884821', 'x:2108148604447884823'].sort());
+  assert.deepEqual(done.approved.sort(), ['x:2108148604447884821', 'x:2108148604447884823', 'x:2108148604447884824'].sort());
   const rows = [...env.DOT_INBOX.values.values()].map(entry => JSON.parse(entry.raw));
   assert.equal(rows.find(row => row.url === stale).approval, 'auto');
   assert.equal(rows.find(row => row.url === pasted).status, 'approved');
   assert.equal(rows.find(row => row.url === pasted).approval, 'auto');
-  assert.equal(rows.find(row => row.url === pooled).status, 'pending');
-  assert.equal(rows.find(row => row.url === pooled).approval, undefined);
+  assert.equal(rows.find(row => row.url === pooled).status, 'approved');
+  assert.equal(rows.find(row => row.url === pooled).approval, 'auto');
   assert.equal(rows.find(row => row.url === fresh).status, 'pending');
   const feed = env.PUBLIC_FEED.json();
   assert.equal(feed.items.some(item => item.original_url === stale && item.origin === 'kosx_approved'), true);
   assert.equal(feed.items.some(item => item.original_url === pasted && item.origin === 'kosx_approved'), true);
-  assert.equal(feed.items.some(item => item.original_url === pooled && item.origin === 'kosx_approved'), false);
+  assert.equal(feed.items.some(item => item.original_url === pooled && item.origin === 'kosx_approved' && item.kosx_review === undefined), true);
   assert.equal(feed.items.some(item => item.original_url === fresh), false);
   assert.equal(env.DOT_INBOX.values.has(UNDERRATED_PIN_KEY), false);
 });

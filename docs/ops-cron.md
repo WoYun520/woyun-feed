@@ -19,7 +19,7 @@
 
 1. 留下作者在账号池里、原帖北京日是今天或昨天、队列里还没有的帖。同一状态编号只留一条。已经 `rejected` 的不重新打开。
 2. 每轮最多新写 20 条（`ESSENCE_INTAKE_CAP`）。池内帖子走和投递密钥相同的进队路径，先记 `pending`，不当场上首页。
-3. 把来源为 `homepage`，或来源为 `delivery` 且作者不在账号池、仍是 `pending`、提交时间早于现在超过 1 小时的记录标成 `approved`，`approval` 为 `auto`。刚好 1 小时继续等人。账号池投递不参加，一直等人。这一步不钉「昨日最被低估」。
+3. 把来源为 `delivery` 或 `homepage`、仍是 `pending`、提交时间早于现在超过 1 小时的记录标成 `approved`，`approval` 为 `auto`。刚好 1 小时继续等人。账号池作者参加这一条。这一步不钉「昨日最被低估」。
 4. 把快照里已有的 `bookmark_count` / `like_count` 补进精华线。缺了就空着，不写成 0。封面和摘录也按同样的「只补空缺」回填。
 
 队列这一轮有变化时，扫榜调用 `publishApprovedFeed`，把已过审的精华行接到**现有**快照上。这不是首页快照的整表重建。
@@ -44,7 +44,7 @@ Overheard 若在调用投递口之前自己扫过 X 或模型，那笔开销在�
 | --- | --- | --- |
 | 首页贴链接 `homepage` | `pending` | `approved`，`approval: auto`，不钉低估 |
 | 投递，作者不在账号池 | `pending` | `approved`，`approval: auto`，不钉低估 |
-| 投递，作者在账号池 | `pending`，不写 `approval: pool` | 仍 `pending`，需接收码。不自动上首页 |
+| 投递，作者在账号池 | `pending`，不写 `approval: pool` | 同一条 1 小时自动过审，不钉低估 |
 
 「昨日最被低估」始终要人工钉。钉选步骤在 [underrated-upload.md](underrated-upload.md)。过审接口在 [pending-review.md](pending-review.md)。以前已经以 `approval: pool` 放上首页的旧行留在线上，新进料不再写这个标记。
 
