@@ -264,7 +264,8 @@ function validRecord(value, storageKey) {
   if (!plain(value) || Object.keys(value).length !== fields.length || fields.some(field => !Object.hasOwn(value, field))) return false;
   if (!signalsValid(value)) return false;
   if (Object.hasOwn(value, 'approval') && !['pool', 'review', 'auto'].includes(value.approval)) return false;
-  if ((value?.approval === 'pool' || value?.approval === 'auto') && value.source !== 'delivery') return false;
+  if (value?.approval === 'pool' && value.source !== 'delivery') return false;
+  if (value?.approval === 'auto' && value.source !== 'delivery' && value.source !== 'homepage') return false;
   if (!['pending', 'approved', 'rejected'].includes(value.status) || !['homepage', 'delivery'].includes(value.source)) return false;
   if (decided && !timestamp(value.reviewed_at)) return false;
   if (!decided && Object.hasOwn(value, 'reviewed_at')) return false;
@@ -432,8 +433,9 @@ function canRelease(item) {
 }
 
 // Delivery of a pool handle can publish onto the chronological cover.
-// Homepage paste, non-members, rejected rows, and anything that would enter
-// 昨日最被低估 stay pending for the review code. Follower counts are not read.
+// Homepage paste stays pending at intake (a later sweep may auto-approve it
+// after one hour). Non-members, rejected rows, and anything that would enter
+// 昨日最被低估 stay pending for the review code at intake. Follower counts are not read.
 async function applyPoolRelease(env, posts, existing, delivery, handles) {
   const held = new Set();
   const promoted = new Set();
@@ -543,8 +545,9 @@ export async function enqueueDeliveryPosts(env, posts, {handles} = {}) {
   return {created:created.map(post => post.key), promoted:[...promoted], held:[...held], full:false};
 }
 
-// Pending delivery older than 3 hours is approved onto the public feed.
-// Homepage paste is skipped. Nothing here writes an underrated pin.
+// Pending delivery older than 3 hours, and homepage paste older than 1 hour,
+// is approved onto the public feed. Nothing here writes an underrated pin.
+// A row that fails the public content check stays pending.
 export async function autoApproveStalePending(env, {now = Date.now(), publish = true} = {}) {
   const due = (await listKosxRecords(env)).filter(record => shouldAutoApprove(record, now));
   if (!due.length) return {approved:[]};

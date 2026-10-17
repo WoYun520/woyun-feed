@@ -11,7 +11,7 @@ import { KOSX_POOL_HANDLES } from './kosx-pool.js';
 import { HOME_LATEST_WINDOW_DAYS } from './src/homeShowcase.js';
 import {
   ESSENCE_INTAKE_CAP, ESSENCE_SWEEP_BUDGET, ESSENCE_SWEEP_CRON, ESSENCE_SWEEP_INTERVAL_MS,
-  ESSENCE_SWEEP_STATE_KEY, PENDING_AUTO_APPROVE_MS, PUBLIC_REFRESH_CRON,
+  ESSENCE_SWEEP_STATE_KEY, HOMEPAGE_AUTO_APPROVE_MS, PENDING_AUTO_APPROVE_MS, PUBLIC_REFRESH_CRON,
   backoffActive, fillMissingCounts, shouldAutoApprove, sweepWaitMs,
 } from './essence-schedule.js';
 import { selectSweepIntake, runEssenceSweep, backfillEssenceHeat } from './essence-sweep.js';
@@ -93,6 +93,7 @@ test('the essence sweep runs at 08:00, 12:00, 16:00, and 20:00 Asia/Shanghai bes
   assert.equal(PUBLIC_REFRESH_CRON, '0 1,13 * * *');
   assert.equal(ESSENCE_SWEEP_INTERVAL_MS, 3 * 60 * 60 * 1000);
   assert.equal(PENDING_AUTO_APPROVE_MS, 3 * 60 * 60 * 1000);
+  assert.equal(HOMEPAGE_AUTO_APPROVE_MS, 1 * 60 * 60 * 1000);
   assert.equal(HOME_LATEST_WINDOW_DAYS, 3);
   assert.equal(ESSENCE_SWEEP_BUDGET.x_api, 0);
   assert.equal(ESSENCE_SWEEP_BUDGET.llm_tokens, 0);
@@ -181,13 +182,18 @@ test('delivery pending older than 3 hours is auto-approved without a pin; paste 
   assert.equal(heldResponse.status, 'pending');
   const old = new Date(now - PENDING_AUTO_APPROVE_MS - 1000).toISOString();
   const exact = new Date(now - PENDING_AUTO_APPROVE_MS).toISOString();
+  const pasteExact = new Date(now - HOMEPAGE_AUTO_APPROVE_MS).toISOString();
   age(env, stale, old);
   age(env, fresh, exact);
-  age(env, pasted, old);
+  age(env, pasted, pasteExact);
   age(env, held, old);
   assert.equal(shouldAutoApprove({status:'pending', source:'delivery', submitted_at:old}, now), true);
   assert.equal(shouldAutoApprove({status:'pending', source:'delivery', submitted_at:exact}, now), false);
-  assert.equal(shouldAutoApprove({status:'pending', source:'homepage', submitted_at:old}, now), false);
+  assert.equal(shouldAutoApprove({status:'pending', source:'delivery', submitted_at:new Date(now - HOMEPAGE_AUTO_APPROVE_MS - 1000).toISOString()}, now), false);
+  assert.equal(shouldAutoApprove({status:'pending', source:'homepage', submitted_at:old}, now), true);
+  assert.equal(shouldAutoApprove({status:'pending', source:'homepage', submitted_at:pasteExact}, now), false);
+  assert.equal(shouldAutoApprove({status:'pending', source:'homepage', created_at:old}, now), true);
+  assert.equal(shouldAutoApprove({status:'rejected', source:'homepage', submitted_at:old}, now), false);
   assert.equal(shouldAutoApprove({status:'pending', source:'delivery', created_at:old}, now), true);
   const done = await autoApproveStalePending(env, {now});
   assert.deepEqual(done.approved.sort(), ['x:2108148604447884821', 'x:2108148604447884824'].sort());
@@ -201,6 +207,53 @@ test('delivery pending older than 3 hours is auto-approved without a pin; paste 
   assert.equal(feed.items.some(item => item.original_url === stale && item.origin === 'kosx_approved'), true);
   assert.equal(feed.items.some(item => item.original_url === held && item.origin === 'kosx_approved'), true);
   assert.equal(feed.items.some(item => item.original_url === pasted), false);
+  assert.equal(env.DOT_INBOX.values.has(UNDERRATED_PIN_KEY), false);
+});
+
+test('homepage paste older than 1 hour auto-approves; delivery still waits 3 hours; content policy holds', async () => {
+  const env = await environment();
+  const pasted = 'https://x.com/example/status/2108148604447884841';
+  const exact = 'https://x.com/example/status/2108148604447884842';
+  const young = 'https://x.com/example/status/2108148604447884843';
+  const blocked = 'https://x.com/example/status/2108148604447884844';
+  const rejected = 'https://x.com/example/status/2108148604447884845';
+  const delivered = 'https://x.com/example/status/2108148604447884846';
+  for (const url of [pasted, exact, young, blocked, rejected]) {
+    assert.equal((await handleDotPendingRequest(request('POST', {body:{url}}), env)).status, 201);
+  }
+  assert.equal((await handleDotPendingRequest(request('POST', {token:delivery, body:{url:delivered}}), env)).status, 201);
+  assert.equal((await handleDotPendingRequest(request('POST', {token:review, path:'/api/dot/pending/decision', body:{url:rejected, status:'rejected'}}), env)).status, 200);
+  const overHour = new Date(now - HOMEPAGE_AUTO_APPROVE_MS - 1000).toISOString();
+  const atHour = new Date(now - HOMEPAGE_AUTO_APPROVE_MS).toISOString();
+  const underHour = new Date(now - HOMEPAGE_AUTO_APPROVE_MS + 1000).toISOString();
+  age(env, pasted, overHour);
+  age(env, exact, atHour);
+  age(env, young, underHour);
+  age(env, blocked, overHour);
+  age(env, rejected, overHour);
+  age(env, delivered, overHour);
+  const blockedRow = [...env.DOT_INBOX.values.values()].map(entry => JSON.parse(entry.raw)).find(record => record.url === blocked);
+  blockedRow.note = 'see /Users/example/secret';
+  env.DOT_INBOX.values.set(`${DOT_PENDING_PREFIX}${blockedRow.key}`, {raw:JSON.stringify(blockedRow), metadata:{status:blockedRow.status, submitted_at:overHour}});
+  const done = await autoApproveStalePending(env, {now});
+  assert.deepEqual(done.approved, ['x:2108148604447884841']);
+  const rows = [...env.DOT_INBOX.values.values()].map(entry => JSON.parse(entry.raw));
+  const row = url => rows.find(item => item.url === url);
+  assert.equal(row(pasted).status, 'approved');
+  assert.equal(row(pasted).approval, 'auto');
+  assert.equal(row(pasted).source, 'homepage');
+  assert.equal(row(exact).status, 'pending');
+  assert.equal(row(young).status, 'pending');
+  assert.equal(row(blocked).status, 'pending');
+  assert.equal(Object.hasOwn(row(blocked), 'approval'), false);
+  assert.equal(row(rejected).status, 'rejected');
+  assert.equal(row(delivered).status, 'pending');
+  assert.equal(row(delivered).source, 'delivery');
+  const feed = env.PUBLIC_FEED.json();
+  assert.equal(feed.items.some(item => item.original_url === pasted && item.origin === 'kosx_approved' && item.kosx_review !== 'pool'), true);
+  assert.equal(feed.items.some(item => item.original_url === blocked), false);
+  assert.equal(feed.items.some(item => item.original_url === rejected), false);
+  assert.equal(feed.items.some(item => item.original_url === delivered), false);
   assert.equal(env.DOT_INBOX.values.has(UNDERRATED_PIN_KEY), false);
 });
 
