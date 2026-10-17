@@ -6,9 +6,10 @@
 
 - **首页贴链接**（来源 `homepage`）和 **投递密钥**（来源 `delivery`）走同一条待筛选队列。作者在不在 KOSX 账号池里，都不当场过审。
 - 账号池只说明作者资格：回答里 `pool: true`。不按万粉或粉丝数排序，也不给粉丝多的人靠前。
-- 满 1 小时仍是 `pending` 时，定时任务会标成 `approved`，`approval` 为 `auto`，并写入公开首页。刚好 1 小时还不算超过。贴链接和投递、池内和池外都参加。这一步不钉「昨日最被低估」。人用接收码先处理的，走 [待筛选过审](pending-review.md)，`approval` 为 `review`。
+- 满 1 小时仍是 `pending` 时，首页贴链接和**不在账号池里**的投递会标成 `approved`，`approval` 为 `auto`，并写入公开首页。刚好 1 小时还不算超过。这一步不钉「昨日最被低估」。
+- **投递且作者在账号池里**不参加这 1 小时。它一直停在 `pending`，直到接收码人工过审。见 [待筛选过审](pending-review.md)。
 
-已经 `rejected` 的链接不会被重新打开。已经 `approved` 的链接不改原来的过审时间。首页先贴过的同一条，来源仍记为 `homepage`。之后即使用投递密钥再送一次，也不会当场过审；满 1 小时仍未人工处理时，和投递一样自动过审。以前已经以 `approval: "pool"` 放上首页的旧行留在线上，这次进料不会新写这种标记。
+已经 `rejected` 的链接不会被重新打开。已经 `approved` 的链接不改原来的过审时间。首页先贴过的同一条，来源仍记为 `homepage`。之后即使用投递密钥再送一次，也不会当场过审；来源仍是 `homepage` 的，满 1 小时仍会自动过审，不按作者是否在池里豁免。账号池成员用投递密钥新送来的帖不自动过审。以前已经以 `approval: "pool"` 放上首页的旧行留在线上，这次进料不会新写这种标记。
 
 预览地址是熟人软启动：`https://woyun-feed-preview.hhzovo66.workers.dev/`。把改动推进 Git 不会自动部署。发布只打 Worker `woyun-feed-preview`。不要部署名为 `woyun` 的 Worker。线上是否已经包含某次提交，以最近一次预览部署为准。
 
@@ -44,7 +45,7 @@ curl -sS -X POST 'https://woyun-feed-preview.hhzovo66.workers.dev/api/dot/pendin
 新链接返回 `201`。整批都已经在队列里、而且状态没有从待筛选改成过审时返回 `200`。批量正文的形状是：
 
 ```json
-{"status":"pending","results":[{"id":"kosx-123","key":"x:123","url":"https://x.com/name/status/123","author_handle":"name","status":"pending","submitted_at":"2026-10-13T00:00:00.000Z","note":"可选","source":"delivery","existing":false,"pool":true,"published":false,"message":"账号池成员的精华帖已进入待筛选。满 1 小时仍未人工处理会自动过审上公开首页。"},{"id":"kosx-456","key":"x:456","url":"https://x.com/outsider/status/456","author_handle":"outsider","status":"pending","submitted_at":"2026-10-13T00:00:00.000Z","note":"","source":"delivery","existing":false,"pool":false,"published":false}]}
+{"status":"pending","results":[{"id":"kosx-123","key":"x:123","url":"https://x.com/name/status/123","author_handle":"name","status":"pending","submitted_at":"2026-10-13T00:00:00.000Z","note":"可选","source":"delivery","existing":false,"pool":true,"published":false,"message":"账号池成员的精华帖已进入待筛选，需接收码人工过审后才会出现在公开首页。"},{"id":"kosx-456","key":"x:456","url":"https://x.com/outsider/status/456","author_handle":"outsider","status":"pending","submitted_at":"2026-10-13T00:00:00.000Z","note":"","source":"delivery","existing":false,"pool":false,"published":false}]}
 ```
 
 单条正文则直接返回上面 `results` 里的那一个对象，不包在 `results` 里。新进料整批都还在待筛选时，批量的 `status` 是 `pending`。队列里已经过审的重复提交仍可能让某一行是 `approved`，这时批量 `status` 仍按全部 `approved`、有的 `approved`（`partial`）或都还在待筛选（`pending`）来标。
@@ -90,8 +91,8 @@ node frontend/refresh-kosx-pool.mjs
 
 继续用投递密钥 POST 到 `/api/dot/pending`。不要改用接收码，接收码不能提交。
 
-- `pool: true` 且 `status: "pending"`：作者在账号池里，这条还在待筛选，没有上公开首页。满 1 小时仍未人工处理会自动过审。不要把它说成已经上首页，也不要按粉丝数决定送不送。
-- `pool: false` 且 `status: "pending"`：作者不在账号池，同样待筛选。满 1 小时仍未人工处理也会自动过审。
+- `pool: true` 且 `status: "pending"` 且 `source: "delivery"`：作者在账号池里，这条还在待筛选，没有上公开首页。1 小时自动过审不会收它，要等接收码。不要把它说成已经上首页，也不要按粉丝数决定送不送。
+- `pool: false` 且 `status: "pending"`：作者不在账号池，同样先待筛选。满 1 小时仍未人工处理会自动过审。
 - `published: true`：这条已经在公开首页。新进料不会因为账号池变成这样。重复投递一条已经过审的链接才会如此。
 - `status: "rejected"`：这条已经被略过，重复 POST 不会把它放回首页。
 

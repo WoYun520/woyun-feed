@@ -335,7 +335,7 @@ function intakeView(record, {includeNote, existing, handles}) {
   if (existing && record.status === 'approved') view.message = '这条已经在公开首页。';
   else if (existing && record.status === 'rejected') view.message = '这条已从待筛选里略过。';
   else if (includeNote && record.source === 'delivery' && record.status === 'pending' && inPool(handles, record.author_handle)) {
-    view.message = '账号池成员的精华帖已进入待筛选。满 1 小时仍未人工处理会自动过审上公开首页。';
+    view.message = '账号池成员的精华帖已进入待筛选，需接收码人工过审后才会出现在公开首页。';
   }
   return view;
 }
@@ -476,7 +476,8 @@ function storeRecord(env, record) {
 
 // Same write path as a delivery POST. New rows stay pending, including pool
 // authors. Nothing here writes approval:pool or PUBLIC_FEED. Already queued
-// keys, including rejected, are left alone. The 1 hour auto-approve runs later.
+// keys, including rejected, are left alone. Pool delivery is not picked up by
+// the 1 hour auto-approve.
 export async function enqueueDeliveryPosts(env, posts) {
   const incoming = Array.isArray(posts) ? posts.filter(post => post?.key && post.url) : [];
   if (!incoming.length) return {created:[], promoted:[], held:[], full:false};
@@ -496,10 +497,14 @@ export async function enqueueDeliveryPosts(env, posts) {
   return {created:created.map(post => post.key), promoted:[], held:[], full:false};
 }
 
-// Pending delivery or homepage paste older than 1 hour is approved onto the
-// public feed, including account-pool authors. Nothing here writes an underrated pin.
+// Homepage paste, and delivery from outside the account pool, older than 1 hour
+// is approved onto the public feed. Pool-member delivery stays pending for a
+// human. Nothing here writes an underrated pin.
 export async function autoApproveStalePending(env, {now = Date.now(), publish = true} = {}) {
-  const due = (await listKosxRecords(env)).filter(record => shouldAutoApprove(record, now));
+  let handles = new Set(KOSX_POOL_HANDLES);
+  try { handles = await loadKosxPoolHandles(env); }
+  catch { handles = new Set(KOSX_POOL_HANDLES); }
+  const due = (await listKosxRecords(env)).filter(record => shouldAutoApprove(record, now, handles));
   if (!due.length) return {approved:[]};
   const clock = now instanceof Date ? now.getTime() : typeof now === 'number' ? now : Date.parse(now);
   const reviewed_at = new Date(Number.isFinite(clock) ? clock : Date.now()).toISOString();

@@ -136,7 +136,8 @@ test('a pool delivery stays pending, and review publishes it without changing th
   assert.equal(body.existing, false);
   assert.equal(body.author_handle.toLowerCase(), poolHandle);
   assert.match(body.message, /待筛选/);
-  assert.match(body.message, /1 小时/);
+  assert.match(body.message, /人工过审/);
+  assert.doesNotMatch(body.message, /自动过审/);
   assert.equal(env.PUBLIC_FEED.writes.length, 0);
   assert.equal(env.PUBLIC_FEED.json().items.some(entry => entry.original_url?.toLowerCase() === poolUrl), false);
   const again = await (await submit(env, {url:poolUrl}, {token:delivery})).json();
@@ -210,8 +211,8 @@ test('a post that would enter yesterday underrated stays pending until the revie
   assert.equal(body.pool, true);
   assert.equal(body.approval, undefined);
   assert.match(body.message, /待筛选/);
-  assert.match(body.message, /1 小时/);
-  assert.doesNotMatch(body.message, /已按时间放上公开首页/);
+  assert.match(body.message, /人工过审/);
+  assert.doesNotMatch(body.message, /自动过审|已按时间放上公开首页/);
   assert.equal(env.PUBLIC_FEED.writes.length, 0);
   assert.equal(env.PUBLIC_FEED.json().items.some(item => item.original_url === poolUrl), false);
   const approved = await decide(env, {url:poolUrl, status:'approved'});
@@ -291,7 +292,7 @@ test('pool intake stays off the homepage until review, and review does not pin u
   const created = await (await submit(env, {url:poolUrl}, {token:delivery})).json();
   assert.equal(created.status, 'pending');
   assert.equal(created.approval, undefined);
-  assert.equal(created.message, '账号池成员的精华帖已进入待筛选。满 1 小时仍未人工处理会自动过审上公开首页。');
+  assert.equal(created.message, '账号池成员的精华帖已进入待筛选，需接收码人工过审后才会出现在公开首页。');
   assert.doesNotMatch(created.message, /不进入昨日最被低估|已按时间放上公开首页/);
   assert.equal(env.PUBLIC_FEED.json().items.some(entry => entry.original_url === poolUrl), false);
   const reviewed = await (await decide(env, {url:poolUrl, status:'approved'})).json();
