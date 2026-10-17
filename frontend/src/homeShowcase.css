@@ -115,9 +115,19 @@ body:has(.workspace-shell[data-workspace-tab="today"]) { background: var(--home-
 .kosx-accent { width: 6px; height: 6px; border-radius: 999px; background: #EC672B; flex: 0 0 auto; }
 .kosx-cta { flex: 0 0 auto; }
 .kosx-footer {
-  display: flex; align-items: center; min-height: 44px; margin: 36px 0 0; padding: 16px 0 0;
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  min-height: 44px; margin: 36px 0 0; padding: 16px 0 0;
   border-top: 1px solid #e8e8e4;
 }
+.essence-page { box-sizing: border-box; max-width: 1120px; margin: 0 auto; padding: 32px 32px 72px; }
+.essence-top { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; margin: 0 0 8px; }
+.essence-top h1 { margin: 0; font-family: var(--font-serif), "Songti SC", serif; font-size: clamp(32px, 4vw, 44px); font-weight: 600; letter-spacing: -.03em; line-height: 1.15; }
+.essence-back { color: #62675d; font-size: 13px; font-weight: 650; text-decoration: none; }
+.essence-back:hover { color: #171917; text-decoration: underline; }
+.essence-pager { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; margin-top: 28px; color: #62675d; font-size: 13px; }
+.essence-pager a { color: #171917; font-weight: 650; text-decoration: none; }
+.essence-pager a:hover { text-decoration: underline; }
+.essence-pager span { color: #b0b3aa; }
 .kosx-wordmark { display: block; height: 32px; width: auto; }
 .kosx-panel {
   display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 10px 0 0; padding: 16px;
@@ -180,7 +190,9 @@ body:has(.workspace-shell[data-workspace-tab="today"]) { background: var(--home-
 .home-band-heading { margin: 0 0 18px; }
 .home-band-heading h2, .home-subhead { margin: 0; font-family: var(--font-serif); font-weight: 600; letter-spacing: -.03em; color: var(--home-ink, #171917); }
 .home-band-heading h2 { font-size: clamp(28px, 3vw, 40px); line-height: 1.2; }
-#home-latest .home-band-heading { margin-bottom: 12px; }
+#home-latest .home-band-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.home-archive-link { flex: 0 0 auto; color: #62675d; font-size: 13px; font-weight: 650; line-height: 1.4; text-decoration: none; }
+.home-archive-link:hover { color: #171917; text-decoration: underline; }
 #home-latest .home-band-heading h2 { font-family: var(--font-sans); font-size: 13px; font-weight: 650; letter-spacing: 0; color: #62675d; }
 .home-band-heading h2 small, .home-subhead small { margin-left: 8px; color: var(--home-muted, #62675d); font-family: var(--font-sans); font-size: 13px; font-weight: 500; letter-spacing: 0; }
 .home-subhead { margin: 22px 0 8px; font-size: 22px; }
@@ -304,6 +316,7 @@ body:has(.workspace-shell[data-workspace-tab="today"]) { background: var(--home-
   .levi-flow { font-size: clamp(36px, 11vw, 44px); }
   .home-slogan { margin-top: 20px; }
   .home-band-heading h2 { font-size: 28px; }
+  .essence-page { padding: 24px 24px 56px; }
 }
 @media (max-width: 520px) {
   .kosx-strip { flex-wrap: wrap; column-gap: 16px; row-gap: 8px; align-items: center; min-height: 44px; }

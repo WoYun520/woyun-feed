@@ -17,6 +17,7 @@
 | 昨日最被低估 | 人工钉选，原帖日是「昨日全部」或它的前一个自然日，最多 2 条，可以空着 |
 | 七日精选 | 最近 7 个北京时间自然日里的精华文章，收藏数达到 200 |
 | 卧云精选 | 不限日期的精华文章，收藏数达到 1000 |
+| 全部精华 | 单独一页，分页列出已经上过公开首页、并仍留在归档里的精华帖。不画在首页第一屏。下架只在本机过审 |
 
 占位标题 `@handle 的精华帖` 可以留在卡片上，只要摘录还在。没有可用摘录、又没有会画出来的封面或图片时，`blankPublicCover` 把这张空白封面排除在五条公开栏之外。这一步已经做在 `selectHomeShowcase` 里。七日精选在整批文章都没有收藏数时还有热度退路。说明见 [docs/architecture.md](docs/architecture.md)。
 
@@ -50,7 +51,7 @@ wrangler.jsonc                    只描述预览 Worker
 打开过审.command                  Mac：打开本机过审
 ```
 
-静态资源在 `public-dist`。`/data/public-feed.json`、`/api/dot/*`、`/api/home-boost` 先进入 Worker，其余路径由静态资源处理。
+静态资源在 `public-dist`。`/data/public-feed.json`、`/api/dot/*`、`/api/home-boost`、`/api/visitor-feedback`、`/api/essence-archive` 先进入 Worker，其余路径由静态资源处理。全部精华是 `/essence.html`，一次只取一页。归档键是 `essence-archive:v1`，不写进首页那包 JSON。
 
 ## 本机查看
 

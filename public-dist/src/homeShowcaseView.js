@@ -180,7 +180,7 @@ function renderKosxStrip(app) {
 }
 
 function renderKosxFooter() {
-  return `<footer class="kosx-footer"><img class="kosx-wordmark" src="/assets/kosx/wordmark-ink.svg" width="187" height="32" alt="KOSX.ai，橙色圆点"></footer>`;
+  return `<footer class="kosx-footer"><img class="kosx-wordmark" src="/assets/kosx/wordmark-ink.svg" width="187" height="32" alt="KOSX.ai，橙色圆点"><a class="home-archive-link" href="/essence.html">全部精华</a></footer>`;
 }
 
 function renderBoostWatermark(app) {
@@ -204,7 +204,7 @@ function renderLatest(app, state, selection) {
   const underrated = selection.underrated.length
     ? `<section class="home-band home-underrated" id="home-underrated" aria-labelledby="home-underrated-title" data-underrated-rule="${e(selection.underratedRule)}"><header class="home-band-heading"><h2 id="home-underrated-title">昨日最被低估精华帖 <small>${selection.underrated.length}</small></h2></header>${renderCards(app, state, selection.underrated, 'under')}</section>`
     : '';
-  return `<section class="home-band" id="home-latest" aria-labelledby="home-latest-title"><header class="home-band-heading"><h2 id="home-latest-title">最新精华帖 <small>${selection.latest.length} / 18</small></h2></header>${renderCards(app, state, selection.latest, 'latest')}</section>${renderSlogan(e)}${underrated}`;
+  return `<section class="home-band" id="home-latest" aria-labelledby="home-latest-title"><header class="home-band-heading"><h2 id="home-latest-title">最新精华帖 <small>${selection.latest.length} / 18</small></h2><a class="home-archive-link" href="/essence.html">全部精华</a></header>${renderCards(app, state, selection.latest, 'latest')}</section>${renderSlogan(e)}${underrated}`;
 }
 
 function renderSlogan(e) {

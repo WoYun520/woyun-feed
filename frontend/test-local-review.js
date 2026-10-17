@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import http from 'node:http';
 import { createFeedServer } from './serve.js';
 import { PUBLIC_FILES } from './public-build.mjs';
-import { decidePendingForLocalReview, launchOpenPath, listFeedbackForLocalReview, listPendingForLocalReview, loadReviewToken, markFeedbackReadForLocalReview } from './local-review.js';
+import { decideArchiveForLocalReview, decidePendingForLocalReview, launchOpenPath, listArchiveForLocalReview, listFeedbackForLocalReview, listPendingForLocalReview, loadReviewToken, markFeedbackReadForLocalReview } from './local-review.js';
 
 const token = 'r'.repeat(40);
 const postUrl = 'https://x.com/example/status/2108148604447883999';
@@ -225,4 +225,34 @@ test('local feedback is a separate host read and never accepts a browser review 
   assert.equal(JSON.parse(done.body).read, true);
   assert.equal(done.body.includes(token), false);
   assert.equal((await request('/api/local-review/feedback?token=secret')).status, 400);
+});
+
+test('the local archive proxy sends the review code and only the take-down body', async () => {
+  const calls = [];
+  const row = {
+    id:'188102', title:'乙', excerpt:'摘录', url:postUrl,
+    published_at:'2026-10-01T00:00:00.000Z', approved_at:'2026-10-04T00:00:00.000Z',
+    author:'@example', source:'KOSX 过审', cover_url:'', cover_kind:'', pool:false, removed:false, removed_at:'',
+  };
+  const fetchImpl = async (url, options) => {
+    calls.push({url:String(url), method:options.method, body:options.body, authorization:options.headers.Authorization});
+    if (options.method === 'POST') {
+      return new Response(JSON.stringify({...row, removed:true, removed_at:'2026-10-17T01:00:00.000Z'}), {status:200, headers:{'Content-Type':'application/json'}});
+    }
+    return new Response(JSON.stringify({page:1, page_size:24, total:1, pages:1, items:[row]}), {status:200, headers:{'Content-Type':'application/json'}});
+  };
+  const listed = await listArchiveForLocalReview({token, origin, fetchImpl, page:'1'});
+  assert.equal(listed.status, 200);
+  assert.equal(listed.body.items[0].url, postUrl);
+  assert.equal(JSON.stringify(listed).includes(token), false);
+  assert.equal(calls[0].url, `${origin}/api/essence-archive/admin?page=1`);
+  assert.equal(calls[0].authorization, `Bearer ${token}`);
+  const decided = await decideArchiveForLocalReview({token, origin, fetchImpl, input:{url:postUrl, removed:true, status:'pending'}});
+  assert.equal(decided.status, 400);
+  const removed = await decideArchiveForLocalReview({token, origin, fetchImpl, input:{url:postUrl, removed:true}});
+  assert.equal(removed.status, 200);
+  assert.equal(removed.body.removed, true);
+  assert.deepEqual(JSON.parse(calls.at(-1).body), {url:postUrl, removed:true});
+  assert.equal(calls.at(-1).url, `${origin}/api/essence-archive/admin`);
+  assert.equal(JSON.stringify(removed).includes(token), false);
 });

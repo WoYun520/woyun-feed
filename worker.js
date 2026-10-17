@@ -6,6 +6,7 @@ import { handleDotPendingRequest, isDotPendingRoute } from './dot-pending-servic
 import { handleDotUnderratedRequest, isDotUnderratedRoute, overlayPublicUnderratedPins } from './dot-underrated-service.js';
 import { handleHomeBoostRequest, isHomeBoostRoute } from './frontend/home-boost-service.js';
 import { handleVisitorFeedbackRequest, isVisitorFeedbackRoute } from './visitor-feedback-service.js';
+import { handleEssenceArchiveRequest, isEssenceArchiveRoute } from './frontend/essence-archive-service.js';
 
 export default {
   async fetch(request,env) {
@@ -15,6 +16,7 @@ export default {
     if(isDotInboxRoute(url.pathname)) return handleDotInboxRequest(request,env);
     if(isHomeBoostRoute(url.pathname)) return handleHomeBoostRequest(request,env);
     if(isVisitorFeedbackRoute(url.pathname)) return handleVisitorFeedbackRequest(request,env);
+    if(isEssenceArchiveRoute(url.pathname)) return handleEssenceArchiveRequest(request,env);
     if(url.pathname==='/data/public-feed.json') {
       if(!['GET','HEAD'].includes(request.method)) return new Response('Method not allowed',{status:405,headers:{Allow:'GET, HEAD'}});
       try {

@@ -129,7 +129,7 @@ function pinnedNote() {
 // Homepage essence is the curated public line that approved pending rows and
 // pool auto-approvals join (same flags as isKosxPublicItem). A dated SoPilot
 // stream post that never took that path is not essence.
-function isHomepageEssence(item) {
+export function isHomepageEssence(item) {
   if (!item || typeof item !== 'object') return false;
   if (item.origin === 'kosx_approved') return true;
   const refs = item.source_refs;
