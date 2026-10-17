@@ -13,14 +13,24 @@
   <main class="page-container" style="max-width:740px;padding:32px 20px 64px">
     <p class="form-help">Levi flow · 只在这台电脑</p>
     <h1>本机过审</h1>
-    <p class="form-help">按提交日列出北京时间今天或昨天进队的链接，从这里过审上首页或略过，包括贴进来的旧帖。浏览器里不需要粘贴接收码。公开首页没有「待过审」入口。</p>
+    <p class="form-help">按提交日列出北京时间今天或昨天进队的链接，从这里过审上首页或略过，包括贴进来的旧帖。浏览器里不需要粘贴接收码。公开首页没有「待过审」入口。访客意见在下面单独一栏。</p>
     <style>
       .review-admin-toolbar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin: 0 0 16px; }
       .review-admin-toolbar p { margin: 0; color: var(--text-muted, #6a6d65); font-size: 13px; line-height: 1.6; }
       .review-admin-toolbar .btn-quiet { min-height: 36px; padding: 6px 14px; color: #171917; border: 1px solid #171917; background: #fff; font-weight: 650; }
       .review-admin-toolbar .btn-quiet:disabled { opacity: .55; }
+      .visitor-feedback { margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--border-light, #dedfd7); }
+      .visitor-feedback-heading h2 { margin: 0 0 6px; font-size: 18px; }
+      .visitor-feedback-heading p, .visitor-feedback-status, .visitor-feedback-error { margin: 0 0 12px; color: var(--text-muted, #6a6d65); font-size: 13px; line-height: 1.6; }
+      .visitor-feedback-error { color: var(--highlight, #c84924); }
+      .visitor-feedback-item { margin: 0 0 12px; padding: 12px 14px; border: 1px solid var(--border-light, #dedfd7); border-radius: 12px; background: #fff; }
+      .visitor-feedback-item.is-read { opacity: .72; }
+      .visitor-feedback-time, .visitor-feedback-contact, .visitor-feedback-meta { margin: 0; color: var(--text-muted, #6a6d65); font-size: 12px; line-height: 1.5; }
+      .visitor-feedback-text { margin: 6px 0 0; white-space: pre-wrap; line-height: 1.6; }
+      .visitor-feedback-contact, .visitor-feedback-meta { margin-top: 8px; }
+      .visitor-feedback-item .btn-quiet { min-height: 32px; margin-top: 10px; padding: 4px 12px; }
     </style>
-    <div id="review-admin-root"><div class="review-admin-toolbar"><button type="button" class="btn-quiet" data-review-refresh>刷新</button><p>打开时拉一次待过审，之后约每 30 秒自动更新，也可以点刷新。页面在后台或正在过审时会跳过自动更新。</p></div><p class="review-queue-status" role="status">正在读取本机过审…</p></div>
+    <div id="review-admin-root"><div class="review-admin-toolbar"><button type="button" class="btn-quiet" data-review-refresh>刷新</button><p>打开时拉一次待过审和意见反馈，之后约每 30 秒自动更新，也可以点刷新。页面在后台、正在过审或标为已读时会跳过自动更新。</p></div><p class="review-queue-status" role="status">正在读取本机过审…</p><section id="visitor-feedback" class="visitor-feedback" aria-label="意见反馈"><header class="visitor-feedback-heading"><h2>意见反馈</h2><p>公开预览顶栏发来的话，单独放在这里，不进待过审队列。</p></header><p class="visitor-feedback-status" role="status">正在读取意见反馈…</p></section></div>
   </main>
   <script type="module" src="/src/reviewAdminPage.js"></script>
 </body>

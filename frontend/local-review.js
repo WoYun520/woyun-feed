@@ -5,9 +5,13 @@ import { REVIEW_TYPES } from './src/reviewQueue.js';
 export const REVIEW_ADMIN_PATH = '/review-admin';
 export const LOCAL_REVIEW_PENDING_PATH = '/api/local-review/pending';
 export const LOCAL_REVIEW_DECISION_PATH = '/api/local-review/decision';
+export const LOCAL_REVIEW_FEEDBACK_PATH = '/api/local-review/feedback';
+export const LOCAL_REVIEW_FEEDBACK_READ_PATH = '/api/local-review/feedback/read';
 export const DEFAULT_REVIEW_ORIGIN = 'https://woyun-feed-preview.hhzovo66.workers.dev';
 const UPSTREAM_PENDING = '/api/dot/pending';
 const UPSTREAM_DECISION = '/api/dot/pending/decision';
+const UPSTREAM_FEEDBACK = '/api/visitor-feedback';
+const UPSTREAM_FEEDBACK_READ = '/api/visitor-feedback/read';
 const TOKEN_PATTERN = /^[A-Za-z0-9_-]{32,256}$/;
 const PAGE_LIMIT = 8;
 const ITEM_LIMIT = 300;
@@ -143,6 +147,84 @@ export async function listPendingForLocalReview({token, origin, fetchImpl}) {
     return {status:200, body:{items}};
   } catch {
     return {status:502, body:{error:'review_unavailable', message:'暂时无法读取本机过审。'}};
+  }
+}
+
+const FEEDBACK_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const FEEDBACK_STAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
+
+function feedbackUnavailable(message = '暂时无法读取意见反馈。') {
+  return {status:502, body:{error:'feedback_unavailable', message}};
+}
+
+function cleanFeedbackItem(item, token) {
+  if (!plain(item)) return null;
+  const id = typeof item.id === 'string' ? item.id.toLowerCase() : '';
+  const text = typeof item.text === 'string' ? item.text : '';
+  const contact = item.contact == null ? '' : item.contact;
+  const userAgent = item.user_agent == null ? '' : item.user_agent;
+  if (!FEEDBACK_UUID.test(id) || !FEEDBACK_STAMP.test(item.created_at) || !Number.isFinite(Date.parse(item.created_at))) return null;
+  if (!text.trim() || Array.from(text).length > 1000 || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(text)) return null;
+  if (typeof contact !== 'string' || Array.from(contact).length > 80 || /[\u0000-\u001f\u007f]/.test(contact)) return null;
+  if (typeof userAgent !== 'string' || Array.from(userAgent).length > 160 || /[\u0000-\u001f\u007f]/.test(userAgent)) return null;
+  if (typeof item.read !== 'boolean') return null;
+  const safe = scrub({id, created_at:item.created_at, text, contact, user_agent:userAgent, read:item.read}, token);
+  return safe;
+}
+
+export async function listFeedbackForLocalReview({token, origin, fetchImpl}) {
+  if (!token) return missingCredential();
+  const resolved = reviewOrigin(origin);
+  if (!resolved || typeof fetchImpl !== 'function') return feedbackUnavailable();
+  try {
+    const result = await callUpstream(fetchImpl, resolved, token, UPSTREAM_FEEDBACK);
+    if (result.status === 401 || result.status === 403) {
+      return {status:401, body:{error:'review_rejected', message:'本机接收码没有通过。请核对 .local/dot-review-token 或 DOT_REVIEW_TOKEN，然后重新打开本机服务。'}};
+    }
+    const list = result.payload;
+    if (result.status !== 200 || !plain(list) || !Array.isArray(list.items) || list.items.length > 50 || (list.truncated != null && typeof list.truncated !== 'boolean')) {
+      return feedbackUnavailable(upstreamMessage(list, token) || '暂时无法读取意见反馈。');
+    }
+    const items = [];
+    for (const item of list.items) {
+      const safe = cleanFeedbackItem(item, token);
+      if (!safe) return feedbackUnavailable();
+      items.push(safe);
+    }
+    return {status:200, body:{items, truncated:list.truncated === true}};
+  } catch {
+    return feedbackUnavailable();
+  }
+}
+
+export function feedbackReadBody(input) {
+  if (!plain(input) || Object.keys(input).length !== 1 || typeof input.id !== 'string' || !FEEDBACK_UUID.test(input.id)) {
+    return {error:'请提交要标为已读的反馈。'};
+  }
+  return {body:{id:input.id.toLowerCase()}};
+}
+
+export async function markFeedbackReadForLocalReview({token, origin, fetchImpl, input}) {
+  if (!token) return missingCredential();
+  const prepared = feedbackReadBody(input);
+  if (prepared.error) return {status:400, body:{error:'invalid_body', message:prepared.error}};
+  const resolved = reviewOrigin(origin);
+  if (!resolved || typeof fetchImpl !== 'function') return {status:502, body:{error:'feedback_unavailable', message:'没有标成已读。'}};
+  try {
+    const result = await callUpstream(fetchImpl, resolved, token, UPSTREAM_FEEDBACK_READ, {method:'POST', body:prepared.body});
+    if (result.status === 401 || result.status === 403) {
+      return {status:401, body:{error:'review_rejected', message:'本机接收码没有通过。请核对 .local/dot-review-token 或 DOT_REVIEW_TOKEN，然后重新打开本机服务。'}};
+    }
+    const safe = cleanFeedbackItem(result.payload, token);
+    if (!safe || safe.read !== true || safe.id !== prepared.body.id) {
+      return {status:result.status >= 400 && result.status < 500 ? result.status : 502, body:{error:'feedback_unavailable', message:upstreamMessage(result.payload, token) || '没有标成已读。'}};
+    }
+    if (result.status !== 200) {
+      return {status:result.status, body:{error:typeof result.payload?.error === 'string' ? result.payload.error : 'feedback_unavailable', message:upstreamMessage(result.payload, token) || '没有标成已读。'}};
+    }
+    return {status:200, body:safe};
+  } catch {
+    return {status:502, body:{error:'feedback_unavailable', message:'没有标成已读。'}};
   }
 }
 

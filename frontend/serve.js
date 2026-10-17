@@ -18,7 +18,7 @@ import { ResearchService, researchError } from './research-service.js';
 import { stopCodexReaders } from './codex-reader.js';
 import { RepositoryGuideService } from './repository-guide-service.js';
 import { installationId } from './installation.js';
-import { REVIEW_ADMIN_PATH, decidePendingForLocalReview, listPendingForLocalReview, loadReviewToken, normalizeReviewToken } from './local-review.js';
+import { REVIEW_ADMIN_PATH, decidePendingForLocalReview, listFeedbackForLocalReview, listPendingForLocalReview, loadReviewToken, markFeedbackReadForLocalReview, normalizeReviewToken } from './local-review.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -171,14 +171,16 @@ export function createFeedServer({ service = new FeedService({ dataDir: path.joi
         if (route === '/api/health' && req.method === 'GET') return json(200, {
           app: 'personal-feed', protocol: 1, installation_id: installationId(FRONTEND_DIR)
         });
-        if (route === '/api/local-review/pending' || route === '/api/local-review/decision') {
+        if (route === '/api/local-review/pending' || route === '/api/local-review/decision' || route === '/api/local-review/feedback' || route === '/api/local-review/feedback/read') {
           if (req.url.includes('?')) return json(400, {error:'invalid_query', message:'这一页不接受查询参数。'});
           const reviewToken = review && Object.hasOwn(review, 'token') ? normalizeReviewToken(review.token) : loadReviewToken({root:ROOT_DIR});
           const origin = review?.origin || process.env.DOT_REVIEW_ORIGIN;
           const fetchImpl = review?.fetch || globalThis.fetch;
-          if (route === '/api/local-review/pending') {
+          if (route === '/api/local-review/pending' || route === '/api/local-review/feedback') {
             if (req.method !== 'GET') return json(405, {error:'method_not_allowed', message:'不支持此操作。'});
-            const result = await listPendingForLocalReview({token:reviewToken, origin, fetchImpl});
+            const result = route === '/api/local-review/feedback'
+              ? await listFeedbackForLocalReview({token:reviewToken, origin, fetchImpl})
+              : await listPendingForLocalReview({token:reviewToken, origin, fetchImpl});
             return json(result.status, result.body);
           }
           if (req.method !== 'POST') return json(405, {error:'method_not_allowed', message:'不支持此操作。'});
@@ -192,7 +194,9 @@ export function createFeedServer({ service = new FeedService({ dataDir: path.joi
           let input;
           try { input = JSON.parse(Buffer.concat(chunks).toString('utf8')); }
           catch { return json(400, {error:'请求格式错误。'}); }
-          const result = await decidePendingForLocalReview({token:reviewToken, origin, fetchImpl, input});
+          const result = route === '/api/local-review/feedback/read'
+            ? await markFeedbackReadForLocalReview({token:reviewToken, origin, fetchImpl, input})
+            : await decidePendingForLocalReview({token:reviewToken, origin, fetchImpl, input});
           return json(result.status, result.body);
         }
         if (route === '/api/research' && req.method === 'POST') {

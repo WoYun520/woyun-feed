@@ -1,4 +1,5 @@
 import { TOPIC_STATUS } from './topicWorkspace.js';
+import { renderVisitorFeedback } from './visitorFeedback.js';
 
 const e=value=>String(value ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const paths={
@@ -21,7 +22,8 @@ export function renderWorkspaceNavigation(tab,state,options={}) {
     const homeView=['latest','yesterday','week','kept'].includes(options.homeView) ? options.homeView : 'latest';
     const catsOpen=options.catsOpen===true;
     const cat=(id,label)=>`<button type="button" class="lift-cat" data-home-view="${id}"${homeView===id?' aria-current="page"':''}>${label}</button>`;
-    return `<a class="workspace-skip" href="#workspace-main">跳到内容</a><header class="site-header lift-header workspace-publication-nav" role="banner"><div class="site-header-inner"><div class="lift-bar"><button type="button" class="lift-pill shape-pill" id="home-brand" data-shape="pill" data-home-view="latest"${homeView==='latest'?' aria-current="page"':''}>Levi flow</button><button type="button" class="lift-cats-button" id="home-cats-button" aria-expanded="${catsOpen?'true':'false'}" aria-controls="home-cats" aria-label="精华帖分类"><span class="lift-menu-icon" aria-hidden="true"><span></span><span></span><span></span></span></button><nav class="lift-cats${catsOpen?' is-open':''}" id="home-cats" aria-label="精华帖分类">${cat('yesterday','昨日全部')}${cat('week','七日精选')}${cat('kept','卧云精选')}</nav></div></div></header>`;
+    const feedback=state.publicPreview?renderVisitorFeedback(options.feedback):'';
+    return `<a class="workspace-skip" href="#workspace-main">跳到内容</a><header class="site-header lift-header workspace-publication-nav" role="banner"><div class="site-header-inner"><div class="lift-bar"><button type="button" class="lift-pill shape-pill" id="home-brand" data-shape="pill" data-home-view="latest"${homeView==='latest'?' aria-current="page"':''}>Levi flow</button><button type="button" class="lift-cats-button" id="home-cats-button" aria-expanded="${catsOpen?'true':'false'}" aria-controls="home-cats" aria-label="精华帖分类"><span class="lift-menu-icon" aria-hidden="true"><span></span><span></span><span></span></span></button><nav class="lift-cats${catsOpen?' is-open':''}" id="home-cats" aria-label="精华帖分类">${cat('yesterday','昨日全部')}${cat('week','七日精选')}${cat('kept','卧云精选')}</nav>${feedback}</div></div></header>`;
   }
   return `<a class="workspace-skip" href="#workspace-main">跳到内容</a><header class="site-header workspace-sidebar${publication?' workspace-publication-nav':''}" role="banner"><div class="site-header-inner">
     ${publication?`<div class="publication-topline"><span>卧云 · 给创作者的信息刊物</span><span>${mode}</span></div>`:''}

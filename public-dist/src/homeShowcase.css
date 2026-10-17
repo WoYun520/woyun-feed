@@ -31,6 +31,32 @@ body:has(.workspace-shell[data-workspace-tab="today"]) { background: var(--home-
   margin: 0 auto; padding: 14px 48px 12px; gap: 0; overflow: visible;
 }
 .lift-bar { position: relative; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 4px 8px; min-height: 44px; }
+.lift-feedback {
+  margin-left: auto; height: 36px; min-height: 36px; padding: 0 12px; border: 0; border-radius: 999px;
+  background: transparent; color: #62675d; font-size: 13px; font-weight: 500; line-height: 1; white-space: nowrap;
+}
+.lift-feedback:hover, .lift-feedback[aria-expanded="true"] { color: #171917; }
+.lift-bar:has(.lift-feedback) .lift-cats-button { margin-left: 0; }
+.lift-feedback-panel {
+  position: absolute; right: 0; top: calc(100% + 8px); z-index: 60; display: flex; flex-direction: column; gap: 8px;
+  width: min(320px, calc(100vw - 48px)); margin: 0; padding: 14px 14px 12px;
+  background: #ffffff; border: 1px solid #e8e8e4; border-radius: 16px;
+}
+.lift-feedback-panel[hidden] { display: none; }
+.lift-feedback-panel label { color: #62675d; font-size: 12px; line-height: 1.4; }
+.lift-feedback-panel textarea, .lift-feedback-panel input {
+  width: 100%; margin: 0; padding: 8px 10px; border: 1px solid #e8e8e4; border-radius: 8px;
+  background: #ffffff; color: #171917; font: inherit; font-size: 14px; line-height: 1.5;
+}
+.lift-feedback-panel textarea { min-height: 96px; resize: vertical; }
+.lift-feedback-send {
+  align-self: flex-end; height: 32px; min-height: 32px; padding: 0 14px; border: 0; border-radius: 999px;
+  background: #171917; color: #ffffff; font-size: 13px; font-weight: 650; line-height: 1;
+}
+.lift-feedback-send:disabled, .lift-feedback-panel textarea:disabled, .lift-feedback-panel input:disabled { opacity: .55; }
+.lift-feedback-status { margin: 0; color: #62675d; font-size: 13px; line-height: 1.5; }
+.lift-feedback-status:empty { display: none; }
+.lift-feedback:focus-visible, .lift-feedback-panel :focus-visible { outline: 2px solid #171917; outline-offset: 2px; }
 .shape-pill, .lift-pill, .lift-cat {
   display: inline-flex; align-items: center; justify-content: center;
   height: 36px; min-height: 36px; padding: 0 14px; border: 0; border-radius: var(--shape-pill, 999px);

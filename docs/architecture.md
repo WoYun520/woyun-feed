@@ -14,13 +14,13 @@ flowchart LR
   pending["DOT_INBOX 队列"]
   feed["PUBLIC_FEED 快照"]
   browser --> worker
-  worker -->|"/api/dot/* 与 /api/home-boost"| pending
+  worker -->|"/api/dot/*、/api/home-boost、/api/visitor-feedback"| pending
   worker -->|GET /data/public-feed.json| feed
   worker -->|其余路径| assets
   feed -->|缺快照时回退| assets
 ```
 
-`wrangler.jsonc` 里 `run_worker_first` 把这几条交给 Worker：`/data/public-feed.json`、`/api/dot/*`、`/api/home-boost`。快照键是 `public-feed:current:v1`。KV 读失败时，`/data/public-feed.json` 回退到已发布的静态文件。
+`wrangler.jsonc` 里 `run_worker_first` 把这几条交给 Worker：`/data/public-feed.json`、`/api/dot/*`、`/api/home-boost`、`/api/visitor-feedback`。快照键是 `public-feed:current:v1`。KV 读失败时，`/data/public-feed.json` 回退到已发布的静态文件。
 
 | 路径 | 模块 | 作用 |
 | --- | --- | --- |
@@ -29,7 +29,9 @@ flowchart LR
 | `/api/dot/pending/decision` | 同上 | 接收码标 `approved` 或 `rejected` |
 | `/api/dot/underrated` | `dot-underrated-service.js` | 接收码钉选或撤下「昨日最被低估」 |
 | `/api/home-boost` | `frontend/home-boost-service.js` | 首页已助力计数 |
-| `/review-admin` | 只在本机 `frontend/serve.js` | 过审页。公开预览没有这条 |
+| `/api/visitor-feedback` | `visitor-feedback-service.js` | 公开页提交意见；接收码才能列出 |
+| `/api/visitor-feedback/read` | 同上 | 接收码把一条意见标为已读 |
+| `/review-admin` | 只在本机 `frontend/serve.js` | 过审页，另有单独的意见反馈栏。公开预览没有这条 |
 
 私有 KV `DOT_INBOX` 里和协作有关的键：
 
@@ -39,6 +41,9 @@ flowchart LR
 | `kosx_pool_handles` | 小写的 KOSX 账号池 handle，缓存超过 1 小时会再拉 |
 | `underrated:pins:v1` | 低估钉选，库最多 8 条，首页最多显示 2 条 |
 | `essence_sweep:v1` | 精华扫榜的成败与退避 |
+| `visitor-feedback:item:` | 访客意见，保留 90 天。不进待筛选 |
+| `visitor-feedback:id:` | 按编号找到一条意见，给标已读用 |
+| `visitor-feedback:rate:` | 同一地址的发送计数，1 小时最多 5 条 |
 
 账号池来自公开接口 <https://impact.kosx.ai/api/members> 的 `members[].handle`。粉丝数不写入 KV，也不参与排序。首页上的 KOSX 标记读的是随静态资源发布的 `kosx-pool.js`，名单变化要等下一次构建部署才换标记；进料回答里的 `pool` 读的是 KV 缓存，不必为了名单再部署。名单不让进料当场过审。
 
