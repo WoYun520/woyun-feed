@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { webcrypto } from 'node:crypto';
 import { dotInboxHash, handleDotInboxRequest } from '../dot-inbox-service.js';
-import { DOT_PENDING_BATCH_MAX, DOT_PENDING_MAX, DOT_PENDING_PATH, DOT_PENDING_PREFIX, handleDotPendingRequest } from '../dot-pending-service.js';
-import { excerptFromOembedHtml, fetchXStatusText } from './x-status-text.js';
+import { DOT_PENDING_BATCH_MAX, DOT_PENDING_DECISION_PATH, DOT_PENDING_MAX, DOT_PENDING_PATH, DOT_PENDING_PREFIX, handleDotPendingRequest } from '../dot-pending-service.js';
+import { excerptFromOembedHtml, excerptFromStatusPayload, fetchXStatusText } from './x-status-text.js';
 import worker from '../worker.js';
 
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
@@ -321,7 +321,8 @@ test('a public status read fills missing paste text and does not call the paid X
   env.xStatusFetch = async endpoint => {
     calls.push(String(endpoint));
     return new Response(JSON.stringify({
-      html:`<blockquote class="twitter-tweet"><p lang="zh">${tweet.replace(/，/g, '&#65292;')}</p>&mdash; Name (@example)</blockquote>`,
+      code:200,
+      tweet:{text:tweet, is_note_tweet:false},
     }), {status:200, headers:{'Content-Type':'application/json'}});
   };
   const created = await submit(env, {url:postUrl});
@@ -329,25 +330,75 @@ test('a public status read fills missing paste text and does not call the paid X
   const row = stored(env)[0];
   assert.equal(row.note, '');
   assert.equal(row.source, 'homepage');
-  assert.equal(row.text.includes('并不等于一定安全'), true);
+  assert.equal(row.text, tweet);
+  assert.equal(row.text_fill_failed, undefined);
   assert.equal(calls.length, 1);
-  assert.match(calls[0], /^https:\/\/publish\.twitter\.com\/oembed\?/);
-  assert.equal(calls.some(url => /api\.x\.com|api\.twitter\.com/.test(url)), false);
+  assert.equal(calls[0], `https://api.fxtwitter.com/status/${statusId}`);
+  assert.equal(calls.some(url => /api\.x\.com|api\.twitter\.com|api\.socialdata\.tools|publish\.twitter\.com/.test(url)), false);
   env.xStatusFetch = async () => { throw Error('should not read again'); };
   const again = await submit(env, {url:postUrl});
   assert.equal(again.status, 200);
   assert.equal(stored(env)[0].text, row.text);
 });
 
-test('oEmbed and syndication excerpts decode, and a failed read stays empty', async () => {
+test('a failed public read stays pending, marks the card, and a later read can fill the empty text', async () => {
+  const env = await environment();
+  const calls = [];
+  env.xStatusFetch = async endpoint => {
+    calls.push(String(endpoint));
+    if (String(endpoint).includes('api.fxtwitter.com')) return new Response('down', {status:503});
+    if (String(endpoint).includes('cdn.syndication.twimg.com')) return new Response('{}', {status:200, headers:{'Content-Type':'application/json'}});
+    return new Response('', {status:301, headers:{Location:'https://publish.x.com/oembed'}});
+  };
+  const created = await submit(env, {url:postUrl});
+  assert.equal(created.status, 201);
+  const row = stored(env)[0];
+  assert.equal(row.status, 'pending');
+  assert.equal(row.text, undefined);
+  assert.equal(row.text_fill_failed, true);
+  assert.equal(calls.filter(url => url.startsWith('https://api.fxtwitter.com/')).length, 2);
+  assert.equal(calls.some(url => url.startsWith('https://cdn.syndication.twimg.com/tweet-result?') && url.includes(`id=${statusId}`) && url.includes('token=')), true);
+  assert.equal(calls.some(url => url.startsWith('https://publish.x.com/oembed?')), true);
+  assert.equal(calls.some(url => /api\.x\.com|api\.socialdata\.tools|publish\.twitter\.com/.test(url)), false);
+  const listed = await handleDotPendingRequest(request('GET', {token:review}), env);
+  const item = (await listed.json()).items.find(entry => entry.url === postUrl);
+  assert.equal(item.text_fill_failed, true);
+  const refused = await handleDotPendingRequest(request('POST', {path:DOT_PENDING_DECISION_PATH, token:review, body:{url:postUrl, status:'approved'}}), env);
+  assert.equal(refused.status, 400);
+  assert.equal((await refused.json()).message, '缺摘录不能上首页');
+  assert.equal(stored(env)[0].status, 'pending');
+  const delivered = '后来投递的正文，不应该被再读一次覆盖。';
+  env.xStatusFetch = async () => { throw Error('delivered text must not be fetched'); };
+  const filled = await submit(env, {url:postUrl, text:delivered}, {token:delivery});
+  assert.equal(filled.status, 200);
+  assert.equal(stored(env)[0].text, delivered);
+  assert.equal(stored(env)[0].text_fill_failed, undefined);
+});
+
+test('oEmbed, note tweets, and article text decode, and a failed read stays empty', async () => {
   assert.equal(excerptFromOembedHtml('<blockquote><p>第一行<br>第二行 &amp; 继续</p></blockquote>'), '第一行\n第二行 & 继续');
   assert.equal(excerptFromOembedHtml(''), '');
+  const note = '这是长文正文，比短的状态文本更完整，应该进摘录。';
+  assert.equal(excerptFromStatusPayload({
+    tweet:{text:'短', is_note_tweet:true, note_tweet:{note_tweet_results:{result:{text:note}}}},
+  }), note);
+  const article = '第一步打开设置。\n第二步保存。';
+  assert.equal(excerptFromStatusPayload({
+    tweet:{text:'https://t.co/abc', article:{title:'本地字幕', preview_text:'短预览', content:{blocks:[{text:'第一步打开设置。'}, {text:'第二步保存。'}]}}},
+  }), `本地字幕\n${article}`);
   const tweet = '公开正文该留在封面卡上。';
+  const calls = [];
   const fetched = await fetchXStatusText(postUrl, async endpoint => {
-    if (String(endpoint).includes('publish.twitter.com')) return new Response('no', {status:404});
-    return new Response(JSON.stringify({text:tweet}), {status:200});
-  });
+    calls.push(String(endpoint));
+    if (String(endpoint).includes('api.fxtwitter.com')) return new Response('no', {status:404});
+    if (String(endpoint).includes('cdn.syndication.twimg.com')) {
+      return new Response(JSON.stringify({text:'短', note_tweet:{text:tweet}}), {status:200, headers:{'Content-Type':'application/json'}});
+    }
+    throw Error('oembed should not run');
+  }, {retryDelayMs:0});
   assert.equal(fetched, tweet);
+  assert.equal(calls.length, 2);
+  assert.match(calls[1], /token=/);
   assert.equal(await fetchXStatusText('https://example.com/not-a-status', async () => { throw Error('no'); }), '');
-  assert.equal(await fetchXStatusText(postUrl, async () => { throw Error('down'); }), '');
+  assert.equal(await fetchXStatusText(postUrl, async () => { throw Error('down'); }, {retryDelayMs:0}), '');
 });

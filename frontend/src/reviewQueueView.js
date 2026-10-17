@@ -37,7 +37,7 @@ function renderItem(item, busy) {
   return `<article class="review-queue-item" data-review-url="${escape(url || item.url || '')}" data-review-type="${escape(reviewType)}">
     <p class="review-queue-title">${escape(author)}${note ? ` · ${escape(note)}` : ''}</p>
     ${excerpt && excerpt !== note ? `<p class="review-queue-excerpt">${escape(excerpt)}</p>` : ''}
-    ${blank ? '<p class="review-queue-missing">缺摘录，过审后不会上公开首页</p>' : ''}
+    ${blank ? `<p class="review-queue-missing">${item.text_fill_failed === true ? '自动补摘录失败。这条还没有正文，过审后不会上公开首页。' : '缺摘录，过审后不会上公开首页'}</p>` : ''}
     <div class="review-queue-actions">
       ${url ? `<a class="dot-original-link" href="${escape(url)}" target="_blank" rel="noopener noreferrer">打开原帖 <span aria-hidden="true">↗</span></a>` : '<span>原帖链接不可用</span>'}
       <label class="review-type-edit">类型<select data-review-type-select aria-label="修正类型：${escape(author)}"${disabled}>${options}</select></label>

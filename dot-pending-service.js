@@ -263,6 +263,8 @@ function validRecord(value, storageKey) {
   for (const field of signalFields) if (Object.hasOwn(value, field)) fields.push(field);
   for (const field of timeFields) if (Object.hasOwn(value, field)) fields.push(field);
   if (Object.hasOwn(value, 'underrated_candidate')) fields.push('underrated_candidate', 'underrated_candidate_at');
+  if (value.text_fill_failed === true) fields.push('text_fill_failed');
+  else if (Object.hasOwn(value, 'text_fill_failed')) return false;
   if (!plain(value) || Object.keys(value).length !== fields.length || fields.some(field => !Object.hasOwn(value, field))) return false;
   if (!signalsValid(value)) return false;
   if (Object.hasOwn(value, 'approval') && !['pool', 'review', 'auto'].includes(value.approval)) return false;
@@ -306,6 +308,7 @@ function signalView(record) {
   if (Object.hasOwn(record, 'has_article')) view.has_article = record.has_article;
   if (typeof record.cover_url === 'string') view.cover_url = record.cover_url;
   if (typeof record.text === 'string' && record.text) view.text = record.text;
+  if (record.text_fill_failed === true) view.text_fill_failed = true;
   if (typeof record.published_at === 'string') view.published_at = record.published_at;
   if (typeof record.created_at === 'string') view.created_at = record.created_at;
   if (record.underrated_candidate === true) {
@@ -354,6 +357,7 @@ function withReviewSignals(record, post) {
   if (post.has_article !== undefined) next.has_article = post.has_article;
   if (post.cover_url) next.cover_url = post.cover_url;
   if (post.text) next.text = post.text;
+  else if (post.text_fill_failed === true) next.text_fill_failed = true;
   if (post.published_at) next.published_at = post.published_at;
   if (post.created_at) next.created_at = post.created_at;
   return next;
@@ -407,6 +411,15 @@ function mergeIntakeTimes(stored, post) {
       changed = true;
     }
   }
+  if (usableExcerptText(next.text)) {
+    if (next.text_fill_failed === true) {
+      delete next.text_fill_failed;
+      changed = true;
+    }
+  } else if (post.text_fill_failed === true && next.text_fill_failed !== true) {
+    next.text_fill_failed = true;
+    changed = true;
+  }
   return changed ? next : null;
 }
 
@@ -419,6 +432,7 @@ function decidedRecord(stored, status, reviewed_at, approval, {candidate = null,
   };
   if (approval) record.approval = approval;
   copySignals(stored, record);
+  if (stored.text_fill_failed === true && !(typeof record.text === 'string' && record.text)) record.text_fill_failed = true;
   if (review_type) record.review_type = review_type;
   const keep = status === 'approved' && (candidate === true || (candidate !== false && stored.underrated_candidate === true));
   if (keep) {
@@ -506,16 +520,22 @@ function statusReader(env) {
   return typeof fetch === 'function' ? fetch : null;
 }
 
+function intakeExcerptPresent(value) {
+  if (!value || typeof value !== 'object') return false;
+  return ['text', 'summary', 'excerpt', 'body'].some(key => usableExcerptText(value[key]));
+}
+
 // Homepage paste and delivery often arrive with only a link. Read the public
-// status text when this body and the stored row both lack a usable excerpt.
-// An existing text field stays; mergeIntakeTimes still fills an absent one.
+// status text when this body and the stored row both lack text, summary,
+// excerpt, and body. An existing text field stays; mergeIntakeTimes still
+// fills an absent one and clears a previous failed-fill mark.
 async function fillAbsentStatusText(env, posts, existing) {
   const fetchImpl = statusReader(env);
   if (!fetchImpl) return posts;
   return Promise.all(posts.map(async post => {
-    if (usableExcerptText(post?.text)) return post;
+    if (intakeExcerptPresent(post)) return post;
     const stored = existing.get(post.key);
-    if (stored && typeof stored.text === 'string' && stored.text.trim()) return post;
+    if (intakeExcerptPresent(stored)) return post;
     let raw = '';
     try { raw = await fetchXStatusText(post.url, fetchImpl); }
     catch { raw = ''; }
@@ -524,8 +544,14 @@ async function fillAbsentStatusText(env, posts, existing) {
       try { text = cleanText(raw, true) || ''; }
       catch { text = ''; }
     }
-    if (!usableExcerptText(text)) return post;
-    return {...post, text};
+    if (usableExcerptText(text)) {
+      const next = {...post, text};
+      delete next.text_fill_failed;
+      return next;
+    }
+    const face = {...(stored || {}), ...post, note:blankFaceNote(post.note) ? (stored?.note || '') : post.note};
+    if (pendingBlankFace(face)) return {...post, text_fill_failed:true};
+    return post;
   }));
 }
 
