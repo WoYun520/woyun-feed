@@ -14,7 +14,7 @@
 node frontend/public-build.mjs
 ```
 
-成功后会重写 `public-dist`。Worker 静态资源目录就是这个目录；`/data/public-feed.json`、`/api/dot/*` 与 `/api/home-boost` 先进入 Worker，其余路径由静态资源处理。
+成功后会重写 `public-dist`。Worker 静态资源目录就是这个目录；`/data/public-feed.json`、`/api/dot/*`、`/api/home-boost` 与 `/api/visitor-feedback` 先进入 Worker，其余路径由静态资源处理。
 
 没有本机 `data/live-feed.json` 时，构建改用已提交的 `public-dist/data/public-feed.json`，并沿用其中的发布时间与自动更新标记。这不会重新抓取原站。有本机资料时仍只读取 `data/live-feed.json`。
 

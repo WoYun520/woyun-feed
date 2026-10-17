@@ -120,16 +120,25 @@ test('local review explains the refresh cadence and does not restore signal copy
     documentRef:{visibilityState:'visible'},
     fetchImpl:async (url, options = {}) => {
       calls.push({url:String(url), method:options.method || 'GET'});
+      if (String(url).includes('/feedback')) return {ok:true, status:200, async json() { return {items:[], truncated:false}; }};
       return {ok:true, status:200, async json() { return {items:[item()]}; }};
     },
   });
   try {
   assert.equal(await page.start(), true);
-  assert.deepEqual(calls, [{url:'/api/local-review/pending', method:'GET'}]);
+  assert.deepEqual(calls, [
+    {url:'/api/local-review/pending', method:'GET'},
+    {url:'/api/local-review/feedback', method:'GET'},
+  ]);
   assert.match(root.innerHTML, /data-review-refresh>/);
   assert.match(root.innerHTML, /刷新/);
   assert.match(root.innerHTML, new RegExp(REVIEW_ADMIN_REFRESH_COPY.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   assert.doesNotMatch(root.innerHTML, /文章卡|收藏偏低|类型优先|互动尚低|Levi样例|review-queue-heat|收藏信号强/);
+  const queueAt = root.innerHTML.indexOf('id="review-queue"');
+  const feedbackAt = root.innerHTML.indexOf('id="visitor-feedback"');
+  assert.ok(queueAt >= 0 && feedbackAt > queueAt);
+  assert.doesNotMatch(root.innerHTML.slice(queueAt, feedbackAt), /意见反馈|visitor-feedback|data-feedback-read/);
+  assert.match(root.innerHTML.slice(feedbackAt), /现在没有意见反馈/);
   } finally {
     page.stop();
   }
@@ -151,31 +160,35 @@ test('visible polling and the refresh button reload pending and never decide whi
         await new Promise(resolve => { releaseDecision = resolve; });
         return {ok:true, status:200, async json() { return {url:postUrl, status:'approved', key:'kosx-1'}; }};
       }
+      if (String(url).includes('/feedback')) return {ok:true, status:200, async json() { return {items:[], truncated:false}; }};
       return {ok:true, status:200, async json() { return {items:[item()]}; }};
     },
   });
   t.after(() => page.stop());
   try {
     await page.start();
-    assert.equal(calls.length, 1);
+    assert.equal(calls.length, 2);
     t.mock.timers.tick(REVIEW_ADMIN_POLL_MS - 1);
     await flush();
-    assert.equal(calls.length, 1);
+    assert.equal(calls.length, 2);
     t.mock.timers.tick(1);
     await flush();
-    assert.deepEqual(calls.map(call => call.url), ['/api/local-review/pending', '/api/local-review/pending']);
+    assert.deepEqual(calls.map(call => call.url), [
+      '/api/local-review/pending', '/api/local-review/feedback',
+      '/api/local-review/pending', '/api/local-review/feedback',
+    ]);
     documentRef.visibilityState = 'hidden';
     documentRef.hidden = true;
     t.mock.timers.tick(REVIEW_ADMIN_POLL_MS);
     await flush();
-    assert.equal(calls.length, 2);
+    assert.equal(calls.length, 4);
     assert.equal(await page.refresh({reason:'poll'}), false);
     documentRef.visibilityState = 'visible';
     documentRef.hidden = false;
     root.querySelector('[data-review-refresh]').click();
     await flush();
-    assert.equal(calls.length, 3);
-    assert.equal(calls.every(call => call.method === 'GET' && call.url === '/api/local-review/pending'), true);
+    assert.equal(calls.length, 6);
+    assert.equal(calls.every(call => call.method === 'GET' && (call.url === '/api/local-review/pending' || call.url === '/api/local-review/feedback')), true);
     const approve = root.querySelector('[data-review-decision="approved"]');
     assert.ok(approve);
     approve.click();
@@ -195,10 +208,54 @@ test('visible polling and the refresh button reload pending and never decide whi
     assert.equal(calls.filter(call => call.method === 'POST').length, 1);
     t.mock.timers.tick(REVIEW_ADMIN_POLL_MS);
     await flush();
-    assert.equal(calls.at(-1).url, '/api/local-review/pending');
+    assert.equal(calls.at(-2).url, '/api/local-review/pending');
+    assert.equal(calls.at(-1).url, '/api/local-review/feedback');
     assert.equal(calls.at(-1).method, 'GET');
     assert.equal(calls.filter(call => call.method === 'POST').length, 1);
   } finally {
     t.mock.timers.reset();
+  }
+});
+
+test('visitor feedback stays in its own section and can be marked read without deciding a link', async () => {
+  const feedbackId = '11111111-1111-4111-8111-111111111111';
+  const calls = [];
+  const root = createRoot();
+  const page = createReviewAdmin({
+    root,
+    documentRef:{visibilityState:'visible'},
+    fetchImpl:async (url, options = {}) => {
+      calls.push({url:String(url), method:options.method || 'GET', body:options.body || ''});
+      if (String(url).endsWith('/feedback/read')) {
+        return {ok:true, status:200, async json() { return {id:feedbackId, created_at:'2026-10-17T02:30:00.000Z', text:'首页有点挤', contact:'@levi', user_agent:'', read:true}; }};
+      }
+      if (String(url).endsWith('/feedback')) {
+        return {ok:true, status:200, async json() { return {items:[{id:feedbackId, created_at:'2026-10-17T02:30:00.000Z', text:'首页有点挤', contact:'@levi', read:false}], truncated:false}; }};
+      }
+      return {ok:true, status:200, async json() { return {items:[item()]}; }};
+    },
+  });
+  try {
+    await page.start();
+    const queueAt = root.innerHTML.indexOf('id="review-queue"');
+    const feedbackAt = root.innerHTML.indexOf('id="visitor-feedback"');
+    assert.ok(feedbackAt > queueAt);
+    assert.match(root.innerHTML.slice(feedbackAt), /首页有点挤/);
+    assert.match(root.innerHTML.slice(feedbackAt), /联系：@levi/);
+    assert.match(root.innerHTML.slice(feedbackAt), /data-feedback-read="11111111-1111-4111-8111-111111111111"/);
+    assert.doesNotMatch(root.innerHTML.slice(queueAt, feedbackAt), /首页有点挤|data-feedback-read/);
+    assert.match(root.innerHTML.slice(queueAt, feedbackAt), /data-review-decision="approved"/);
+    root.querySelector('[data-feedback-read]').click();
+    await flush();
+    assert.equal(calls.filter(call => call.url.endsWith('/feedback/read')).length, 1);
+    assert.equal(calls.filter(call => call.url.includes('/decision')).length, 0);
+    assert.equal(JSON.parse(calls.find(call => call.url.endsWith('/feedback/read')).body).id, feedbackId);
+    assert.match(root.innerHTML, /已标为已读/);
+    assert.match(root.innerHTML, /已读/);
+    assert.equal(root.querySelector('[data-feedback-read]'), null);
+    assert.equal(page.state.items[0].url, postUrl);
+    assert.equal(page.state.items[0].status, 'pending');
+  } finally {
+    page.stop();
   }
 });

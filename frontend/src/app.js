@@ -26,6 +26,7 @@ import { DOT_IMPORT_MAX_BYTES } from './dotCandidates.js';
 import { renderDotCandidatesView, bindDotCandidatesEvents, renderDotInboxPanel, bindDotInboxEvents, renderDotInboxFeedback, bindDotInboxFeedbackEvents } from './dotCandidatesView.js';
 import { DotInboxClient, DOT_INBOX_STORAGE_KEY } from './dotInboxClient.js';
 import { renderWorkspaceNavigation, renderWorkspaceResume, renderWorkspaceStorageNotice } from './workspaceShell.js';
+import { submitVisitorFeedback } from './visitorFeedback.js';
 import { DOT_FILTER_DEFAULTS } from './dotCandidateFilters.js';
 
 class PersonalFeedApp {
@@ -68,6 +69,12 @@ class PersonalFeedApp {
     this.kosxDraft = '';
     this.kosxMessage = '';
     this.kosxError = '';
+    this.feedbackOpen = false;
+    this.feedbackDraft = '';
+    this.feedbackContact = '';
+    this.feedbackMessage = '';
+    this.feedbackError = '';
+    this.feedbackBusy = false;
     this.homeBoostCount = readBoostTotal(this.boostStore());
     this.boardGroup = 'all';
     this.sourceLimits = {};
@@ -704,7 +711,7 @@ class PersonalFeedApp {
 
     appEl.innerHTML = `
       <div class="workspace-shell" data-workspace-tab="${this.currentTab}"${publicHome ? ' data-public-home="true"' : ''}>
-      ${renderWorkspaceNavigation(this.currentTab,state,{homeView:this.homeView,catsOpen:this.catsOpen})}
+      ${renderWorkspaceNavigation(this.currentTab,state,{homeView:this.homeView,catsOpen:this.catsOpen,feedback:{open:this.feedbackOpen,text:this.feedbackDraft,contact:this.feedbackContact,message:this.feedbackMessage,error:this.feedbackError,busy:this.feedbackBusy}})}
       <main id="workspace-main" tabindex="-1" class="page-container ${publicHome ? 'source-board-page' : ''}" role="main">
         ${publicHome ? '' : renderWorkspaceStorageNotice(state)}
         <div id="feed-load-status" role="status" aria-live="polite">${publicHome || state.loadStatus?.phase === 'ready' ? '' : renderFeedLoadStatus(this, state)}</div>
@@ -1499,6 +1506,42 @@ class PersonalFeedApp {
     document.getElementById('home-cats')?.addEventListener('keydown',event=>{
       if(event.key!=='Escape') return;
       event.preventDefault();this.catsOpen=false;this.render();document.getElementById('home-cats-button')?.focus();
+    });
+    document.getElementById('home-feedback')?.addEventListener('click',()=>{
+      const top=window.scrollY;
+      this.feedbackOpen=!this.feedbackOpen;
+      if(!this.feedbackOpen){this.feedbackMessage='';this.feedbackError='';}
+      this.render();
+      window.scrollTo({top,behavior:'instant'});
+      document.getElementById(this.feedbackOpen ? 'home-feedback-text' : 'home-feedback')?.focus();
+    });
+    document.getElementById('home-feedback-text')?.addEventListener('input',event=>{this.feedbackDraft=event.target.value;});
+    document.getElementById('home-feedback-contact')?.addEventListener('input',event=>{this.feedbackContact=event.target.value;});
+    document.getElementById('home-feedback-panel')?.addEventListener('keydown',event=>{
+      if(event.key!=='Escape') return;
+      event.preventDefault();this.feedbackOpen=false;this.feedbackMessage='';this.feedbackError='';
+      this.render();document.getElementById('home-feedback')?.focus();
+    });
+    document.getElementById('home-feedback-panel')?.addEventListener('submit',async event=>{
+      event.preventDefault();
+      if(this.feedbackBusy) return;
+      const text=document.getElementById('home-feedback-text')?.value || '';
+      const contact=document.getElementById('home-feedback-contact')?.value || '';
+      const top=window.scrollY;
+      this.feedbackBusy=true;this.feedbackDraft=text;this.feedbackContact=contact;this.feedbackMessage='';this.feedbackError='';
+      this.render();window.scrollTo({top,behavior:'instant'});
+      try {
+        await submitVisitorFeedback({text,contact});
+        this.feedbackOpen=true;this.feedbackDraft='';this.feedbackContact='';this.feedbackError='';
+        this.feedbackMessage='已收到，谢谢。';
+      } catch(error) {
+        this.feedbackOpen=true;this.feedbackDraft=text;this.feedbackContact=contact;this.feedbackMessage='';
+        this.feedbackError=error.message || '没有发出去，请稍后再试。';
+      } finally {
+        this.feedbackBusy=false;
+      }
+      this.render();window.scrollTo({top,behavior:'instant'});
+      document.getElementById('home-feedback-status')?.focus();
     });
     document.getElementById('kosx-open')?.addEventListener('click',()=>{
       const top=window.scrollY;

@@ -67,9 +67,11 @@ curl -sS -X POST 'https://woyun-feed-preview.hhzovo66.workers.dev/api/dot/pendin
 2. 双击「打开过审.command」。它和「打开 Levi flow.command」启动同一个本机服务，并打开过审页。已经开着信息流时，直接打开 `http://127.0.0.1:3000/review-admin`。端口以启动时打印的为准。没有打开页面时，终端窗口会停住，留下原文，例如「端口被占用」。看完后按任意键才会关闭。
 3. 也可以先双击「打开 Levi flow.command」，或在仓库里运行 `cd frontend && node serve.js`，再打开上面的地址。「打开 Levi flow.command」仍按原来的方式启动。
 
-本机过审页打开时拉取一次待过审，之后约每 30 秒自动再拉一次。页面切到后台时跳过这一轮；正在点「过审上首页」或「略过」时也跳过，避免把正在进行的操作冲掉。页面上有「刷新」，可以马上再拉一次。
+本机过审页打开时拉取一次待过审和意见反馈，之后约每 30 秒自动再拉一次。页面切到后台时跳过这一轮；正在点「过审上首页」「略过」或「标为已读」时也跳过，避免把正在进行的操作冲掉。页面上有「刷新」，可以马上再拉一次。
 
-这一页只由本机 `frontend/serve.js` 提供，只监听 `127.0.0.1`。它用本机保存的接收码去调用预览 Worker 上原有的 `GET /api/dot/pending` 和 `POST /api/dot/pending/decision`。公开预览没有 `/review-admin`，也没有不带接收码的过审接口。不要为了这一页执行 `npx wrangler deploy`。
+意见反馈是顶栏单独的一栏，不进待过审卡片。公开预览右上角的「意见反馈」直接交给 `POST /api/visitor-feedback`，访客不需要接收码。本机这一页用接收码调用 `GET /api/visitor-feedback` 来读，用 `POST /api/visitor-feedback/read` 标已读。浏览器仍然不接触接收码。
+
+这一页只由本机 `frontend/serve.js` 提供，只监听 `127.0.0.1`。它用本机保存的接收码去调用预览 Worker 上的 `GET /api/dot/pending`、`POST /api/dot/pending/decision`，以及上面的意见反馈读取。公开预览没有 `/review-admin`，也没有不带接收码的过审接口。不要为了这一页执行 `npx wrangler deploy`。
 
 接收码读取 `GET /api/dot/pending` 时，每条在原有字段外还会带上已保存的 `review_type`、`bookmark_count`、`like_count`、`has_article`、`cover_url`、`text`。有候选记号时带 `underrated_candidate: true` 和 `underrated_candidate_at`。旧记录没有这些字段时，页面会按备注粗分，热度和 Article 卡显示为未知。
 

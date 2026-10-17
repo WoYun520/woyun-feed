@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import http from 'node:http';
 import { createFeedServer } from './serve.js';
 import { PUBLIC_FILES } from './public-build.mjs';
-import { decidePendingForLocalReview, launchOpenPath, listPendingForLocalReview, loadReviewToken } from './local-review.js';
+import { decidePendingForLocalReview, launchOpenPath, listFeedbackForLocalReview, listPendingForLocalReview, loadReviewToken, markFeedbackReadForLocalReview } from './local-review.js';
 
 const token = 'r'.repeat(40);
 const postUrl = 'https://x.com/example/status/2108148604447883999';
@@ -95,6 +95,9 @@ test('the local admin page lists and decides without a browser token, and the pu
   assert.match(page.body, /\/src\/reviewAdminPage\.js/);
   assert.match(page.body, /data-review-refresh/);
   assert.match(page.body, /约每 30 秒自动更新/);
+  assert.match(page.body, /id="visitor-feedback"/);
+  assert.match(page.body, /不进待过审队列/);
+  assert.ok(page.body.indexOf('正在读取本机过审') < page.body.indexOf('id="visitor-feedback"'));
   assert.doesNotMatch(page.body, /type="password"|文章卡·收藏|互动尚低|DOT_REVIEW_TOKEN|只列出原帖日期|正在读取公开待过审/);
   const pending = await request('/api/local-review/pending', 'GET', {Authorization:`Bearer ${'a'.repeat(40)}`});
   assert.equal(pending.status, 200);
@@ -149,4 +152,77 @@ test('the local admin page lists and decides without a browser token, and the pu
   assert.match(publicQueue, /pendingReviewItems/);
   assert.match(publicQueue, /pendingLocalReviewItems/);
   assert.doesNotMatch(publicQueue, /review-queue-heat|收藏信号强|文章卡/);
+});
+
+test('local feedback is a separate host read and never accepts a browser review token', async t => {
+  const feedbackId = '11111111-1111-4111-8111-111111111111';
+  const createdAt = '2026-10-17T02:30:00.000Z';
+  const note = {id:feedbackId, created_at:createdAt, text:'首页有点挤', contact:'@levi', user_agent:'TestAgent', read:false};
+  const calls = [];
+  const fetchImpl = async (url, options) => {
+    calls.push({url:String(url), authorization:options.headers.Authorization, method:options.method || 'GET', body:options.body});
+    assert.equal(String(url).includes(token), false);
+    if (options.method === 'POST') {
+      return new Response(JSON.stringify({...note, read:true}), {status:200, headers:{'Content-Type':'application/json'}});
+    }
+    return new Response(JSON.stringify({items:[note], truncated:false}), {status:200, headers:{'Content-Type':'application/json'}});
+  };
+  const listed = await listFeedbackForLocalReview({token, origin, fetchImpl});
+  assert.equal(listed.status, 200);
+  assert.equal(listed.body.items[0].text, '首页有点挤');
+  assert.equal(listed.body.items[0].read, false);
+  assert.equal(JSON.stringify(listed).includes(token), false);
+  assert.equal(calls[0].url, `${origin}/api/visitor-feedback`);
+  assert.equal(calls[0].authorization, `Bearer ${token}`);
+  const missing = await listFeedbackForLocalReview({token:'', origin, fetchImpl});
+  assert.equal(missing.status, 503);
+  assert.equal(calls.length, 1);
+  const leaked = await listFeedbackForLocalReview({token, origin, fetchImpl:async () => new Response(JSON.stringify({items:[{...note, text:token}], truncated:false}), {status:200, headers:{'Content-Type':'application/json'}})});
+  assert.equal(leaked.status, 502);
+  assert.equal(JSON.stringify(leaked).includes(token), false);
+  const marked = await markFeedbackReadForLocalReview({token, origin, fetchImpl, input:{id:feedbackId}});
+  assert.equal(marked.status, 200);
+  assert.equal(marked.body.read, true);
+  assert.equal(calls.at(-1).url, `${origin}/api/visitor-feedback/read`);
+  assert.deepEqual(JSON.parse(calls.at(-1).body), {id:feedbackId});
+  const server = createFeedServer({
+    service:{current:async () => ({mode:'live', items:[]}), refresh:async () => ({mode:'live', items:[]})},
+    review:{token, origin, fetch:fetchImpl},
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise(resolve => server.close(resolve)));
+  const port = server.address().port;
+  const request = (path, method = 'GET', headers = {}, body) => new Promise((resolve, reject) => {
+    const req = http.request({hostname:'127.0.0.1', port, path, method, headers, agent:false}, res => {
+      let raw = '';
+      res.setEncoding('utf8');
+      res.on('data', chunk => { raw += chunk; });
+      res.on('end', () => resolve({status:res.statusCode, body:raw}));
+    });
+    req.on('error', reject);
+    if (body) req.end(body); else req.end();
+  });
+  const before = calls.length;
+  const browserToken = 'a'.repeat(40);
+  const page = await request('/api/local-review/feedback', 'GET', {Authorization:`Bearer ${browserToken}`});
+  assert.equal(page.status, 200);
+  assert.equal(JSON.parse(page.body).items[0].text, '首页有点挤');
+  assert.equal(page.body.includes(token), false);
+  assert.equal(page.body.includes(browserToken), false);
+  assert.equal(calls.at(-1).authorization, `Bearer ${token}`);
+  const blocked = await request('/api/local-review/feedback/read', 'POST', {'Content-Type':'application/json'}, JSON.stringify({id:feedbackId}));
+  assert.equal(blocked.status, 403);
+  assert.equal(calls.length, before + 1);
+  const read = await request('/api/local-review/feedback/read', 'POST', {
+    'Content-Type':'application/json', 'X-Personal-Feed':'1', Origin:`http://127.0.0.1:${port}`,
+  }, JSON.stringify({id:feedbackId, status:'approved'}));
+  assert.equal(read.status, 400);
+  assert.equal(calls.length, before + 1);
+  const done = await request('/api/local-review/feedback/read', 'POST', {
+    'Content-Type':'application/json', 'X-Personal-Feed':'1', Origin:`http://127.0.0.1:${port}`,
+  }, JSON.stringify({id:feedbackId}));
+  assert.equal(done.status, 200);
+  assert.equal(JSON.parse(done.body).read, true);
+  assert.equal(done.body.includes(token), false);
+  assert.equal((await request('/api/local-review/feedback?token=secret')).status, 400);
 });

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {renderWorkspaceNavigation,renderWorkspaceResume,recentWorkspaceTopic,renderWorkspaceStorageNotice} from './src/workspaceShell.js';
+import {submitVisitorFeedback} from './src/visitorFeedback.js';
 
 test('navigation preserves existing actions with one explicit current page and real counters',()=>{
   const state={publicPreview:true,mode:'live',savedItems:[{}],followups:[{}],dotPendingCandidates:[{},{}]};
@@ -31,6 +32,10 @@ test('public homepage nav has no pending-review entry',()=>{
   const state={publicPreview:true,mode:'live',savedItems:[],followups:[],dotPendingCandidates:[{},{}]};
   const html=renderWorkspaceNavigation('today',state,{homeView:'latest'});
   assert.doesNotMatch(html,/待过审|待筛选|home-review|lift-review|#review|\?review=/);
+  assert.match(html,/id="home-feedback"/);
+  assert.match(html,/意见反馈/);
+  assert.ok(html.indexOf('id="home-cats"') < html.indexOf('id="home-feedback"'));
+  assert.doesNotMatch(renderWorkspaceNavigation('today',{...state,publicPreview:false},{homeView:'latest'}),/意见反馈|home-feedback/);
   assert.doesNotMatch(html,/id="nav-|实用教程|收藏与跟进|主题工作台|我的关注|整理/);
   const open=renderWorkspaceNavigation('today',state,{homeView:'week',catsOpen:true});
   assert.match(open,/lift-cats is-open|is-open/);
@@ -49,6 +54,21 @@ test('public app does not open a review flow from the address bar',()=>{
   assert.doesNotMatch(shell,/home-review|reviewRouteRequested|#review|待过审/);
   assert.doesNotMatch(candidates,/renderReviewQueue|公开待过审|连接接收码后/);
   assert.doesNotMatch(`${source}\n${shell}`,/review=1/);
+});
+
+test('public feedback submits the note without a review token',async()=>{
+  const calls=[];
+  const result=await submitVisitorFeedback({text:'  首页有点挤  ',contact:'  @levi  '},async(url,options)=>{
+    calls.push({url,options});
+    return new Response(JSON.stringify({id:'11111111-1111-4111-8111-111111111111',created_at:'2026-10-17T02:30:00.000Z'}),{status:201,headers:{'Content-Type':'application/json'}});
+  });
+  assert.equal(calls.length,1);
+  assert.equal(calls[0].url,'/api/visitor-feedback');
+  assert.equal(calls[0].options.method,'POST');
+  assert.equal(calls[0].options.headers.Authorization,undefined);
+  assert.deepEqual(JSON.parse(calls[0].options.body),{text:'首页有点挤',contact:'@levi'});
+  assert.equal(result.id,'11111111-1111-4111-8111-111111111111');
+  await assert.rejects(submitVisitorFeedback({text:'   '},async()=>{throw Error('should not send');}),/请写下想说的话/);
 });
 
 test('storage notice states actual local boundary and never auto-publication',()=>{

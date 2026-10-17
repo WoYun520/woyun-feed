@@ -13,7 +13,7 @@
   "assets": {
     "directory": "./public-dist",
     "binding": "ASSETS",
-    "run_worker_first": ["/data/public-feed.json", "/api/dot/*", "/api/home-boost"],
+    "run_worker_first": ["/data/public-feed.json", "/api/dot/*", "/api/home-boost", "/api/visitor-feedback", "/api/visitor-feedback/*"],
     "not_found_handling": "404-page",
     "html_handling": "auto-trailing-slash"
   },
