@@ -9,8 +9,11 @@ import { PRIVATE_CONTENT } from './frontend/public-feed-data.js';
 import { normalizeCoverUrl } from './frontend/src/postMedia.js';
 import { REVIEW_COUNT_MAX, REVIEW_TEXT_MAX, REVIEW_TYPES, classifyReviewItem } from './frontend/src/reviewQueue.js';
 import { homepageCardExcerpt, usableCardTitle } from './frontend/src/homeShowcaseView.js';
+import { pendingBlankFace, usableExcerptText } from './frontend/src/coverFace.js';
 import { shouldAutoApprove } from './frontend/essence-schedule.js';
+import { fetchXStatusText } from './frontend/x-status-text.js';
 
+export const MISSING_EXCERPT_MESSAGE = '缺摘录不能上首页';
 export const DOT_PENDING_PATH = '/api/dot/pending';
 export const DOT_PENDING_DECISION_PATH = '/api/dot/pending/decision';
 export const DOT_PENDING_PREFIX = 'pending:';
@@ -496,8 +499,39 @@ export async function enqueueDeliveryPosts(env, posts) {
   return {created:created.map(post => post.key), promoted:[], held:[], full:false};
 }
 
+function statusReader(env) {
+  if (typeof env?.xStatusFetch === 'function') return env.xStatusFetch;
+  // Unit tests construct the queue without a network. Production has no such flag.
+  if (process.env.NODE_TEST_CONTEXT) return null;
+  return typeof fetch === 'function' ? fetch : null;
+}
+
+// Homepage paste and delivery often arrive with only a link. Read the public
+// status text when this body and the stored row both lack a usable excerpt.
+// An existing text field stays; mergeIntakeTimes still fills an absent one.
+async function fillAbsentStatusText(env, posts, existing) {
+  const fetchImpl = statusReader(env);
+  if (!fetchImpl) return posts;
+  return Promise.all(posts.map(async post => {
+    if (usableExcerptText(post?.text)) return post;
+    const stored = existing.get(post.key);
+    if (stored && typeof stored.text === 'string' && stored.text.trim()) return post;
+    let raw = '';
+    try { raw = await fetchXStatusText(post.url, fetchImpl); }
+    catch { raw = ''; }
+    let text = '';
+    if (raw) {
+      try { text = cleanText(raw, true) || ''; }
+      catch { text = ''; }
+    }
+    if (!usableExcerptText(text)) return post;
+    return {...post, text};
+  }));
+}
+
 // Pending delivery or homepage paste older than 1 hour is approved onto the
 // public feed, including account-pool authors. Nothing here writes an underrated pin.
+// A row with no usable excerpt stays pending: the homepage would hide that card.
 export async function autoApproveStalePending(env, {now = Date.now(), publish = true} = {}) {
   const due = (await listKosxRecords(env)).filter(record => shouldAutoApprove(record, now));
   if (!due.length) return {approved:[]};
@@ -505,6 +539,9 @@ export async function autoApproveStalePending(env, {now = Date.now(), publish = 
   const reviewed_at = new Date(Number.isFinite(clock) ? clock : Date.now()).toISOString();
   const approved = [];
   for (const record of due) {
+    // A blank face would be written and then hidden by the homepage filter.
+    // Leave it pending until a real excerpt arrives.
+    if (pendingBlankFace(record)) continue;
     const next = decidedRecord(record, 'approved', reviewed_at, 'auto');
     if (!canRelease(kosxPublicItem(next))) continue;
     await storeRecord(env, next);
@@ -632,6 +669,9 @@ async function handleDecision(request, env, review) {
   if (!post) bad('invalid_url', '请粘贴有效的 X 链接。');
   const stored = await readStored(env, post.key);
   if (!stored) return json({error:'not_found', message:'这条链接不在待筛选里。'}, 404);
+  if (body.status === 'approved' && pendingBlankFace({...stored, ...(reviewType ? {review_type:reviewType} : {})})) {
+    bad('missing_excerpt', MISSING_EXCERPT_MESSAGE);
+  }
   let record = stored;
   const statusChanged = stored.status !== body.status;
   const markReview = body.status === 'approved' && (stored.approval === 'pool' || stored.approval === 'auto');
@@ -701,12 +741,14 @@ export async function handleDotPendingRequest(request, env) {
       return json({items, next_cursor:page.list_complete ? null : page.cursor});
     }
     if (request.headers.get('Content-Type')?.split(';')[0].trim().toLowerCase() !== 'application/json') return json({error:'json_required', message:'请使用 application/json 提交。'}, 415);
-    const {posts, batched} = postsFromBody(await readBody(request), delivery);
+    const parsed = postsFromBody(await readBody(request), delivery);
     const existing = new Map();
-    for (const post of posts) {
+    for (const post of parsed.posts) {
       const stored = await readStored(env, post.key);
       if (stored) existing.set(post.key, stored);
     }
+    const posts = await fillAbsentStatusText(env, parsed.posts, existing);
+    const {batched} = parsed;
     const created = posts.filter(post => !existing.has(post.key));
     if (created.length && await pendingCount(env) + created.length > DOT_PENDING_MAX) return json({error:'queue_full', message:'待筛选已满，请先处理已有链接。'}, 409);
     const submitted_at = new Date().toISOString();

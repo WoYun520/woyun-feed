@@ -185,7 +185,7 @@ test('approval pins 进低估 for yesterday and leaves an older day on the homep
   assert.equal(showcase(published).underratedRule === 'pinned', false);
   assert.deepEqual(showcase(published).underrated.map(entry => entry.post.item.id), before.underrated.map(entry => entry.post.item.id));
   const yesterdayUrl = 'https://x.com/example/status/2108148604447884019';
-  await submit(env, {url:yesterdayUrl, published_at:'2026-10-09T02:00:00.000Z', review_type:'文章', bookmark_count:40, like_count:8});
+  await submit(env, {url:yesterdayUrl, published_at:'2026-10-09T02:00:00.000Z', review_type:'文章', bookmark_count:40, like_count:8, text:'昨日这篇可以钉上。'});
   const pinned = await (await decide(env, {url:yesterdayUrl, status:'approved', underrated_candidate:true})).json();
   assert.equal(pinned.published, true);
   assert.equal(pinned.pinned, true);
@@ -264,6 +264,11 @@ test('the review queue keeps approve and skip, and does not print signal or evid
   assert.doesNotMatch(html, /有 X Article 卡|收藏 12|点赞 4|收藏\/点赞|收藏信号强|可后看|review-queue-heat|review-queue-article|文章卡|收藏偏低|类型优先|互动尚低|可执行提示词|Levi样例/);
   assert.deepEqual([...html.matchAll(/data-review-type="([^"]+)"/g)].map(match => match[1]), ['教程指南', '教程指南', '产品安利']);
   assert.doesNotMatch(html, /data-review-url="https:\/\/x.com\/example\/status\/2108148604447884002"/);
+  const blankCard = html.slice(html.indexOf('data-review-url="https://x.com/example/status/2108148604447884004"'));
+  assert.match(blankCard, /缺摘录，过审后不会上公开首页/);
+  assert.match(blankCard, /data-review-decision="approved" disabled/);
+  assert.match(blankCard, /data-review-decision="rejected"/);
+  assert.doesNotMatch(blankCard, /data-review-decision="rejected" disabled/);
   const disconnected = renderReviewQueue({connected:false, items:[{status:'pending', url:postUrl}]});
   assert.match(disconnected, /连接接收码后/);
   assert.doesNotMatch(disconnected, /进低估|过审上首页|收藏、点赞|Article 卡/);
@@ -763,7 +768,7 @@ test('a pool re-delivery fills a missing bookmark_count onto the public item for
 
 test('worker public feed reads do not grow an underrated pin just because a candidate flag exists', async () => {
   const env = await environment();
-  await submit(env, {url:postUrl, has_article:true, published_at:'2026-10-07T04:00:00.000Z'});
+  await submit(env, {url:postUrl, has_article:true, published_at:'2026-10-07T04:00:00.000Z', text:'这篇有摘录，候选记号本身不钉栏。'});
   const decided = await (await decide(env, {url:postUrl, status:'approved', underrated_candidate:true})).json();
   assert.equal(decided.published, true);
   assert.equal(decided.pinned, false);
@@ -803,9 +808,10 @@ test('delivery stores a cover, copies it onto the public item, and a later deliv
   assert.equal(Object.hasOwn(direct, 'cover_url'), false);
 
   await submit(env, {url:bareUrl, review_type:'文章', bookmark_count:220, published_at:'2026-10-08T05:00:00.000Z'});
-  await decide(env, {url:bareUrl, status:'approved'});
-  const bare = env.PUBLIC_FEED.json().items.find(item => item.original_url === bareUrl);
-  assert.equal(Object.hasOwn(bare, 'cover_url'), false);
+  const refused = await decide(env, {url:bareUrl, status:'approved'});
+  assert.equal(refused.status, 400);
+  assert.equal((await refused.json()).message, '缺摘录不能上首页');
+  assert.equal(env.PUBLIC_FEED.json().items.some(item => item.original_url === bareUrl), false);
   const page = renderFeed(env.PUBLIC_FEED.json());
   const week = renderFeed(env.PUBLIC_FEED.json(), 'week');
   const shown = `src="${escapeHtml(storedCover)}"`;
@@ -814,8 +820,8 @@ test('delivery stores a cover, copies it onto the public item, and a later deliv
   const articleCover = page.slice(page.indexOf('class="cover-photo cover-article"'), page.indexOf('</figure>', page.indexOf('class="cover-photo cover-article"')));
   assert.match(articleCover, /cover-article/);
   assert.doesNotMatch(articleCover, /未核对原帖|<figcaption>|文章封面，未核对原帖/);
-  assert.equal(page.includes(`data-home-card="${bare.id}"`), false);
-  assert.equal(week.includes(`data-home-card="${bare.id}"`), false);
+  assert.equal(page.includes(bareUrl), false);
+  assert.equal(week.includes(bareUrl), false);
   assert.doesNotMatch(`${page}\n${week}`, /无来源附图/);
 
   const other = 'https://cdn.example.com/covers/later.jpg';

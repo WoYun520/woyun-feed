@@ -16,7 +16,7 @@ import {
 } from './essence-schedule.js';
 import { selectSweepIntake, runEssenceSweep, backfillEssenceHeat } from './essence-sweep.js';
 import { attachKosxApproved } from './kosx-public-posts.js';
-import { autoApproveStalePending, backfillEssenceFace } from '../dot-pending-service.js';
+import { autoApproveStalePending, backfillEssenceFace, publishApprovedFeed } from '../dot-pending-service.js';
 
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
@@ -174,9 +174,15 @@ test('delivery, homepage paste, and pool rows older than 1 hour auto-approve wit
   const fresh = 'https://x.com/example/status/2108148604447884822';
   const pasted = 'https://x.com/example/status/2108148604447884823';
   const pooled = `https://x.com/${pool}/status/2108148604447884824`;
-  assert.equal((await handleDotPendingRequest(request('POST', {token:delivery, body:{url:stale}}), env)).status, 201);
-  assert.equal((await handleDotPendingRequest(request('POST', {token:delivery, body:{url:fresh}}), env)).status, 201);
+  const blank = 'https://x.com/example/status/2108148604447884825';
+  assert.equal((await handleDotPendingRequest(request('POST', {token:delivery, body:{url:stale, text:'过了 1 小时仍可上首页的摘录。'}}), env)).status, 201);
+  assert.equal((await handleDotPendingRequest(request('POST', {token:delivery, body:{url:fresh, text:'还没到 1 小时。'}}), env)).status, 201);
   assert.equal((await handleDotPendingRequest(request('POST', {body:{url:pasted}}), env)).status, 201);
+  const pastedKey = `${DOT_PENDING_PREFIX}x:2108148604447884823`;
+  const pastedRow = JSON.parse(env.DOT_INBOX.values.get(pastedKey).raw);
+  pastedRow.text = '首页贴进来之后补上的摘录。';
+  env.DOT_INBOX.values.set(pastedKey, {raw:JSON.stringify(pastedRow)});
+  assert.equal((await handleDotPendingRequest(request('POST', {token:delivery, body:{url:blank, note:'@example 的精华帖'}}), env)).status, 201);
   const poolResponse = await (await handleDotPendingRequest(request('POST', {token:delivery, body:{url:pooled, note:'池内待审', published_at:'2026-10-09T02:00:00.000Z'}}), env)).json();
   assert.equal(poolResponse.status, 'pending');
   assert.equal(poolResponse.published, false);
@@ -188,6 +194,7 @@ test('delivery, homepage paste, and pool rows older than 1 hour auto-approve wit
   age(env, fresh, exact);
   age(env, pasted, old);
   age(env, pooled, old);
+  age(env, blank, old);
   assert.equal(shouldAutoApprove({status:'pending', source:'delivery', submitted_at:old}, now), true);
   assert.equal(shouldAutoApprove({status:'pending', source:'delivery', submitted_at:exact}, now), false);
   assert.equal(shouldAutoApprove({status:'pending', source:'homepage', submitted_at:old}, now), true);
@@ -202,6 +209,8 @@ test('delivery, homepage paste, and pool rows older than 1 hour auto-approve wit
   assert.equal(rows.find(row => row.url === pooled).status, 'approved');
   assert.equal(rows.find(row => row.url === pooled).approval, 'auto');
   assert.equal(rows.find(row => row.url === fresh).status, 'pending');
+  assert.equal(rows.find(row => row.url === blank).status, 'pending');
+  assert.equal(rows.find(row => row.url === blank).approval, undefined);
   const feed = env.PUBLIC_FEED.json();
   assert.equal(feed.items.some(item => item.original_url === stale && item.origin === 'kosx_approved'), true);
   assert.equal(feed.items.some(item => item.original_url === pasted && item.origin === 'kosx_approved'), true);
@@ -225,7 +234,7 @@ test('heat backfill copies known counts and ignores empty fields', async () => {
 
   const env = await environment();
   const url = 'https://x.com/example/status/2108148604447884830';
-  await handleDotPendingRequest(request('POST', {token:delivery, body:{url, published_at:'2026-10-10T01:00:00.000Z'}}), env);
+  await handleDotPendingRequest(request('POST', {token:delivery, body:{url, text:'热度回填不改这段摘录。', published_at:'2026-10-10T01:00:00.000Z'}}), env);
   await handleDotPendingRequest(request('POST', {token:review, path:'/api/dot/pending/decision', body:{url, status:'approved'}}), env);
   const key = `${DOT_PENDING_PREFIX}x:2108148604447884830`;
   const record = JSON.parse(env.DOT_INBOX.values.get(key).raw);
@@ -236,7 +245,7 @@ test('heat backfill copies known counts and ignores empty fields', async () => {
     original_url:url, canonical_url:url, published_at:'2026-10-10T01:00:00.000Z', bookmark_count:1200,
   });
   const bare = 'https://x.com/example/status/2108148604447884831';
-  await handleDotPendingRequest(request('POST', {token:delivery, body:{url:bare, published_at:'2026-10-10T02:00:00.000Z'}}), env);
+  await handleDotPendingRequest(request('POST', {token:delivery, body:{url:bare, text:'这条没有收藏数。', published_at:'2026-10-10T02:00:00.000Z'}}), env);
   await handleDotPendingRequest(request('POST', {token:review, path:'/api/dot/pending/decision', body:{url:bare, status:'approved'}}), env);
   feed.items.push({id:'bare', title:'空', summary:'摘录', source_refs:['sopilot-all'], original_url:bare, canonical_url:bare, published_at:'2026-10-10T02:00:00.000Z'});
   env.PUBLIC_FEED.raw = JSON.stringify(feed);
@@ -273,8 +282,13 @@ test('backfill writes a board excerpt onto an empty approved row so the next reb
   const id = '2110682653334868100';
   const url = `https://x.com/${pool}/status/${id}`;
   await handleDotPendingRequest(request('POST', {token:delivery, body:{url, published_at:'2026-10-10T01:00:00.000Z'}}), env);
-  await handleDotPendingRequest(request('POST', {token:review, path:'/api/dot/pending/decision', body:{url, status:'approved'}}), env);
   const key = `${DOT_PENDING_PREFIX}x:${id}`;
+  const queued = JSON.parse(env.DOT_INBOX.values.get(key).raw);
+  queued.status = 'approved';
+  queued.reviewed_at = '2026-10-16T01:00:00.000Z';
+  queued.approval = 'auto';
+  env.DOT_INBOX.values.set(key, {raw:JSON.stringify(queued)});
+  await publishApprovedFeed(env);
   const before = JSON.parse(env.DOT_INBOX.values.get(key).raw);
   assert.equal(before.note, '');
   assert.equal(before.text, undefined);

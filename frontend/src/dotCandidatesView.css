@@ -235,5 +235,6 @@
 .review-queue-actions { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
 .review-type-edit, .review-underrated-choice { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
 .review-type-edit select { min-height: 36px; border: 1px solid var(--dot-line, #e3e4dd); border-radius: 4px; background: #fff; font: inherit; }
-.review-queue-error { color: #9d2c2c; font-size: 13px; }
+.review-queue-error, .review-queue-missing { color: #9d2c2c; font-size: 13px; }
+.review-queue-missing { margin: 0 0 8px; line-height: 1.6; }
 .review-queue-hint { margin: 6px 0 0; }

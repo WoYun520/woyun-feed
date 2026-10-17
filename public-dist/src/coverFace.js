@@ -135,3 +135,41 @@ export function blankPublicCover(post) {
   if (showcaseCoverMedia(post)) return false;
   return !coverRecords(post).some(item => homepageCardExcerpt(item?.summary));
 }
+
+const PLACEHOLDER_EXCERPT = /^@[A-Za-z0-9_]{1,15} 的精华帖$/u;
+
+// homepageCardExcerpt keeps a real sentence. 「@用户 的精华帖」and「来源未提供标题」
+// are faces, the same way usableCardTitle treats them. Intake remarks are already gone.
+export function usableExcerptText(value) {
+  const excerpt = homepageCardExcerpt(value);
+  if (!excerpt || excerpt === '来源未提供标题' || PLACEHOLDER_EXCERPT.test(excerpt)) return '';
+  return excerpt;
+}
+
+// A pending row is a blank face when it has no real text, summary, excerpt, body,
+// or note, and the homepage would not paint a cover. Placeholder titles do not count.
+// This is the same blank-face rule as blankPublicCover, with the placeholder face
+// excluded from the excerpt.
+export function pendingBlankFace(record) {
+  if (!record || typeof record !== 'object') return true;
+  for (const key of ['text', 'summary', 'excerpt', 'body', 'note']) {
+    if (usableExcerptText(record[key])) return false;
+  }
+  const summary = typeof record.text === 'string' && record.text.trim()
+    ? record.text
+    : (typeof record.note === 'string' ? record.note : '');
+  const item = {
+    summary,
+    title:typeof record.note === 'string' ? record.note : '',
+    author_handle:record.author_handle,
+    original_url:record.url,
+    canonical_url:record.url,
+    review_type:record.review_type,
+    has_article:record.has_article,
+    cover_url:record.cover_url,
+    origin:'kosx_approved',
+    source_refs:['sopilot-kosx'],
+  };
+  const statusId = postStatusId(record.url);
+  return !showcaseCoverMedia({item, records:[item], originalUrl:record.url, statusId});
+}

@@ -261,7 +261,7 @@ test('a missing or undated public post is not pinned, a yesterday pool post is, 
   assert.equal((await undated.json()).error, 'undated');
   assert.equal(env.DOT_INBOX.writes.length, 1);
   const pendingEnv = await environment([item(postUrl)]);
-  const intake = await handleDotPendingRequest(request('POST', {path:'/api/dot/pending', token:delivery, body:{url:postUrl}}), pendingEnv);
+  const intake = await handleDotPendingRequest(request('POST', {path:'/api/dot/pending', token:delivery, body:{url:postUrl, text:'过审后才能钉，这一段是摘录。'}}), pendingEnv);
   assert.equal(intake.status, 201);
   const approved = await handleDotPendingRequest(request('POST', {path:DOT_PENDING_DECISION_PATH, body:{url:postUrl, status:'approved'}}), pendingEnv);
   assert.equal(approved.status, 200);

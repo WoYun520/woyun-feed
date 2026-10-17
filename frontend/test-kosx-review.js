@@ -106,6 +106,57 @@ test('approval publishes one pending link onto the public homepage and rejection
   assert.equal(showcase(after).latest.some(entry => entry.post.originalUrl === postUrl), false);
 });
 
+test('a blank face cannot be approved, rejection still works, and a later read backfills an approved row', async () => {
+  const env = await environment();
+  const blankUrl = 'https://x.com/jarvis11x/status/2111026168526746057';
+  assert.equal((await submit(env, {url:blankUrl, note:'@jarvis11x 的精华帖'}, {token:delivery})).status, 201);
+  const refused = await decide(env, {url:blankUrl, status:'approved', underrated_candidate:true});
+  const refusedBody = await refused.json();
+  assert.equal(refused.status, 400);
+  assert.equal(refusedBody.error, 'missing_excerpt');
+  assert.equal(refusedBody.message, '缺摘录不能上首页');
+  assert.equal(env.PUBLIC_FEED.writes.length, 0);
+  const pending = [...env.DOT_INBOX.values.values()].map(entry => JSON.parse(entry.raw)).find(item => item.url === blankUrl);
+  assert.equal(pending.status, 'pending');
+  assert.equal(pending.underrated_candidate, undefined);
+  const skipped = await decide(env, {url:blankUrl, status:'rejected'});
+  assert.equal(skipped.status, 200);
+  assert.equal((await skipped.json()).published, false);
+
+  const covered = 'https://x.com/example/status/2111026168526746058';
+  assert.equal((await submit(env, {
+    url:covered, review_type:'文章', has_article:true, cover_url:'https://cdn.example.com/covers/face.jpg',
+  }, {token:delivery})).status, 201);
+  assert.equal((await decide(env, {url:covered, status:'approved'})).status, 200);
+  assert.equal(env.PUBLIC_FEED.json().items.some(item => item.original_url === covered && item.cover_url), true);
+
+  const shell = 'https://x.com/example/status/2111026168526746059';
+  assert.equal((await submit(env, {url:shell, note:'@example 的精华帖'}, {token:delivery})).status, 201);
+  const key = 'pending:x:2111026168526746059';
+  const stored = JSON.parse(env.DOT_INBOX.values.get(key).raw);
+  stored.status = 'approved';
+  stored.reviewed_at = '2026-10-16T01:00:00.000Z';
+  stored.approval = 'review';
+  env.DOT_INBOX.values.set(key, {raw:JSON.stringify(stored), metadata:{}});
+  const tweet = '这条是后来补上的原帖正文。';
+  env.xStatusFetch = async endpoint => {
+    assert.doesNotMatch(String(endpoint), /api\.x\.com|api\.twitter\.com/);
+    return new Response(JSON.stringify({html:`<blockquote><p>${tweet}</p></blockquote>`}), {status:200, headers:{'Content-Type':'application/json'}});
+  };
+  const filled = await submit(env, {url:shell}, {token:delivery});
+  assert.equal(filled.status, 200);
+  const next = JSON.parse(env.DOT_INBOX.values.get(key).raw);
+  assert.equal(next.status, 'approved');
+  assert.equal(next.text, tweet);
+  assert.equal(next.note, '@example 的精华帖');
+  assert.equal(next.reviewed_at, stored.reviewed_at);
+  const card = env.PUBLIC_FEED.json().items.find(item => item.original_url === shell);
+  assert.equal(card.summary, tweet);
+  const shown = env.PUBLIC_FEED.json();
+  shown.generated_at = '2026-10-17T04:00:00.000Z';
+  assert.equal(showcase(shown).latest.some(entry => entry.post.originalUrl === shell), true);
+});
+
 test('only the review code can publish, and a missing queue entry stays off the homepage', async () => {
   const env = await environment();
   await submit(env, {url:postUrl});

@@ -4,7 +4,7 @@
 
 **进料都不当场过审。** 首页「贴链接」（`homepage`）和投递密钥（`delivery`）都先记 `pending`。作者在 KOSX 账号池里也不再写 `approval: "pool"`，不在进料时写入 `PUBLIC_FEED`。这不是粉丝数排序。见 [待筛选进料](pending-intake.md)。
 
-**满 1 小时仍未人工处理，贴链接和投递都自动过审上首页。** 来源是 `homepage` 或 `delivery`、状态仍是 `pending`，并且 `submitted_at`（没有则用 `created_at`）早于现在超过 1 小时，定时任务会把它标成 `approved`，`approval` 为 `auto`，并写入 `PUBLIC_FEED`。刚好 1 小时还不算超过，继续等人。账号池作者走同一条，不会一直停到人工。这一步**不自动钉低估**。检查跑在现有的精华扫榜和公开刷新上，不另加每小时定时；行龄超过 1 小时之后，下一次这些任务才会写上首页。
+**满 1 小时仍未人工处理，贴链接和投递都自动过审上首页。** 来源是 `homepage` 或 `delivery`、状态仍是 `pending`，并且 `submitted_at`（没有则用 `created_at`）早于现在超过 1 小时，定时任务会把它标成 `approved`，`approval` 为 `auto`，并写入 `PUBLIC_FEED`。刚好 1 小时还不算超过，继续等人。账号池作者走同一条，不会一直停到人工。这一步**不自动钉低估**。没有可用摘录、首页又画不出封面的空白行不自动过审，继续留在 `pending`。检查跑在现有的精华扫榜和公开刷新上，不另加每小时定时；行龄超过 1 小时之后，下一次这些任务才会写上首页。
 
 `approved` 会写进公开首页使用的 `PUBLIC_FEED`。`rejected` 会从公开首页拿掉。`pending` 不会出现在首页。
 
@@ -40,6 +40,10 @@ curl -sS -X POST 'https://woyun-feed-preview.hhzovo66.workers.dev/api/dot/pendin
 ```
 
 `200` 且 `"published": true` 表示这条已经写进 `PUBLIC_FEED`，公开首页的最新封面可以读到它。`existing: true` 表示它本来就是这个过审状态，过审时间不变。重复调用可以补上一次没写成功的首页记录。
+
+没有可用摘录时不能标成 `approved`。可用摘录和公开首页同一套：空的不要，只有「@用户 的精华帖」或「来源未提供标题」不要，流程说明和补仓备注也不要。`text`、`summary`、`excerpt`、`body`、备注里要有一句正文。文章类卡片如果已经有会画出来的 `cover_url`，仍然可以过审。缺摘录时返回 `400`，`error` 为 `missing_excerpt`，`message` 为「缺摘录不能上首页」。队列仍是 `pending`，公开首页不写这一条。`rejected` 不受这条限制。勾了进低估也不能靠这次通过把空白封面钉上去。
+
+本机过审页上，这种空白卡片会把「过审上首页」置灰，并写一行红字「缺摘录，过审后不会上公开首页」。「略过」仍可点。
 
 过审时可以多带两个可选字段：
 

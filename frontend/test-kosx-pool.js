@@ -11,7 +11,7 @@ import { DOT_UNDERRATED_PATH, handleDotUnderratedRequest } from '../dot-underrat
 import { makePublicFeed } from './public-feed-data.js';
 import { normalizeRepositories } from './repository-normalize.js';
 import { validCachedFeed } from './src/feedCache.js';
-import { addCalendarDays, beijingDateKey, selectHomeShowcase, wouldEnterUnderrated } from './src/homeShowcase.js';
+import { beijingDateKey, selectHomeShowcase, wouldEnterUnderrated } from './src/homeShowcase.js';
 
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 const delivery = 'test-delivery-credential-1234567890';
@@ -72,12 +72,6 @@ function request(method, {token = null, path = DOT_PENDING_PATH, body} = {}) {
 const submit = (env, body, options = {}) => handleDotPendingRequest(request('POST', {body, ...options}), env);
 const decide = (env, body) => handleDotPendingRequest(request('POST', {path:DOT_PENDING_DECISION_PATH, token:review, body}), env);
 const showcase = feed => selectHomeShowcase({sources:feed.sources, allItems:feed.items, profile:feed.profile, generated_at:feed.generated_at});
-
-function nextBeijingInstant(from = Date.now()) {
-  const next = addCalendarDays(beijingDateKey(from), 1);
-  const [year, month, day] = next.split('-').map(Number);
-  return new Date(Date.UTC(year, month - 1, day, 4, 0, 0)).toISOString();
-}
 
 test('the roster is handles only, sourced from impact, and matches case-insensitively', () => {
   const text = readFileSync(new URL('./kosx-pool.js', import.meta.url), 'utf8');
@@ -294,18 +288,14 @@ test('pool intake stays off the homepage until review, and review does not pin u
   assert.equal(created.message, '账号池成员的精华帖已进入待筛选。满 1 小时仍未人工处理会自动过审上公开首页。');
   assert.doesNotMatch(created.message, /不进入昨日最被低估|已按时间放上公开首页/);
   assert.equal(env.PUBLIC_FEED.json().items.some(entry => entry.original_url === poolUrl), false);
-  const reviewed = await (await decide(env, {url:poolUrl, status:'approved'})).json();
-  assert.equal(reviewed.existing, false);
-  assert.equal(reviewed.approval, 'review');
-  assert.equal(reviewed.published, true);
-  const after = env.PUBLIC_FEED.json();
-  const posted = after.items.find(entry => entry.original_url === poolUrl);
-  assert.equal(posted.summary, '');
-  assert.equal(posted.kosx_review, undefined);
-  assert.doesNotMatch(posted.summary, /尚未读取原文|不进入昨日最被低估|过审后放上首页|按时间放上首页/);
-  after.generated_at = nextBeijingInstant(Date.parse(posted.published_at));
-  assert.equal(showcase(after).underrated.some(entry => entry.post.originalUrl === poolUrl), false);
-  assert.equal(wouldEnterUnderrated({sources:after.sources, allItems:after.items, profile:after.profile, generated_at:after.generated_at}, posted.id), false);
+  const reviewed = await decide(env, {url:poolUrl, status:'approved'});
+  const decision = await reviewed.json();
+  assert.equal(reviewed.status, 400);
+  assert.equal(decision.error, 'missing_excerpt');
+  assert.equal(decision.message, '缺摘录不能上首页');
+  assert.equal(env.PUBLIC_FEED.json().items.some(entry => entry.original_url === poolUrl), false);
+  const row = [...env.DOT_INBOX.values.values()].map(entry => JSON.parse(entry.raw)).find(item => item.url === poolUrl);
+  assert.equal(row.status, 'pending');
 });
 
 test('a mixed delivery leaves pool and outside authors pending until review', async () => {
