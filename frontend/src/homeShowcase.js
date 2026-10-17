@@ -116,11 +116,11 @@ function pickKept(entries) {
   return kept;
 }
 
-const UNDERRATED_HUMAN = '昨日最被低估必须人工过审。已经在昨日全部里的帖可以钉进这一栏，包括账号池自动放上首页的帖。';
+const UNDERRATED_HUMAN = '昨日最被低估必须人工过审。已经在昨日全部里的帖，以及昨日全部前一个自然日的精华帖，可以钉进这一栏，包括账号池自动放上首页的帖。';
 const KOSX_PUBLIC_SOURCE_ID = 'sopilot-kosx';
 
 function pinnedNote() {
-  return `这一栏只显示人工从「昨日全部」钉选的帖，按钉选顺序，最多 ${HOME_UNDERSTATED_LIMIT} 条。没有对上的钉选时留空，不按来源热度、榜位或发布时间补。钉选不表示已核对原帖。${UNDERRATED_HUMAN}`;
+  return `这一栏只显示人工钉选、并且原帖日是当前「昨日全部」或它的前一个自然日的帖，按钉选顺序，最多 ${HOME_UNDERSTATED_LIMIT} 条。没有对上的钉选时留空，不按来源热度、榜位或发布时间补。钉选不表示已核对原帖。${UNDERRATED_HUMAN}`;
 }
 
 // Homepage essence is the curated public line that approved pending rows and
@@ -261,13 +261,15 @@ function emptyUnderrated() {
   return {entries:[], rule:'empty', unit:'', note:pinnedNote()};
 }
 
-// The band is human pins that land on 「昨日全部」. A pool auto-approval
-// already on that line can be pinned. Nothing fills the gap from heat, rank, or age.
-function pickPinnedUnderrated(yesterday, pins, yesterdayKey) {
-  const wanted = normalizePins(pins).filter(pin => pin.day === yesterdayKey);
+// The band is human pins whose day is 「昨日全部」 or the calendar day before it.
+// Each pin still has to sit on that day's essence line. Nothing fills the gap
+// from heat, rank, or age.
+function pickPinnedUnderrated(entries, pins, days) {
+  const allowed = new Set((Array.isArray(days) ? days : []).filter(Boolean));
+  const wanted = normalizePins(pins).filter(pin => allowed.has(pin.day));
   if (!wanted.length) return emptyUnderrated();
   const byKey = new Map();
-  for (const entry of yesterday) {
+  for (const entry of entries) {
     const key = statusKey(entry.post.item);
     if (key && !byKey.has(key)) byKey.set(key, entry);
     if (entry.post.item?.id && !byKey.has(entry.post.item.id)) byKey.set(entry.post.item.id, entry);
@@ -275,7 +277,8 @@ function pickPinnedUnderrated(yesterday, pins, yesterdayKey) {
   const chosen = [];
   for (const pin of wanted) {
     const entry = (pin.key && byKey.get(pin.key)) || (pin.id && byKey.get(pin.id));
-    if (!entry || chosen.includes(entry)) continue;
+    const day = entry?.time?.ms ? beijingDateKey(entry.time.ms) : '';
+    if (!entry || day !== pin.day || chosen.includes(entry)) continue;
     chosen.push(entry);
     if (chosen.length >= HOME_UNDERSTATED_LIMIT) break;
   }
@@ -295,13 +298,17 @@ export function selectHomeShowcase(state, {now} = {}) {
   const onDay = (entry, key) => key && beijingDateKey(entry.time.ms) === key;
   // 「昨日全部」is homepage essence whose original-post Beijing date is yesterday.
   // Quality folds are already out of `dated`. Pool auto-approvals stay on this
-  // list and on the chronological cover; underrated screening reads this list,
-  // so a stream post that never joined the essence line cannot enter it.
+  // list and on the chronological cover. A stream post that never joined the
+  // essence line cannot enter it. The underrated rail uses the same essence
+  // line for yesterday and the calendar day before it.
   // Same membership as 最新精华: an approved row counts when any copy of the
   // same post still has a usable excerpt or a cover the card would show.
   // A blank face — no usable excerpt and no visible media — does not take a slot.
   const showCover = entry => !blankPublicCover(entry.post);
   const yesterdayEntries = dated.filter(entry => onDay(entry, yesterday) && latestEssence(entry) && showCover(entry));
+  const priorDay = yesterday ? addCalendarDays(yesterday, -1) : '';
+  const underratedDays = [yesterday, priorDay].filter(Boolean);
+  const underratedEntries = dated.filter(entry => underratedDays.some(day => onDay(entry, day)) && latestEssence(entry) && showCover(entry));
   const weekEntries = dated.filter(entry => weekKeys.includes(beijingDateKey(entry.time.ms)) && latestEssence(entry) && showCover(entry));
   const week = pickWeek(weekEntries);
   // 「最新精华」keeps homepage essence whose original Beijing day is inside the
@@ -312,7 +319,7 @@ export function selectHomeShowcase(state, {now} = {}) {
   // Blank faces stay out of every public rail, including after a snapshot refresh.
   const latestKeys = dateKey ? Array.from({length:HOME_LATEST_WINDOW_DAYS}, (_, index) => addCalendarDays(dateKey, -index)) : [];
   const latest = dated.filter(entry => latestEssence(entry) && latestKeys.includes(essenceOriginalDay(entry)) && showCover(entry)).sort((a, b) => latestPlacementMs(b) - latestPlacementMs(a) || byRecent(a, b)).slice(0, HOME_LATEST_LIMIT);
-  const under = pickPinnedUnderrated(yesterdayEntries, state?.underratedPins ?? state?.underrated_pins, yesterday);
+  const under = pickPinnedUnderrated(underratedEntries, state?.underratedPins ?? state?.underrated_pins, underratedDays);
   const kept = pickKept(dated.filter(showCover));
   if (before !== state) throw Error('首页筛选不应替换资料对象。');
   const weekStart = weekKeys[6] || '', weekEnd = weekKeys[0] || '';
