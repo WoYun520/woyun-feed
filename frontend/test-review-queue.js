@@ -266,6 +266,13 @@ test('the review queue keeps approve and skip, and does not print signal or evid
   assert.doesNotMatch(html, /data-review-url="https:\/\/x.com\/example\/status\/2108148604447884002"/);
   const blankCard = html.slice(html.indexOf('data-review-url="https://x.com/example/status/2108148604447884004"'));
   assert.match(blankCard, /缺摘录，过审后不会上公开首页/);
+  assert.doesNotMatch(blankCard, /自动补摘录失败/);
+  const failed = renderReviewQueue({connected:true, now:'2026-10-09T03:00:00.000Z', items:[
+    {id:'kosx-5', key:'x:5', url:'https://x.com/example/status/2108148604447884005', author_handle:'levi', status:'pending', note:'', text_fill_failed:true, submitted_at:'2026-10-14T00:00:00.000Z'},
+  ]});
+  assert.match(failed, /自动补摘录失败。这条还没有正文，过审后不会上公开首页。/);
+  assert.match(failed, /data-review-decision="approved" disabled/);
+  assert.match(failed, /data-review-decision="rejected"/);
   assert.match(blankCard, /data-review-decision="approved" disabled/);
   assert.match(blankCard, /data-review-decision="rejected"/);
   assert.doesNotMatch(blankCard, /data-review-decision="rejected" disabled/);

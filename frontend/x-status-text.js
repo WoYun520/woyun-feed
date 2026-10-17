@@ -1,10 +1,16 @@
 // Public read of one X status, used only to fill a missing intake excerpt.
-// publish.twitter.com oEmbed and the syndication tweet card do not use api.x.com
-// or a bearer token. A failure leaves the text empty; the review gate then
-// refuses to put a blank face on the homepage.
+// impact.kosx.ai does not fetch status text in the browser. Its Worker stores
+// full_text from api.socialdata.tools, which needs a paid Bearer key. This
+// path does not call that API, api.x.com, or any cookie session.
+//
+// publish.twitter.com/oembed now answers 301 with an empty body and a Location
+// of publish.x.com. Redirects stay manual, so the old host is not requested.
+// FxTwitter already expands note_tweet into tweet.text. The syndication card
+// only returns a body when the public embed token is present; a bare id returns {}.
 
-const OEMBED_ORIGIN = 'https://publish.twitter.com';
+const FXTWITTER_ORIGIN = 'https://api.fxtwitter.com';
 const SYNDICATION_ORIGIN = 'https://cdn.syndication.twimg.com';
+const OEMBED_ORIGIN = 'https://publish.x.com';
 const BODY_LIMIT = 100_000;
 
 function canonicalStatusUrl(value) {
@@ -20,6 +26,12 @@ function canonicalStatusUrl(value) {
   } catch {
     return '';
   }
+}
+
+// Same public token the syndication embed page sends. It is derived from the
+// status id; it is not a user credential.
+function syndicationToken(id) {
+  return ((Number(id) / 1e15) * Math.PI).toString(36).replace(/(0+|\.)/g, '');
 }
 
 export function decodeExcerptHtml(value) {
@@ -50,14 +62,46 @@ export function excerptFromOembedHtml(html) {
   return decodeExcerptHtml(match ? match[1] : '');
 }
 
-function excerptFromPayload(payload) {
-  if (!payload || typeof payload !== 'object') return '';
-  const fromHtml = excerptFromOembedHtml(payload.html);
-  if (fromHtml) return fromHtml;
-  for (const value of [payload.text, payload.data?.text, payload.tweet?.text]) {
-    if (typeof value === 'string' && value.trim()) return decodeExcerptHtml(value);
+function articleText(article) {
+  if (!article || typeof article !== 'object') return [];
+  const blocks = Array.isArray(article.content?.blocks) ? article.content.blocks : [];
+  const body = blocks.map(block => typeof block?.text === 'string' ? block.text : '').filter(Boolean).join('\n');
+  const titled = article.title && body ? `${article.title}\n${body}` : '';
+  return [article.preview_text, article.text, body, titled];
+}
+
+function noteText(note) {
+  if (!note || typeof note !== 'object') return [];
+  return [note.text, note.note_tweet_results?.result?.text];
+}
+
+function bestText(candidates) {
+  let best = '';
+  for (const value of candidates) {
+    if (typeof value !== 'string' || !value) continue;
+    const text = decodeExcerptHtml(value);
+    if (text.length > best.length) best = text;
   }
-  return '';
+  return best;
+}
+
+// Prefer the longest real body. FxTwitter puts note_tweet text on tweet.text;
+// a raw note_tweet or an article block can still be longer than the short status.
+export function excerptFromStatusPayload(payload) {
+  if (!payload || typeof payload !== 'object') return '';
+  const tweet = payload.tweet && typeof payload.tweet === 'object' ? payload.tweet : null;
+  const candidates = [
+    excerptFromOembedHtml(payload.html),
+    payload.text,
+    payload.full_text,
+    payload.data?.text,
+    ...noteText(payload.note_tweet),
+    ...articleText(payload.article),
+  ];
+  if (tweet) {
+    candidates.push(tweet.text, tweet.full_text, tweet.raw_text?.text, ...noteText(tweet.note_tweet), ...articleText(tweet.article));
+  }
+  return bestText(candidates);
 }
 
 async function readJson(response) {
@@ -69,25 +113,45 @@ async function readJson(response) {
   try { return JSON.parse(raw); } catch { return null; }
 }
 
-// Returns the status text, or '' when the public read is missing or refused.
+function retryableStatus(status) {
+  return status === 429 || (typeof status === 'number' && status >= 500);
+}
+
+async function pause(ms) {
+  if (!ms) return;
+  await new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function readStatus(fetchImpl, endpoint, timeoutMs) {
+  const response = await fetchImpl(endpoint, {
+    headers:{Accept:'application/json', 'User-Agent':'woyun-feed-preview/excerpt'},
+    redirect:'manual',
+    ...(typeof AbortSignal?.timeout === 'function' ? {signal:AbortSignal.timeout(timeoutMs)} : {}),
+  });
+  const text = excerptFromStatusPayload(await readJson(response));
+  return {text, retry:retryableStatus(response?.status)};
+}
+
+// Returns the status text, or '' when every public read is missing or refused.
 // fetchImpl is the only network call. Redirects are not followed.
-export async function fetchXStatusText(url, fetchImpl, {timeoutMs = 4000} = {}) {
+export async function fetchXStatusText(url, fetchImpl, {timeoutMs = 4000, retryDelayMs = 200} = {}) {
   const status = canonicalStatusUrl(url);
   if (!status || typeof fetchImpl !== 'function') return '';
   const targets = [
-    `${OEMBED_ORIGIN}/oembed?omit_script=true&dnt=true&url=${encodeURIComponent(status.url)}`,
-    `${SYNDICATION_ORIGIN}/tweet-result?id=${status.id}&lang=zh-cn`,
+    {endpoint:`${FXTWITTER_ORIGIN}/status/${status.id}`, retry:true},
+    {endpoint:`${SYNDICATION_ORIGIN}/tweet-result?id=${status.id}&token=${encodeURIComponent(syndicationToken(status.id))}&lang=zh-cn`, retry:false},
+    {endpoint:`${OEMBED_ORIGIN}/oembed?omit_script=true&dnt=true&url=${encodeURIComponent(status.url)}`, retry:false},
   ];
-  for (const endpoint of targets) {
-    try {
-      const response = await fetchImpl(endpoint, {
-        headers:{Accept:'application/json', 'User-Agent':'woyun-feed-preview/excerpt'},
-        redirect:'manual',
-        ...(typeof AbortSignal?.timeout === 'function' ? {signal:AbortSignal.timeout(timeoutMs)} : {}),
-      });
-      const text = excerptFromPayload(await readJson(response));
-      if (text) return text;
-    } catch { /* The next public card, or no excerpt. */ }
+  for (const target of targets) {
+    const attempts = target.retry ? 2 : 1;
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      let outcome = {text:'', retry:false};
+      try { outcome = await readStatus(fetchImpl, target.endpoint, timeoutMs); }
+      catch { outcome = {text:'', retry:true}; }
+      if (outcome.text) return outcome.text;
+      if (!(target.retry && outcome.retry && attempt + 1 < attempts)) break;
+      await pause(retryDelayMs);
+    }
   }
   return '';
 }
