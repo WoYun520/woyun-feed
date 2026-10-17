@@ -897,7 +897,7 @@ test('delivery stores a cover, copies it onto the public item, and a later deliv
   assert.equal(env.PUBLIC_FEED.json().items.find(item => item.original_url === poolUrl).cover_url, storedCover);
 });
 
-test('an original outside the five Beijing-day latest window stays off 最新精华 and can still enter 卧云精选', async () => {
+test('an original outside the thirty Beijing-day latest window stays off 最新精华 and can still enter 卧云精选', async () => {
   const env = await environment();
   for (let index = 0; index < 18; index += 1) {
     const url = `https://x.com/example/status/2108148604447885${String(index).padStart(3, '0')}`;
@@ -913,10 +913,10 @@ test('an original outside the five Beijing-day latest window stays off 最新精
   await submit(env, {url:keptUrl, note:'高收藏摘录', published_at:'2026-08-01T00:00:00.000Z', review_type:'文章', bookmark_count:1500});
   await decide(env, {url:keptUrl, status:'approved'});
   const edgeUrl = 'https://x.com/example/status/2108148604447884997';
-  assert.equal((await submit(env, {url:edgeUrl, note:'窗口边缘摘录', published_at:'2026-10-06T00:00:00.000Z', review_type:'文章', bookmark_count:40})).status, 201);
+  assert.equal((await submit(env, {url:edgeUrl, note:'窗口边缘摘录', published_at:'2026-09-11T00:00:00.000Z', review_type:'文章', bookmark_count:40})).status, 201);
   await decide(env, {url:edgeUrl, status:'approved'});
   const outsideUrl = 'https://x.com/example/status/2108148604447884996';
-  assert.equal((await submit(env, {url:outsideUrl, note:'窗口外的摘录', published_at:'2026-10-05T12:00:00.000Z', review_type:'文章', bookmark_count:800})).status, 201);
+  assert.equal((await submit(env, {url:outsideUrl, note:'窗口外的摘录', published_at:'2026-09-10T12:00:00.000Z', review_type:'文章', bookmark_count:800})).status, 201);
   await decide(env, {url:outsideUrl, status:'approved'});
   const item = env.PUBLIC_FEED.json().items.find(entry => entry.original_url === oldUrl);
   assert.equal(item.origin, 'kosx_approved');
@@ -924,16 +924,16 @@ test('an original outside the five Beijing-day latest window stays off 最新精
   assert.equal(item.source_item_time, decision.reviewed_at);
   assert.equal(item.published_at, '2026-09-01T00:00:00.000Z');
   const home = showcase(env.PUBLIC_FEED.json());
-  assert.equal(HOME_LATEST_WINDOW_DAYS, 5);
+  assert.equal(HOME_LATEST_WINDOW_DAYS, 30);
   assert.equal(home.reference.dateKey, '2026-10-10');
-  assert.deepEqual(Array.from({length:HOME_LATEST_WINDOW_DAYS}, (_, index) => addCalendarDays(home.reference.dateKey, -index)), ['2026-10-10', '2026-10-09', '2026-10-08', '2026-10-07', '2026-10-06']);
+  assert.deepEqual(Array.from({length:HOME_LATEST_WINDOW_DAYS}, (_, index) => addCalendarDays(home.reference.dateKey, -index)), ['2026-10-10', '2026-10-09', '2026-10-08', '2026-10-07', '2026-10-06', '2026-10-05', '2026-10-04', '2026-10-03', '2026-10-02', '2026-10-01', '2026-09-30', '2026-09-29', '2026-09-28', '2026-09-27', '2026-09-26', '2026-09-25', '2026-09-24', '2026-09-23', '2026-09-22', '2026-09-21', '2026-09-20', '2026-09-19', '2026-09-18', '2026-09-17', '2026-09-16', '2026-09-15', '2026-09-14', '2026-09-13', '2026-09-12', '2026-09-11']);
   assert.equal(home.reference.weekKeys.length, 7);
   assert.equal(home.latest.some(entry => entry.post.item.original_url === edgeUrl), true);
   assert.equal(home.latest.some(entry => entry.post.item.original_url === outsideUrl), false);
   assert.equal(home.latest.some(entry => entry.post.item.original_url === oldUrl), false);
   assert.equal(home.latest.some(entry => entry.post.item.original_url === keptUrl), false);
   assert.equal(home.latest.length, 18);
-  assert.equal(home.week.some(entry => entry.post.item.original_url === outsideUrl), true);
+  assert.equal(home.week.some(entry => entry.post.item.original_url === outsideUrl), false);
   assert.equal(home.kept.some(entry => entry.post.item.original_url === outsideUrl), false);
   assert.equal(home.kept.some(entry => entry.post.item.original_url === oldUrl), false);
   assert.equal(home.kept.some(entry => entry.post.item.original_url === keptUrl), true);

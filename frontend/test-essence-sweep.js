@@ -93,7 +93,7 @@ test('the essence sweep runs at 08:00, 12:00, 16:00, and 20:00 Asia/Shanghai bes
   assert.equal(PUBLIC_REFRESH_CRON, '0 1,13 * * *');
   assert.equal(ESSENCE_SWEEP_INTERVAL_MS, 3 * 60 * 60 * 1000);
   assert.equal(PENDING_AUTO_APPROVE_MS, 60 * 60 * 1000);
-  assert.equal(HOME_LATEST_WINDOW_DAYS, 5);
+  assert.equal(HOME_LATEST_WINDOW_DAYS, 30);
   assert.equal(ESSENCE_SWEEP_BUDGET.x_api, 0);
   assert.equal(ESSENCE_SWEEP_BUDGET.llm_tokens, 0);
   assert.equal(ESSENCE_SWEEP_BUDGET.roster_gets, 1);

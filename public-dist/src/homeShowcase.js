@@ -10,7 +10,7 @@ export const HOME_BOOST_TOTAL_KEY = 'personal-feed:home-boost-total:v1';
 export const HOME_BOOST_VISITOR_KEY = 'personal-feed:visitor:v1';
 
 export const HOME_LATEST_LIMIT = 18;
-export const HOME_LATEST_WINDOW_DAYS = 5;
+export const HOME_LATEST_WINDOW_DAYS = 30;
 export const HOME_UNDERSTATED_LIMIT = 2;
 // Levi's floor for 「七日精选」. Same number as the 200 bookmark gate on the material review filters.
 export const HOME_WEEK_BOOKMARK_MIN = 200;
@@ -146,7 +146,7 @@ function latestEssence(entry) {
 // Approval writes source_item_time to the review clock and leaves published_at
 // on the original post. Yesterday and the week shelf stay on the original
 // post clock. 最新精华 also uses that original Beijing day, and only keeps
-// the last 5 calendar days. Approval time still sorts rows inside the window.
+// the last 30 calendar days. Approval time still sorts rows inside the window.
 function essenceOriginalDay(entry) {
   const items = [entry?.post?.item, ...(Array.isArray(entry?.post?.records) ? entry.post.records : [])];
   let day = '';
@@ -315,10 +315,11 @@ export function selectHomeShowcase(state, {now} = {}) {
   const weekEntries = dated.filter(entry => weekKeys.includes(beijingDateKey(entry.time.ms)) && latestEssence(entry) && showCover(entry));
   const week = pickWeek(weekEntries);
   // 「最新精华」keeps homepage essence whose original Beijing day is inside the
-  // last 5 calendar days, including the reference day. Older approved posts
-  // can still reach 卧云精选 or 七日精选 under those shelves' own rules. They
-  // do not take a latest slot. Inside the window, a later approval still sorts
-  // ahead of an earlier original. Public-stream heat posts do not fill the cap.
+  // last 30 calendar days, including the reference day. Older approved posts
+  // can still reach 卧云精选 under that shelf's own rules. They do not take a
+  // latest slot. 七日精选 keeps its own 7-day window. Inside this window, a
+  // later approval still sorts ahead of an earlier original. Public-stream
+  // heat posts do not fill the cap.
   // Blank faces stay out of every public rail, including after a snapshot refresh.
   const latestKeys = dateKey ? Array.from({length:HOME_LATEST_WINDOW_DAYS}, (_, index) => addCalendarDays(dateKey, -index)) : [];
   const latest = dated.filter(entry => latestEssence(entry) && latestKeys.includes(essenceOriginalDay(entry)) && showCover(entry)).sort((a, b) => latestPlacementMs(b) - latestPlacementMs(a) || byRecent(a, b)).slice(0, HOME_LATEST_LIMIT);

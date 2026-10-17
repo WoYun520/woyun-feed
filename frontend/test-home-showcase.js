@@ -181,15 +181,15 @@ test('beijing yesterday is the calendar day before the published snapshot', () =
   assert.equal(parsePublicHeat('没有数字'), null);
 });
 
-test('an original outside the five Beijing-day latest window leaves 最新精华 and can still enter 卧云精选', () => {
+test('an original outside the thirty Beijing-day latest window leaves 最新精华 and can still enter 卧云精选', () => {
   const newer = Array.from({length:18}, (_, index) => post(String(500000 + index), `2026-10-09T${String(index).padStart(2, '0')}:10:00.000Z`, {
     origin:'kosx_approved', source_item_time:'2026-10-10T12:00:00.000Z', review_type:'文章', bookmark_count:40,
   }));
-  const edge = post('188887', '2026-10-06T00:00:00.000Z', {
+  const edge = post('188887', '2026-09-11T00:00:00.000Z', {
     origin:'kosx_approved', source_refs:['sopilot-kosx'], source_item_time:'2026-10-15T08:00:00.000Z',
     title:'窗口内最旧一天', review_type:'文章', bookmark_count:40,
   });
-  const justOutside = post('188886', '2026-10-05T12:00:00.000Z', {
+  const justOutside = post('188886', '2026-09-10T12:00:00.000Z', {
     origin:'kosx_approved', source_refs:['sopilot-kosx'], source_item_time:'2026-10-15T09:00:00.000Z',
     title:'窗口外一天', review_type:'文章', bookmark_count:800,
   });
@@ -204,9 +204,9 @@ test('an original outside the five Beijing-day latest window leaves 最新精华
   const input = state([...newer, edge, justOutside, approved, keptOld, hot]);
   input.sources = [source, {id:'sopilot-kosx', name:'KOSX 过审', group:'posts', link_kind:'post', status:'ok', enabled:true}];
   const selected = selectHomeShowcase(input);
-  assert.equal(HOME_LATEST_WINDOW_DAYS, 5);
+  assert.equal(HOME_LATEST_WINDOW_DAYS, 30);
   assert.equal(selected.reference.dateKey, '2026-10-10');
-  assert.deepEqual(Array.from({length:HOME_LATEST_WINDOW_DAYS}, (_, index) => addCalendarDays(selected.reference.dateKey, -index)), ['2026-10-10', '2026-10-09', '2026-10-08', '2026-10-07', '2026-10-06']);
+  assert.deepEqual(Array.from({length:HOME_LATEST_WINDOW_DAYS}, (_, index) => addCalendarDays(selected.reference.dateKey, -index)), ['2026-10-10', '2026-10-09', '2026-10-08', '2026-10-07', '2026-10-06', '2026-10-05', '2026-10-04', '2026-10-03', '2026-10-02', '2026-10-01', '2026-09-30', '2026-09-29', '2026-09-28', '2026-09-27', '2026-09-26', '2026-09-25', '2026-09-24', '2026-09-23', '2026-09-22', '2026-09-21', '2026-09-20', '2026-09-19', '2026-09-18', '2026-09-17', '2026-09-16', '2026-09-15', '2026-09-14', '2026-09-13', '2026-09-12', '2026-09-11']);
   assert.equal(selected.reference.weekKeys.length, 7);
   assert.deepEqual(selected.reference.weekKeys, ['2026-10-10', '2026-10-09', '2026-10-08', '2026-10-07', '2026-10-06', '2026-10-05', '2026-10-04']);
   assert.equal(selected.latest[0].post.item.id, edge.id);
@@ -215,7 +215,7 @@ test('an original outside the five Beijing-day latest window leaves 最新精华
   assert.equal(selected.latest.some(entry => entry.post.item.id === keptOld.id), false);
   assert.equal(selected.latest.length, 18);
   assert.equal(selected.latest.some(entry => entry.post.item.id === hot.id), false);
-  assert.deepEqual(selected.week.map(entry => entry.post.item.id), [justOutside.id]);
+  assert.deepEqual(selected.week.map(entry => entry.post.item.id), []);
   assert.equal(selected.kept.some(entry => entry.post.item.id === approved.id), false);
   assert.equal(selected.kept.some(entry => entry.post.item.id === justOutside.id), false);
   assert.equal(selected.kept.some(entry => entry.post.item.id === keptOld.id), true);
