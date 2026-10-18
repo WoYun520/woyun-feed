@@ -296,6 +296,92 @@ test('batch pin keeps order, unpin accepts DELETE or status unpinned, and the pu
   assert.equal(JSON.stringify(feed.underrated_pins).includes('内部备注'), false);
 });
 
+test('pins earlier than the homepage prior day expire before the cap, and yesterday or prior pins stay', async () => {
+  // 2026-10-18T16:30Z is 2026-10-19 00:30 in Asia/Shanghai, so 昨日全部 is 10-18 and the prior day is 10-17.
+  const generated_at = '2026-10-18T16:30:00.000Z';
+  const storedPin = (id, day, note = '') => ({
+    id:`news-${id.slice(-8)}`, key:`x:${id}`, url:`https://x.com/example/status/${id}`, author_handle:'example',
+    day, pinned_at:'2026-10-16T03:00:00.000Z', note, reviewer:UNDERRATED_REVIEWER,
+  });
+  const oldDays = ['2026-10-13', '2026-10-13', '2026-10-14', '2026-10-14', '2026-10-15', '2026-10-15', '2026-10-16', '2026-10-16'];
+  const oldPins = oldDays.map((day, index) => storedPin(`2108148604447885${String(index).padStart(3, '0')}`, day, '已过期'));
+  const priorUrl = 'https://x.com/example/status/2108148604447886101';
+  const tooOldUrl = 'https://x.com/example/status/2108148604447886100';
+  const env = await environment([
+    item(priorUrl, {published_at:'2026-10-17T02:00:00.000Z'}),
+    item(tooOldUrl, {published_at:'2026-10-16T02:00:00.000Z'}),
+  ], {generated_at});
+  await env.DOT_INBOX.put(UNDERRATED_PIN_KEY, JSON.stringify({items:oldPins}));
+  const refused = await call(env, 'POST', {url:tooOldUrl});
+  assert.equal(refused.status, 409);
+  assert.equal((await refused.json()).error, 'not_yesterday');
+  assert.equal((await (await call(env, 'GET')).json()).items.length, oldPins.length);
+  const created = await call(env, 'POST', {url:priorUrl, note:'10-17 仍可钉'});
+  const pin = await created.json();
+  assert.equal(created.status, 201);
+  assert.equal(pin.existing, false);
+  assert.equal(pin.day, '2026-10-17');
+  const listed = await (await call(env, 'GET')).json();
+  assert.deepEqual(listed.items.map(row => row.url), [priorUrl]);
+  assert.deepEqual(JSON.parse(env.DOT_INBOX.values.get(UNDERRATED_PIN_KEY).raw).items.map(row => row.day), ['2026-10-17']);
+
+  const yesterdayUrl = 'https://x.com/example/status/2108148604447886201';
+  const keptPriorUrl = 'https://x.com/example/status/2108148604447886202';
+  const anotherUrl = 'https://x.com/example/status/2108148604447886203';
+  const keptEnv = await environment([
+    item(yesterdayUrl, {published_at:'2026-10-18T02:00:00.000Z'}),
+    item(keptPriorUrl, {published_at:'2026-10-17T02:00:00.000Z'}),
+    item(anotherUrl, {published_at:'2026-10-18T06:00:00.000Z'}),
+  ], {generated_at});
+  const kept = [
+    storedPin('2108148604447886301', '2026-10-13'),
+    storedPin('2108148604447886302', '2026-10-14'),
+    storedPin('2108148604447886303', '2026-10-15'),
+    storedPin('2108148604447886304', '2026-10-16'),
+    storedPin('2108148604447886305', '2026-10-13'),
+    storedPin('2108148604447886306', '2026-10-16'),
+    storedPin('2108148604447886202', '2026-10-17', '前一天留下'),
+    storedPin('2108148604447886201', '2026-10-18', '昨日留下'),
+  ];
+  await keptEnv.DOT_INBOX.put(UNDERRATED_PIN_KEY, JSON.stringify({items:kept}));
+  const before = await (await worker.fetch(new Request(`${base}/data/public-feed.json`), keptEnv)).json();
+  assert.deepEqual(before.underrated_pins.map(row => row.day).sort(), kept.map(row => row.day).sort());
+  const added = await call(keptEnv, 'POST', {url:anotherUrl});
+  assert.equal(added.status, 201);
+  const after = await (await call(keptEnv, 'GET')).json();
+  assert.deepEqual(after.items.map(row => [row.url, row.day, row.note]), [
+    [keptPriorUrl, '2026-10-17', '前一天留下'],
+    [yesterdayUrl, '2026-10-18', '昨日留下'],
+    [anotherUrl, '2026-10-18', ''],
+  ]);
+  const published = await (await worker.fetch(new Request(`${base}/data/public-feed.json`), keptEnv)).json();
+  assert.deepEqual(published.underrated_pins.map(row => [row.url, row.day]), [
+    [keptPriorUrl, '2026-10-17'],
+    [yesterdayUrl, '2026-10-18'],
+    [anotherUrl, '2026-10-18'],
+  ]);
+  assert.equal(published.underrated_pins.some(row => row.day < '2026-10-17'), false);
+});
+
+test('an unreadable feed clock does not prune stored pins', async () => {
+  const env = await environment();
+  const staleId = '2108148604447886401';
+  const stale = {
+    id:'news-clock', key:`x:${staleId}`, url:`https://x.com/example/status/${staleId}`, author_handle:'example',
+    day:'2026-10-13', pinned_at:'2026-10-13T03:00:00.000Z', note:'时钟不明不能删', reviewer:UNDERRATED_REVIEWER,
+  };
+  await env.DOT_INBOX.put(UNDERRATED_PIN_KEY, JSON.stringify({items:[stale]}));
+  const writes = env.DOT_INBOX.writes.length;
+  env.PUBLIC_FEED.get = async () => { throw new Error('feed clock down'); };
+  const failed = await call(env, 'POST', {url:postUrl});
+  assert.equal(failed.status, 503);
+  assert.equal(env.DOT_INBOX.writes.length, writes);
+  const listed = await (await call(env, 'GET')).json();
+  assert.equal(listed.items.length, 1);
+  assert.equal(listed.items[0].day, '2026-10-13');
+  assert.equal(listed.items[0].note, '时钟不明不能删');
+});
+
 test('the pin store stops at eight and a misconfigured worker does not publish through assets', async () => {
   const ids = Array.from({length:UNDERRATED_PIN_STORE_MAX + 1}, (_, index) => `2108148604447884${String(index).padStart(3, '0')}`);
   const env = await environment(ids.map(id => item(`https://x.com/example/status/${id}`)));

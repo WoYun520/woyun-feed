@@ -205,6 +205,17 @@ function homepagePinDays(feed) {
   return {yesterday, prior};
 }
 
+// The rail only shows yesterday and the day before it. Older pins never appear
+// again, but they used to occupy the store until a new pin returned pin_full.
+// Drop them before the cap is counted and when that new pin is saved. An
+// unreadable feed clock leaves every stored pin in place.
+function retainPinnedWindow(items, feed) {
+  if (!feed || typeof feed !== 'object') return items;
+  const prior = homepagePinDays(feed).prior;
+  if (!prior) return items;
+  return items.filter(item => item.day >= prior);
+}
+
 function resolvePublic(feed, post) {
   const matches = feed.items.filter(item => underratedStatusKey(item) === post.key);
   if (!matches.length) throw new UnderratedError(404, 'not_public', '这条链接还不在当前公开首页。请先用接收码过审，或等它进入公开快照。钉选不会顺便批准。');
@@ -245,12 +256,14 @@ export async function pinReviewedPost(env, url) {
 }
 
 async function pinPosts(env, posts, note, batched) {
-  const items = await loadPins(env);
-  const fresh = posts.filter(post => !items.some(item => item.key === post.key));
+  const stored = await loadPins(env);
+  const fresh = posts.filter(post => !stored.some(item => item.key === post.key));
   const resolved = new Map();
+  let items = stored;
   if (fresh.length) {
     const publicFeed = await readPublicFeed(env);
     for (const post of fresh) resolved.set(post.key, resolvePublic(publicFeed, post));
+    items = retainPinnedWindow(stored, publicFeed);
   }
   if (items.length + fresh.length > UNDERRATED_PIN_STORE_MAX) {
     return json({error:'pin_full', message:`昨日低估钉选已满（${UNDERRATED_PIN_STORE_MAX} 条）。请先撤下旧钉选。首页这一栏最多仍显示 2 条。`}, 409);
@@ -260,7 +273,7 @@ async function pinPosts(env, posts, note, batched) {
     items.push({...resolved.get(post.key), pinned_at, note, reviewer:UNDERRATED_REVIEWER});
   }
   if (fresh.length) await savePins(env, items);
-  const results = posts.map(post => reviewView(items.find(item => item.key === post.key), {status:'pinned', existing:!fresh.includes(post)}));
+  const results = posts.map(post => reviewView(items.find(item => item.key === post.key) || stored.find(item => item.key === post.key), {status:'pinned', existing:!fresh.includes(post)}));
   return resultResponse(results, batched, 'pinned', fresh.length > 0);
 }
 
