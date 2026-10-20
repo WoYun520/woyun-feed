@@ -123,7 +123,7 @@ const UNDERRATED_HUMAN = '昨日最被低估必须人工过审。已经在昨日
 const KOSX_PUBLIC_SOURCE_ID = 'sopilot-kosx';
 
 function pinnedNote() {
-  return `这一栏只显示人工钉选、并且原帖日是当前「昨日全部」或它的前一个自然日的帖，按钉选顺序，最多 ${HOME_UNDERSTATED_LIMIT} 条。没有对上的钉选时留空，不按来源热度、榜位或发布时间补。钉选不表示已核对原帖。${UNDERRATED_HUMAN}`;
+  return `这一栏只显示人工钉选、并且原帖日是当前「昨日全部」或它的前一个自然日的帖。当前「昨日全部」的钉选先占位，前一个自然日的钉选补上剩下的位置；同一天仍按钉选顺序。最多 ${HOME_UNDERSTATED_LIMIT} 条。没有对上的钉选时留空，不按来源热度、榜位或发布时间补。钉选不表示已核对原帖。${UNDERRATED_HUMAN}`;
 }
 
 // Homepage essence is the curated public line that approved pending rows and
@@ -265,10 +265,13 @@ function emptyUnderrated() {
 }
 
 // The band is human pins whose day is 「昨日全部」 or the calendar day before it.
-// Each pin still has to sit on that day's essence line. Nothing fills the gap
-// from heat, rank, or age.
+// `days` is [yesterday, prior day]. Yesterday's pins take the rail first; the
+// prior day only fills slots still open. Within one day the store order stays,
+// earliest pin first. Each pin still has to sit on that day's essence line.
+// Nothing fills the gap from heat, rank, or age.
 function pickPinnedUnderrated(entries, pins, days) {
-  const allowed = new Set((Array.isArray(days) ? days : []).filter(Boolean));
+  const dayList = (Array.isArray(days) ? days : []).filter(Boolean);
+  const allowed = new Set(dayList);
   const wanted = normalizePins(pins).filter(pin => allowed.has(pin.day));
   if (!wanted.length) return emptyUnderrated();
   const byKey = new Map();
@@ -277,8 +280,12 @@ function pickPinnedUnderrated(entries, pins, days) {
     if (key && !byKey.has(key)) byKey.set(key, entry);
     if (entry.post.item?.id && !byKey.has(entry.post.item.id)) byKey.set(entry.post.item.id, entry);
   }
+  const ordered = [];
+  for (const day of dayList) {
+    for (const pin of wanted) if (pin.day === day) ordered.push(pin);
+  }
   const chosen = [];
-  for (const pin of wanted) {
+  for (const pin of ordered) {
     const entry = (pin.key && byKey.get(pin.key)) || (pin.id && byKey.get(pin.id));
     const day = entry?.time?.ms ? beijingDateKey(entry.time.ms) : '';
     if (!entry || day !== pin.day || chosen.includes(entry)) continue;
