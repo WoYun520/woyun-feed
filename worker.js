@@ -1,4 +1,4 @@
-import { PUBLIC_FEED_KEY, runScheduledUpdate } from './frontend/cloud-feed-service.js';
+import { PUBLIC_FEED_KEY, handlePublicRefreshRequest, runScheduledUpdate } from './frontend/cloud-feed-service.js';
 import { ESSENCE_SWEEP_CRON } from './frontend/essence-schedule.js';
 import { runEssenceSweep } from './frontend/essence-sweep.js';
 import { handleDotInboxRequest, isDotInboxRoute } from './dot-inbox-service.js';
@@ -11,6 +11,8 @@ import { handleEssenceArchiveRequest, isEssenceArchiveRoute } from './frontend/e
 export default {
   async fetch(request,env) {
     const url=new URL(request.url);
+    const refresh=await handlePublicRefreshRequest(request,env);
+    if(refresh) return refresh;
     if(isDotUnderratedRoute(url.pathname)) return handleDotUnderratedRequest(request,env);
     if(isDotPendingRoute(url.pathname)) return handleDotPendingRequest(request,env);
     if(isDotInboxRoute(url.pathname)) return handleDotInboxRequest(request,env);

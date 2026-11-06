@@ -21,7 +21,7 @@ flowchart LR
   feed -->|缺快照时回退| assets
 ```
 
-`wrangler.jsonc` 里 `run_worker_first` 把这几条交给 Worker：`/data/public-feed.json`、`/api/dot/*`、`/api/home-boost`、`/api/visitor-feedback`、`/api/essence-archive`、`/api/essence-archive/*`。首页快照键是 `public-feed:current:v1`。全部精华另存在同一块 `PUBLIC_FEED` 的 `essence-archive:v1`，不写进首页那包 JSON。KV 读失败时，`/data/public-feed.json` 回退到已发布的静态文件。归档键还不存在时，全部精华才临时从这份快照分一页。
+`wrangler.jsonc` 里 `run_worker_first` 把这几条交给 Worker：`/data/public-feed.json`、`/api/dot/*`、`/api/home-boost`、`/api/visitor-feedback`、`/api/essence-archive`、`/api/essence-archive/*`、`/api/internal/public-refresh`。最后这条只给公开刷新自己叫醒下一段用，服务绑定是 `SELF`。首页快照键是 `public-feed:current:v1`。全部精华另存在同一块 `PUBLIC_FEED` 的 `essence-archive:v1`，不写进首页那包 JSON。KV 读失败时，`/data/public-feed.json` 回退到已发布的静态文件。归档键还不存在时，全部精华才临时从这份快照分一页。
 
 | 路径 | 模块 | 作用 |
 | --- | --- | --- |
