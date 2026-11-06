@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { FEED_CHANNELS, mergeSourceItems, normalizeSubscription, parseSubscription } from './feed-sources.js';
 import { normalizeRepositories } from './repository-normalize.js';
 import { makePublicFeed } from './public-feed-data.js';
-import { PUBLIC_FEED_KEY, mergePublicSourceResults, readBoundedText, refreshPublicFeed, runScheduledUpdate } from './cloud-feed-service.js';
+import { PUBLIC_FEED_KEY, PUBLIC_REFRESH_JOB_KEY, PUBLIC_REFRESH_PATH, PUBLIC_REFRESH_SOURCE_BATCH, mergePublicSourceResults, readBoundedText, refreshPublicFeed, runScheduledUpdate } from './cloud-feed-service.js';
 import worker from '../worker.js';
 
 const oldTime = '2026-10-01T01:00:00.000Z';
@@ -365,4 +365,88 @@ test('public feed rejects mutation methods before storage or assets are contacte
     const response = await worker.fetch(new Request('https://feed.example/data/public-feed.json', {method}), env);
     assert.equal(response.status, 405); assert.equal(response.headers.get('Allow'), 'GET, HEAD');
   }
+});
+
+test('a continuation without the refresh token does not touch the snapshot', async () => {
+  let writes=0;
+  const response=await worker.fetch(new Request('https://feed.example'+PUBLIC_REFRESH_PATH,{method:'POST',headers:{'x-woyun-refresh-token':'not-the-job'}}),{
+    PUBLIC_FEED:{get:async()=>null,put:async()=>{writes+=1;}},
+  });
+  assert.equal(response.status,404);
+  assert.equal(writes,0);
+});
+
+test('scheduled refresh reads a bounded source batch, then still publishes without dropping earlier items', async () => {
+  const previous=seed(), original=JSON.stringify(previous);
+  const sspai=FEED_CHANNELS.find(source=>source.id==='sspai');
+  const others=FEED_CHANNELS.filter(source=>source.format==='rss' && !source.creator_scope && !source.youtube_channel_id && source.id!=='sspai').slice(0,7);
+  const definitions=[...others,sspai];
+  const calls=[];
+  const store=new Map([[PUBLIC_FEED_KEY, original]]);
+  const kv={
+    async get(key, type){const raw=store.get(key); if(raw==null) return null; return type==='json' ? JSON.parse(raw) : raw;},
+    async put(key, value){store.set(key, value);},
+    async delete(key){store.delete(key);},
+  };
+  const fetchImpl=async url=>{
+    calls.push(String(url));
+    if(new URL(url).hostname==='api.github.com') return repositoryResponse();
+    const source=definitions.find(entry=>entry.feed_url===String(url));
+    if(!source) throw Error('unexpected source');
+    if(source.id==='sspai') throw Error('reader failed');
+    return new Response(rss(`https://example.com/${source.id}/item`));
+  };
+  const env={PUBLIC_FEED:kv, SELF:{fetch:async()=>new Response(null,{status:204})}};
+  const options={definitions, fetchImpl, now};
+  const originalWarn=console.warn, originalLog=console.log;
+  console.warn=()=>{}; console.log=()=>{};
+  try {
+    await runScheduledUpdate(env, options);
+    assert.equal(calls.length, PUBLIC_REFRESH_SOURCE_BATCH);
+    assert.equal(store.get(PUBLIC_FEED_KEY), original, 'a source batch does not replace the snapshot');
+    assert.equal(JSON.parse(store.get(PUBLIC_REFRESH_JOB_KEY)).cursor, PUBLIC_REFRESH_SOURCE_BATCH);
+    let published=null;
+    for(let hop=0; hop<12 && store.has(PUBLIC_REFRESH_JOB_KEY); hop+=1) published=await runScheduledUpdate(env, options);
+    assert.equal(store.has(PUBLIC_REFRESH_JOB_KEY), false);
+    assert.equal(calls.length, 1+definitions.length);
+    assert.equal(published.items.some(item=>item.original_url==='https://sspai.com/post/10001'), true);
+    assert.equal(published.sources.find(source=>source.id==='sspai').status, 'failed');
+    assert.equal(published.sources.find(source=>source.id==='sspai').last_success_at, oldTime);
+    assert.equal(published.items.some(item=>item.original_url===`https://example.com/${others[0].id}/item`), true);
+    assert.equal(store.get(PUBLIC_FEED_KEY), JSON.stringify(published));
+  } finally {console.warn=originalWarn; console.log=originalLog;}
+});
+
+test('a broken refresh chain publishes completed sources and keeps sources it has not read yet', async () => {
+  const previous=seed();
+  const sspai=FEED_CHANNELS.find(source=>source.id==='sspai');
+  const others=FEED_CHANNELS.filter(source=>source.format==='rss' && !source.creator_scope && !source.youtube_channel_id && source.id!=='sspai').slice(0,7);
+  const definitions=[...others,sspai];
+  const calls=[];
+  const store=new Map([[PUBLIC_FEED_KEY, JSON.stringify(previous)]]);
+  const kv={
+    async get(key, type){const raw=store.get(key); if(raw==null) return null; return type==='json' ? JSON.parse(raw) : raw;},
+    async put(key, value){store.set(key, value);},
+    async delete(key){store.delete(key);},
+  };
+  const fetchImpl=async url=>{
+    calls.push(String(url));
+    if(new URL(url).hostname==='api.github.com') return repositoryResponse();
+    const source=definitions.find(entry=>entry.feed_url===String(url));
+    if(!source) throw Error('unexpected source');
+    return new Response(rss(`https://example.com/${source.id}/item`));
+  };
+  const env={PUBLIC_FEED:kv, SELF:{fetch:async()=>{throw Error('chain broke');}}};
+  const originalWarn=console.warn, originalLog=console.log;
+  console.warn=()=>{}; console.log=()=>{};
+  try {
+    const published=await runScheduledUpdate(env, {definitions, fetchImpl, now});
+    assert.equal(calls.length, PUBLIC_REFRESH_SOURCE_BATCH);
+    assert.equal(published.items.some(item=>item.original_url==='https://sspai.com/post/10001'), true);
+    assert.equal(published.sources.find(source=>source.id==='sspai').last_success_at, oldTime);
+    assert.equal(published.sources.find(source=>source.id==='sspai').status, 'ok');
+    assert.equal(published.items.some(item=>item.original_url===`https://example.com/${others[0].id}/item`), true);
+    assert.equal(published.items.some(item=>item.original_url===`https://example.com/${sspai.id}/item`), false);
+    assert.equal(store.get(PUBLIC_FEED_KEY), JSON.stringify(published));
+  } finally {console.warn=originalWarn; console.log=originalLog;}
 });

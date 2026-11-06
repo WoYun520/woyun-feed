@@ -17,13 +17,17 @@
   "assets": {
     "directory": "./public-dist",
     "binding": "ASSETS",
-    "run_worker_first": ["/data/public-feed.json", "/api/dot/*", "/api/home-boost", "/api/visitor-feedback", "/api/visitor-feedback/*", "/api/essence-archive", "/api/essence-archive/*"],
+    "run_worker_first": ["/data/public-feed.json", "/api/dot/*", "/api/home-boost", "/api/visitor-feedback", "/api/visitor-feedback/*", "/api/essence-archive", "/api/essence-archive/*", "/api/internal/public-refresh"],
     "not_found_handling": "404-page",
     "html_handling": "auto-trailing-slash"
   },
   "kv_namespaces": [
     {"binding": "PUBLIC_FEED", "id": "a17c761fdabd46ef88b78965c73375a7"},
     {"binding": "DOT_INBOX", "id": "fd0d1eeaf2ed401cb04bb4089b55847c"}
+  ],
+  // Each public-refresh cron step calls this Worker again so the next batch gets a fresh CPU budget.
+  "services": [
+    {"binding": "SELF", "service": "woyun-feed-preview"}
   ],
   // 01:00 and 13:00 UTC = 09:00 and 21:00 Asia/Shanghai: public source refresh.
   // 00:00, 04:00, 08:00, and 12:00 UTC = 08:00, 12:00, 16:00, and 20:00 Asia/Shanghai:

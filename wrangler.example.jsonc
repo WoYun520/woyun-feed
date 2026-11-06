@@ -13,13 +13,16 @@
   "assets": {
     "directory": "./public-dist",
     "binding": "ASSETS",
-    "run_worker_first": ["/data/public-feed.json", "/api/dot/*", "/api/home-boost", "/api/visitor-feedback", "/api/visitor-feedback/*", "/api/essence-archive", "/api/essence-archive/*"],
+    "run_worker_first": ["/data/public-feed.json", "/api/dot/*", "/api/home-boost", "/api/visitor-feedback", "/api/visitor-feedback/*", "/api/essence-archive", "/api/essence-archive/*", "/api/internal/public-refresh"],
     "not_found_handling": "404-page",
     "html_handling": "auto-trailing-slash"
   },
   "kv_namespaces": [
     {"binding": "PUBLIC_FEED", "id": "SET_YOUR_OWN_KV_NAMESPACE_ID"},
     {"binding": "DOT_INBOX", "id": "SET_YOUR_OWN_PRIVATE_INBOX_NAMESPACE_ID"}
+  ],
+  "services": [
+    {"binding": "SELF", "service": "your-woyun-feed"}
   ],
   "triggers": {"crons": ["0 1,13 * * *", "0 0,4,8,12 * * *"]}
 }

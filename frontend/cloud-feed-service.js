@@ -10,7 +10,16 @@ import { readSopilotAuthor } from './sopilot-author-reader.js';
 import { createSourceFetch, publicRetryBudget, publicRequestPlan } from './source-retry.js';
 
 export const PUBLIC_FEED_KEY = 'public-feed:current:v1';
+export const PUBLIC_REFRESH_JOB_KEY = 'public-feed:refresh-job:v1';
+export const PUBLIC_REFRESH_PATH = '/api/internal/public-refresh';
+// Measured 2026-11-06: one refreshPublicFeed of the committed snapshot was
+// ~1165 ms of Node CPU across 35 sources (body decode dominated; parsing the
+// buffered pages summed to ~116 ms). The cron is killed around 2050 ms of
+// Worker CPU. Four sources keep a single invocation well under that cliff.
+export const PUBLIC_REFRESH_SOURCE_BATCH = 4;
 export const SCHEDULE_LABEL = '每天 09:00、21:00（北京时间）';
+const REFRESH_JOB_MAX_AGE_MS = 20 * 60 * 1000;
+const REFRESH_JOB_MAX_HOPS = 40;
 const github = {id:'github',name:'GitHub 小型工具',kind:'repository',group:'tech',home_url:'https://github.com/topics/productivity'};
 const sha = text => createHash('sha256').update(text || '').digest('hex');
 
@@ -82,9 +91,19 @@ export function mergePublicSourceResults(previous, results, {publishedAt=new Dat
   return output;
 }
 
-export async function refreshPublicFeed(previous, {fetchImpl=fetch,now=()=>new Date(),definitions=FEED_CHANNELS,timeoutMs=10000,retryDelayMs=200}={}) {
-  const attemptedAt=now().toISOString(), definitionsAll=[github,...definitions], results=[];
-  const requestPlan=publicRequestPlan(definitions),retryBudget=publicRetryBudget(definitions,requestPlan);
+export async function refreshPublicFeed(previous, options={}) {
+  const definitions=options.definitions ?? FEED_CHANNELS;
+  const results=await readPublicSourceResults(previous, [github, ...definitions], options);
+  return assemblePublicFeed(previous, results, options);
+}
+
+// Read exactly these source definitions. Callers that split a refresh pass the
+// request plan and retry budget computed for the full source list.
+export async function readPublicSourceResults(previous, sourceDefs, {fetchImpl=fetch,now=()=>new Date(),timeoutMs=10000,retryDelayMs=200,requestPlan,retryBudget,attemptedAt:fixedAttempt}={}) {
+  const attemptedAt=fixedAttempt || now().toISOString(), definitionsAll=sourceDefs, results=[];
+  const planned=sourceDefs.filter(def=>def.id!=='github');
+  const plan=requestPlan || publicRequestPlan(planned);
+  const budget=retryBudget || publicRetryBudget(planned, plan);
   let cursor=0;
   async function read(def) {
     const old=previous.sources.find(s=>s.id===def.id) || {status:'not_connected',last_success_at:null};
@@ -95,7 +114,7 @@ export async function refreshPublicFeed(previous, {fetchImpl=fetch,now=()=>new D
       // A slow first read needs its actual source budget. Restarting it after
       // five seconds never helps a page that consistently takes six seconds.
       // Two-page ranks share the source deadline; HN keeps its detail budget.
-      attemptTimeoutMs:def.format==='hackernews-api' ? 1800 : def.sopilot_category ? sourceTimeoutMs/2 : sourceTimeoutMs,retryDelayMs,retryBudget});
+      attemptTimeoutMs:def.format==='hackernews-api' ? 1800 : def.sopilot_category ? sourceTimeoutMs/2 : sourceTimeoutMs,retryDelayMs,retryBudget:budget});
     let observedChannelId=null;
     try {
       let endpoint=def.feed_url;
@@ -112,7 +131,7 @@ export async function refreshPublicFeed(previous, {fetchImpl=fetch,now=()=>new D
         ...(def.id==='github' ? {'X-GitHub-Api-Version':'2022-11-28'} : {})
       }};
       let raw, body;
-      if(def.format==='hackernews-api') body=await readHackerNewsApi(def,{fetchImpl:fetchSource,maxItems:requestPlan.hnMaxItems,...options});
+      if(def.format==='hackernews-api') body=await readHackerNewsApi(def,{fetchImpl:fetchSource,maxItems:plan.hnMaxItems,...options});
       else if(def.format==='sopilot-author') body=await readSopilotAuthor(def,{fetchImpl:fetchSource,...options});
       else if(def.sopilot_category) body=await readSopilotRank(def,{fetchImpl:fetchSource,...options,readText:readBoundedText});
       else {
@@ -153,13 +172,18 @@ export async function refreshPublicFeed(previous, {fetchImpl=fetch,now=()=>new D
   }
   // Leave room for platform connection limits and avoid fetching all feeds simultaneously.
   await Promise.all(Array.from({length:4},async()=>{while(cursor<definitionsAll.length){const index=cursor++;results[index]=await read(definitionsAll[index]);}}));
+  return results;
+}
+
+export function assemblePublicFeed(previous, results, {now=()=>new Date(),publishedAt}={}) {
   const successes=results.filter(r=>r.success).length;
   const buckets=Object.fromEntries(results.map(r=>[r.source.id,r.items]));
-  const items=mergeSourceItems(buckets),seen=new Set(previous.items.map(item=>sourceLinkIdentity(item.original_url) || item.id));
+  const items=mergeSourceItems(buckets),seen=new Set((previous.items || []).map(item=>sourceLinkIdentity(item.original_url) || item.id));
   const newIds=successes ? items.filter(item=>!seen.has(sourceLinkIdentity(item.original_url) || item.id)).map(item=>item.id) : [];
+  const attemptedAt=results.find(result=>result.source?.last_attempt_at)?.source.last_attempt_at || now().toISOString();
   const input={schema_version:'0.3',mode:'live',sources:results.map(r=>r.source),items,
     refresh:{status:successes ? 'ok' : 'failed',last_attempt_at:attemptedAt,new_item_ids:newIds}};
-  const output=makePublicFeed(input,{cache:reusedGuides(previous),publishedAt:now().toISOString(),automaticUpdate:true});
+  const output=makePublicFeed(input,{cache:reusedGuides(previous),publishedAt:publishedAt || now().toISOString(),automaticUpdate:true});
   if(PRIVATE_CONTENT.test(JSON.stringify(output))) throw Error('public audit failed');
   return output;
 }
@@ -170,26 +194,26 @@ export async function loadPublicSeed(env) {
   return response.json();
 }
 
-export async function runScheduledUpdate(env, options) {
-  // Roster refresh must not block the public snapshot. A failed fetch keeps the last cache.
-  try { await refreshKosxPoolCache(env, {fetchImpl:options?.fetchImpl, now:options?.now}); }
-  catch { console.warn(JSON.stringify({event:'kosx-pool-refresh-failed'})); }
-  const previous=await env.PUBLIC_FEED.get(PUBLIC_FEED_KEY,'json') || await loadPublicSeed(env);
-  const refreshed=await refreshPublicFeed(previous, options);
-  let approved=[];
-  if (typeof env?.DOT_INBOX?.list==='function') {
-    const {listApprovedKosxRecords, autoApproveStalePending, backfillEssenceFace}=await import('../dot-pending-service.js');
-    const {backfillEssenceHeat}=await import('./essence-sweep.js');
-    try { await backfillEssenceHeat(env, {publish:false, extraItems:refreshed.items}); }
-    catch { console.warn(JSON.stringify({event:'essence-heat-backfill-failed'})); }
-    try { await autoApproveStalePending(env, {publish:false}); }
-    catch { console.warn(JSON.stringify({event:'essence-auto-approve-failed'})); }
-    const remembered=[...(Array.isArray(previous?.items) ? previous.items : []), ...(Array.isArray(refreshed?.items) ? refreshed.items : [])];
-    try { await backfillEssenceFace(env, {extraItems:remembered}); }
-    catch { console.warn(JSON.stringify({event:'essence-face-backfill-failed'})); }
-    approved=await listApprovedKosxRecords(env);
-  }
-  const next=attachKosxApproved(refreshed, approved, previous?.items);
+async function maintainApprovedQueue(env, previous, refreshedItems) {
+  if (typeof env?.DOT_INBOX?.list!=='function') return;
+  const {autoApproveStalePending, backfillEssenceFace}=await import('../dot-pending-service.js');
+  const {backfillEssenceHeat}=await import('./essence-sweep.js');
+  try { await backfillEssenceHeat(env, {publish:false, extraItems:refreshedItems}); }
+  catch { console.warn(JSON.stringify({event:'essence-heat-backfill-failed'})); }
+  try { await autoApproveStalePending(env, {publish:false}); }
+  catch { console.warn(JSON.stringify({event:'essence-auto-approve-failed'})); }
+  const remembered=[...(Array.isArray(previous?.items) ? previous.items : []), ...(Array.isArray(refreshedItems) ? refreshedItems : [])];
+  try { await backfillEssenceFace(env, {extraItems:remembered}); }
+  catch { console.warn(JSON.stringify({event:'essence-face-backfill-failed'})); }
+}
+
+async function approvedRecords(env) {
+  if (typeof env?.DOT_INBOX?.list!=='function') return [];
+  const {listApprovedKosxRecords}=await import('../dot-pending-service.js');
+  return listApprovedKosxRecords(env);
+}
+
+async function publishSnapshot(env, next) {
   // A single completed snapshot is published; partial failures keep each source's previous items.
   await env.PUBLIC_FEED.put(PUBLIC_FEED_KEY,JSON.stringify(next));
   try {
@@ -200,4 +224,184 @@ export async function runScheduledUpdate(env, options) {
     successful_sources:next.sources.filter(s=>s.status==='ok').length,failed_sources:next.sources.filter(s=>s.status==='failed').map(s=>s.id),
     completed_at:next.publication.published_at}));
   return next;
+}
+
+async function runInlineUpdate(env, options) {
+  // Roster refresh must not block the public snapshot. A failed fetch keeps the last cache.
+  try { await refreshKosxPoolCache(env, {fetchImpl:options?.fetchImpl, now:options?.now}); }
+  catch { console.warn(JSON.stringify({event:'kosx-pool-refresh-failed'})); }
+  const previous=await env.PUBLIC_FEED.get(PUBLIC_FEED_KEY,'json') || await loadPublicSeed(env);
+  const refreshed=await refreshPublicFeed(previous, options);
+  await maintainApprovedQueue(env, previous, refreshed.items);
+  const next=attachKosxApproved(refreshed, await approvedRecords(env), previous?.items);
+  return publishSnapshot(env, next);
+}
+
+function clockMs(now) {
+  if (now instanceof Date) return now.getTime();
+  if (typeof now==='number' && Number.isFinite(now)) return now;
+  if (typeof now==='string' && Number.isFinite(Date.parse(now))) return Date.parse(now);
+  return Date.now();
+}
+
+function createRefreshJob(options, now) {
+  const definitions=options.definitions ?? FEED_CHANNELS;
+  const requestPlan=publicRequestPlan(definitions);
+  const retryBudget=publicRetryBudget(definitions, requestPlan);
+  const instant=now instanceof Date ? now : new Date(clockMs(now));
+  return {token:crypto.randomUUID(),created_at:instant.toISOString(),attempted_at:instant.toISOString(),cursor:0,phase:'active',hops:0,
+    hn_max_items:requestPlan.hnMaxItems,retry_remaining:retryBudget.remaining,
+    sources:JSON.parse(JSON.stringify([github, ...definitions])),results:[]};
+}
+
+function storedJob(job) {
+  return {token:job.token,created_at:job.created_at,attempted_at:job.attempted_at,cursor:job.cursor,phase:job.phase,
+    hops:job.hops,hn_max_items:job.hn_max_items,retry_remaining:job.retry_remaining,sources:job.sources,results:job.results};
+}
+
+async function readStoredJob(kv) {
+  let raw;
+  try { raw=await kv.get(PUBLIC_REFRESH_JOB_KEY,'json'); }
+  catch { return null; }
+  if (typeof raw==='string') { try { raw=JSON.parse(raw); } catch { return null; } }
+  if (!raw || typeof raw!=='object' || Array.isArray(raw)) return null;
+  if (raw.phase==='done' || !Array.isArray(raw.sources) || !Array.isArray(raw.results) || typeof raw.token!=='string') return null;
+  return raw;
+}
+
+async function writeStoredJob(kv, job) {
+  if (job.phase==='done' && typeof kv.delete==='function') { await kv.delete(PUBLIC_REFRESH_JOB_KEY); return; }
+  await kv.put(PUBLIC_REFRESH_JOB_KEY, JSON.stringify(job.phase==='done' ? {phase:'done',created_at:job.created_at} : storedJob(job)));
+}
+
+async function loadPreviousSnapshot(env) {
+  let stored;
+  try { stored=await env.PUBLIC_FEED.get(PUBLIC_FEED_KEY,'json'); }
+  catch { stored=null; }
+  if (typeof stored==='string') { try { stored=JSON.parse(stored); } catch { stored=null; } }
+  if (stored && Array.isArray(stored.items) && Array.isArray(stored.sources)) return stored;
+  return loadPublicSeed(env);
+}
+
+function resultsForPublish(previous, sources, done) {
+  const byId=new Map(done.map(result=>[result?.source?.id, result]));
+  const results=[];
+  for (const def of sources) {
+    if (byId.get(def.id)) { results.push(byId.get(def.id)); continue; }
+    const known=(previous.sources || []).some(source=>source.id===def.id) || (previous.items || []).some(item=>item.source_refs?.includes(def.id));
+    if (!known) continue;
+    const old=(previous.sources || []).find(source=>source.id===def.id) || {status:'not_connected',last_success_at:null};
+    results.push({source:{...old,id:def.id},items:retainedBucket(previous, def.id),success:false});
+  }
+  return results;
+}
+
+async function publishJob(env, job, options) {
+  const previous=await loadPreviousSnapshot(env);
+  const refreshed=assemblePublicFeed(previous, resultsForPublish(previous, job.sources, job.results), {now:options?.now});
+  await maintainApprovedQueue(env, previous, refreshed.items);
+  const next=attachKosxApproved(refreshed, await approvedRecords(env), previous?.items);
+  await publishSnapshot(env, next);
+  job.phase='done';
+  job.snapshot=next;
+  return next;
+}
+
+async function finishRefreshJob(env, job, options) {
+  try { await publishJob(env, job, options); }
+  catch { console.warn(JSON.stringify({event:'public-refresh-publish-failed'})); }
+  job.phase='done';
+  try { await writeStoredJob(env.PUBLIC_FEED, job); }
+  catch { console.warn(JSON.stringify({event:'public-refresh-job-write-failed'})); }
+}
+
+function sameToken(left, right) {
+  const a=String(left ?? ''), b=String(right ?? '');
+  let difference=a.length===b.length ? 0 : 1;
+  const length=Math.max(a.length, b.length);
+  for (let index=0; index<length; index+=1) difference |= (a.charCodeAt(index) || 0) ^ (b.charCodeAt(index) || 0);
+  return difference===0;
+}
+
+async function advanceRefreshJob(env, job, options) {
+  if (job.cursor<job.sources.length) {
+    if (job.cursor===0) {
+      try { await refreshKosxPoolCache(env, {fetchImpl:options?.fetchImpl, now:options?.now}); }
+      catch { console.warn(JSON.stringify({event:'kosx-pool-refresh-failed'})); }
+    }
+    const previous=await loadPreviousSnapshot(env);
+    const batch=job.sources.slice(job.cursor, job.cursor+PUBLIC_REFRESH_SOURCE_BATCH);
+    const retryBudget={remaining:job.retry_remaining};
+    const results=await readPublicSourceResults(previous, batch, {...options,requestPlan:{hnMaxItems:job.hn_max_items},retryBudget,attemptedAt:job.attempted_at});
+    job.results.push(...results);
+    job.retry_remaining=retryBudget.remaining;
+    job.cursor+=batch.length;
+    return;
+  }
+  await publishJob(env, job, options);
+}
+
+async function dispatchRefresh(env, job, options) {
+  // Await the next invocation. Its CPU limit is separate; this invocation only waits.
+  // The next step finishes before this response returns, so a cancelled caller cannot drop it.
+  const request=new Request('https://woyun-feed-preview.woyun520.workers.dev'+PUBLIC_REFRESH_PATH,{method:'POST',headers:{'x-woyun-refresh-token':job.token}});
+  try {
+    const response=await env.SELF.fetch(request);
+    await response?.arrayBuffer?.().catch(()=>{});
+    if (response && response.status!==204) throw Error('continue');
+    return null;
+  } catch {
+    // The callee may already have saved a later batch or published. Republish only
+    // the job still stored here, and never overwrite a snapshot the callee finished.
+    const latest=await readStoredJob(env.PUBLIC_FEED);
+    if (!latest || latest.token!==job.token) return null;
+    await finishRefreshJob(env, latest, options);
+    return latest.snapshot ?? null;
+  }
+}
+
+// One bounded step. A service binding starts the next step in a fresh invocation
+// so a full refresh does not have to fit in a single CPU budget. Without that
+// binding (tests and a misconfigured deploy) the inline path still publishes.
+async function runBoundedUpdate(env, options={}) {
+  const kv=env.PUBLIC_FEED;
+  let job=await readStoredJob(kv);
+  const now=typeof options.now==='function' ? options.now() : new Date();
+  const age=clockMs(now)-Date.parse(job?.created_at || '');
+  if (!job || !Number.isFinite(age) || age<0 || age>REFRESH_JOB_MAX_AGE_MS) job=createRefreshJob(options, now);
+  job.hops+=1;
+  if (job.hops>REFRESH_JOB_MAX_HOPS) {
+    await finishRefreshJob(env, job, options);
+    return job.snapshot ?? null;
+  }
+  try { await advanceRefreshJob(env, job, options); }
+  catch {
+    console.warn(JSON.stringify({event:'public-refresh-step-failed',hop:job.hops}));
+    await finishRefreshJob(env, job, options);
+    return job.snapshot ?? null;
+  }
+  try { await writeStoredJob(kv, job); }
+  catch {
+    console.warn(JSON.stringify({event:'public-refresh-job-write-failed'}));
+    if (job.phase!=='done') await finishRefreshJob(env, job, options);
+    return job.snapshot ?? null;
+  }
+  if (job.phase==='done') return job.snapshot ?? null;
+  return await dispatchRefresh(env, job, options) ?? job.snapshot ?? null;
+}
+
+export async function handlePublicRefreshRequest(request, env) {
+  const url=new URL(request.url);
+  if (url.pathname!==PUBLIC_REFRESH_PATH) return null;
+  const job=typeof env?.PUBLIC_FEED?.get==='function' ? await readStoredJob(env.PUBLIC_FEED) : null;
+  const token=request.headers.get('x-woyun-refresh-token') || '';
+  if (!job || !sameToken(token, job.token)) return new Response('Not found',{status:404});
+  if (request.method!=='POST') return new Response('Method not allowed',{status:405,headers:{Allow:'POST'}});
+  await runBoundedUpdate(env);
+  return new Response(null,{status:204});
+}
+
+export async function runScheduledUpdate(env, options) {
+  if (typeof env?.SELF?.fetch==='function') return runBoundedUpdate(env, options);
+  return runInlineUpdate(env, options);
 }
