@@ -55,6 +55,18 @@ for (const source of FEED_CHANNELS.slice(2).filter(source=>source.enabled!==fals
  if (source.ranked) assert.ok(Number.isSafeInteger(item.source_rank));
 });
 
+test('36kr accepts article HTML inside a description and still rejects a challenge page',()=>{
+  const source=FEED_CHANNELS.find(entry=>entry.id==='36kr');
+  const raw=`<rss version="2.0"><channel><title>36氪</title><link>http://36kr.com</link><item><title>公开文章</title><link><![CDATA[https://36kr.com/p/123?f=rss]]></link><pubDate>2026-11-11 19:31:07  +0800</pubDate><description><![CDATA[<p class="image-wrapper"><!DOCTYPE html></p><p>来源摘要，提到 <!ENTITY example> 也不是文档声明。</p>]]></description></item></channel></rss>`;
+  const [item]=convert(source, raw);
+  assert.equal(item.original_url,'https://36kr.com/p/123?f=rss');
+  assert.equal(item.title,'公开文章');
+  assert.match(item.summary,/来源摘要/);
+  assert.equal(item.source_refs[0],'36kr');
+  assert.throws(()=>convert(source,'<!DOCTYPE html><html><script id="__waf_verification_challenge"></script><p>正在进行安全检测</p></html>'),/格式不正确/);
+  assert.throws(()=>convert(source,'<!DOCTYPE rss [<!ENTITY secret SYSTEM "file:///secret">]><rss><channel><item><title>x</title><link>https://36kr.com/p/1</link></item></channel></rss>'),/格式不正确/);
+});
+
 test('Atom links accept arbitrary attribute order and omitted alternate rel without reading self or enclosure',()=>{
  const source=FEED_CHANNELS.find(s=>s.id==='producthunt');
  for (const link of ['<link href="https://example.com/page?a=1&amp;b=2" rel="alternate" type="text/html"/>',"<link type='text/html' href='https://example.com/page?a=1&amp;b=2'/>"]) {

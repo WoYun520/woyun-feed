@@ -643,10 +643,11 @@ function faceTitle(item) {
 // The public card is rebuilt from the queue. A summary that exists only on a
 // board row, or only on the previous public card, has to be written back here
 // or the next scheduled snapshot publishes an empty shell.
-export async function backfillEssenceFace(env, {extraItems = []} = {}) {
+export async function backfillEssenceFace(env, {extraItems = [], feed: supplied = null} = {}) {
   const empty = {updated:0};
   let snapshot = [];
-  try {
+  if (supplied && Array.isArray(supplied.items)) snapshot = supplied.items;
+  else try {
     const feed = await readPublicFeedSnapshot(env);
     if (Array.isArray(feed?.items)) snapshot = feed.items;
   } catch { snapshot = []; }

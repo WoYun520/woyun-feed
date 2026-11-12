@@ -11,15 +11,30 @@ import { createSourceFetch, publicRetryBudget, publicRequestPlan } from './sourc
 
 export const PUBLIC_FEED_KEY = 'public-feed:current:v1';
 export const PUBLIC_REFRESH_JOB_KEY = 'public-feed:refresh-job:v1';
+export const PUBLIC_REFRESH_PART_PREFIX = 'public-feed:refresh-part:v1:';
+const PUBLIC_REFRESH_DRAFT_PREFIX = 'public-feed:refresh-draft:v1:';
 export const PUBLIC_REFRESH_PATH = '/api/internal/public-refresh';
 // Measured 2026-11-06: one refreshPublicFeed of the committed snapshot was
 // ~1165 ms of Node CPU across 35 sources (body decode dominated; parsing the
 // buffered pages summed to ~116 ms). The cron is killed around 2050 ms of
 // Worker CPU. Four sources keep a single invocation well under that cliff.
+// A later failure mode is the job document itself. It used to embed every
+// source's items, so each hop parsed and serialized that growing blob plus
+// the ~1.6 MB snapshot. With ~1000 items the publish hop, and the caller's
+// fallback publish, exceeded the CPU limit and left phase "active".
 export const PUBLIC_REFRESH_SOURCE_BATCH = 4;
+export const PUBLIC_REFRESH_JOB_MAX_BYTES = 128 * 1024;
 export const SCHEDULE_LABEL = '每天 09:00、21:00（北京时间）';
 const REFRESH_JOB_MAX_AGE_MS = 20 * 60 * 1000;
 const REFRESH_JOB_MAX_HOPS = 40;
+
+export function publicRefreshPartKey(token, sourceId) {
+  return PUBLIC_REFRESH_PART_PREFIX+token+':'+sourceId;
+}
+
+function refreshDraftKey(token) {
+  return PUBLIC_REFRESH_DRAFT_PREFIX+token;
+}
 const github = {id:'github',name:'GitHub 小型工具',kind:'repository',group:'tech',home_url:'https://github.com/topics/productivity'};
 const sha = text => createHash('sha256').update(text || '').digest('hex');
 
@@ -198,12 +213,12 @@ async function maintainApprovedQueue(env, previous, refreshedItems) {
   if (typeof env?.DOT_INBOX?.list!=='function') return;
   const {autoApproveStalePending, backfillEssenceFace}=await import('../dot-pending-service.js');
   const {backfillEssenceHeat}=await import('./essence-sweep.js');
-  try { await backfillEssenceHeat(env, {publish:false, extraItems:refreshedItems}); }
+  try { await backfillEssenceHeat(env, {publish:false, extraItems:refreshedItems, feed:previous}); }
   catch { console.warn(JSON.stringify({event:'essence-heat-backfill-failed'})); }
   try { await autoApproveStalePending(env, {publish:false}); }
   catch { console.warn(JSON.stringify({event:'essence-auto-approve-failed'})); }
   const remembered=[...(Array.isArray(previous?.items) ? previous.items : []), ...(Array.isArray(refreshedItems) ? refreshedItems : [])];
-  try { await backfillEssenceFace(env, {extraItems:remembered}); }
+  try { await backfillEssenceFace(env, {extraItems:remembered, feed:previous}); }
   catch { console.warn(JSON.stringify({event:'essence-face-backfill-failed'})); }
 }
 
@@ -251,27 +266,104 @@ function createRefreshJob(options, now) {
   const instant=now instanceof Date ? now : new Date(clockMs(now));
   return {token:crypto.randomUUID(),created_at:instant.toISOString(),attempted_at:instant.toISOString(),cursor:0,phase:'active',hops:0,
     hn_max_items:requestPlan.hnMaxItems,retry_remaining:retryBudget.remaining,
-    sources:JSON.parse(JSON.stringify([github, ...definitions])),results:[]};
+    sources:JSON.parse(JSON.stringify([github, ...definitions]))};
 }
 
 function storedJob(job) {
   return {token:job.token,created_at:job.created_at,attempted_at:job.attempted_at,cursor:job.cursor,phase:job.phase,
-    hops:job.hops,hn_max_items:job.hn_max_items,retry_remaining:job.retry_remaining,sources:job.sources,results:job.results};
+    hops:job.hops,hn_max_items:job.hn_max_items,retry_remaining:job.retry_remaining,sources:job.sources,
+    ...(job.stage==='commit' ? {stage:'commit'} : {})};
 }
 
+function validJob(raw) {
+  return !!raw && typeof raw==='object' && !Array.isArray(raw) && raw.phase==='active' && Array.isArray(raw.sources)
+    && typeof raw.token==='string' && raw.token.length>0 && Number.isInteger(raw.cursor) && raw.cursor>=0;
+}
+
+function abandonedJob(text) {
+  const head=text.slice(0, 400);
+  const token=head.match(/"token":"([^"]{1,80})"/)?.[1] || '';
+  const created_at=head.match(/"created_at":"([^"]{1,40})"/)?.[1] || '';
+  return {abandoned:true, token, created_at};
+}
+
+// Text first. A stuck job from before per-source keys embeds every item and can
+// be larger than a Worker should JSON.parse just to notice it is stale.
 async function readStoredJob(kv) {
   let raw;
-  try { raw=await kv.get(PUBLIC_REFRESH_JOB_KEY,'json'); }
+  try { raw=await kv.get(PUBLIC_REFRESH_JOB_KEY); }
   catch { return null; }
-  if (typeof raw==='string') { try { raw=JSON.parse(raw); } catch { return null; } }
-  if (!raw || typeof raw!=='object' || Array.isArray(raw)) return null;
-  if (raw.phase==='done' || !Array.isArray(raw.sources) || !Array.isArray(raw.results) || typeof raw.token!=='string') return null;
-  return raw;
+  if (raw==null) return null;
+  if (typeof raw==='object') return validJob(raw) ? raw : null;
+  if (typeof raw!=='string') return null;
+  if (raw.length>PUBLIC_REFRESH_JOB_MAX_BYTES) return abandonedJob(raw);
+  try { raw=JSON.parse(raw); } catch { return null; }
+  return validJob(raw) ? raw : null;
+}
+
+async function deletePartsForToken(kv, token) {
+  if (!token || typeof kv.list!=='function' || typeof kv.delete!=='function') return;
+  const prefix=PUBLIC_REFRESH_PART_PREFIX+token+':';
+  let cursor;
+  do {
+    const page=await kv.list({prefix, cursor});
+    const keys=Array.isArray(page?.keys) ? page.keys : [];
+    for (const key of keys) {
+      const name=typeof key==='string' ? key : key?.name;
+      if (name) await kv.delete(name);
+    }
+    cursor=page?.list_complete===false && page.cursor ? page.cursor : undefined;
+  } while (cursor);
+}
+
+async function deleteJobParts(kv, job) {
+  if (!job?.token || typeof kv.delete!=='function') return;
+  const ids=(job.sources || []).map(source=>source?.id).filter(Boolean);
+  await Promise.all(ids.map(id=>Promise.resolve(kv.delete(publicRefreshPartKey(job.token, id))).catch(()=>{})));
+  await Promise.resolve(kv.delete(refreshDraftKey(job.token))).catch(()=>{});
+  await deletePartsForToken(kv, job.token);
+}
+
+async function discardAbandonedJob(kv, job) {
+  if (!job?.abandoned) return job;
+  try { if (typeof kv.delete==='function') await kv.delete(PUBLIC_REFRESH_JOB_KEY); } catch { /* The next read still refuses to parse it. */ }
+  await deletePartsForToken(kv, job.token);
+  return null;
 }
 
 async function writeStoredJob(kv, job) {
-  if (job.phase==='done' && typeof kv.delete==='function') { await kv.delete(PUBLIC_REFRESH_JOB_KEY); return; }
+  if (job.phase==='done') {
+    await deleteJobParts(kv, job);
+    if (typeof kv.delete==='function') { await kv.delete(PUBLIC_REFRESH_JOB_KEY); return; }
+  }
   await kv.put(PUBLIC_REFRESH_JOB_KEY, JSON.stringify(job.phase==='done' ? {phase:'done',created_at:job.created_at} : storedJob(job)));
+}
+
+function partRecord(result) {
+  if (result?.success) return {source:result.source, items:Array.isArray(result.items) ? result.items : [], success:true};
+  return {source:result?.source, items:[], success:false, retain:true};
+}
+
+async function writePart(kv, token, result) {
+  if (!result?.source?.id) return;
+  await kv.put(publicRefreshPartKey(token, result.source.id), JSON.stringify(partRecord(result)));
+}
+
+async function loadParts(kv, job) {
+  const parts=[];
+  for (let index=0; index<job.sources.length; index+=PUBLIC_REFRESH_SOURCE_BATCH) {
+    const slice=job.sources.slice(index, index+PUBLIC_REFRESH_SOURCE_BATCH);
+    const rows=await Promise.all(slice.map(async def=>{
+      try { return await kv.get(publicRefreshPartKey(job.token, def.id), 'json'); }
+      catch { return null; }
+    }));
+    for (let row of rows) {
+      if (typeof row==='string') { try { row=JSON.parse(row); } catch { row=null; } }
+      if (row && typeof row==='object') parts.push(row);
+    }
+  }
+  if (!parts.length && Array.isArray(job.results)) return job.results;
+  return parts;
 }
 
 async function loadPreviousSnapshot(env) {
@@ -283,11 +375,23 @@ async function loadPreviousSnapshot(env) {
   return loadPublicSeed(env);
 }
 
+function finishedResult(previous, def, part) {
+  const old=(previous.sources || []).find(source=>source.id===def.id) || {status:'not_connected',last_success_at:null};
+  if (part?.success) return {source:{...part.source, ...successfulSourceHealth(old)}, items:Array.isArray(part.items) ? part.items : [], success:true};
+  // Counters are applied once, from the snapshot. The fetch hop does not have
+  // the previous items, so a stored failure must not be incremented again.
+  const failedAt=part?.source?.last_failure_at || part?.source?.last_attempt_at || new Date().toISOString();
+  return {source:{...old, ...def, status:'failed', last_attempt_at:part?.source?.last_attempt_at || failedAt,
+    last_success_at:old.last_success_at ?? null, read_error:part?.source?.read_error, ...failedSourceHealth(old, failedAt),
+    ...(part?.source?.observed_channel_id ? {observed_channel_id:part.source.observed_channel_id} : {})},
+    items:retainedBucket(previous, def.id), success:false};
+}
+
 function resultsForPublish(previous, sources, done) {
   const byId=new Map(done.map(result=>[result?.source?.id, result]));
   const results=[];
   for (const def of sources) {
-    if (byId.get(def.id)) { results.push(byId.get(def.id)); continue; }
+    if (byId.has(def.id)) { results.push(finishedResult(previous, def, byId.get(def.id))); continue; }
     const known=(previous.sources || []).some(source=>source.id===def.id) || (previous.items || []).some(item=>item.source_refs?.includes(def.id));
     if (!known) continue;
     const old=(previous.sources || []).find(source=>source.id===def.id) || {status:'not_connected',last_success_at:null};
@@ -296,9 +400,34 @@ function resultsForPublish(previous, sources, done) {
   return results;
 }
 
-async function publishJob(env, job, options) {
+async function assembledFeed(env, job, options) {
   const previous=await loadPreviousSnapshot(env);
-  const refreshed=assemblePublicFeed(previous, resultsForPublish(previous, job.sources, job.results), {now:options?.now});
+  const done=await loadParts(env.PUBLIC_FEED, job);
+  return {previous, refreshed:assemblePublicFeed(previous, resultsForPublish(previous, job.sources, done), {now:options?.now})};
+}
+
+async function readDraft(kv, token) {
+  let raw;
+  try { raw=await kv.get(refreshDraftKey(token), 'json'); }
+  catch { return null; }
+  if (typeof raw==='string') { try { raw=JSON.parse(raw); } catch { return null; } }
+  if (!raw || typeof raw!=='object' || !Array.isArray(raw.items) || !Array.isArray(raw.sources)) return null;
+  return raw;
+}
+
+// Reading every source part and building the public document is one invocation.
+// Maintenance, approved rows, the snapshot write and the archive are the next,
+// so a 1000-item publish is not stacked on top of that build.
+async function writeRefreshDraft(env, job, options) {
+  const {refreshed}=await assembledFeed(env, job, options);
+  await env.PUBLIC_FEED.put(refreshDraftKey(job.token), JSON.stringify(refreshed));
+  job.stage='commit';
+}
+
+async function publishJob(env, job, options) {
+  const drafted=job.stage==='commit' ? await readDraft(env.PUBLIC_FEED, job.token) : null;
+  const previous=await loadPreviousSnapshot(env);
+  const refreshed=drafted || (await assembledFeed(env, job, options)).refreshed;
   await maintainApprovedQueue(env, previous, refreshed.items);
   const next=attachKosxApproved(refreshed, await approvedRecords(env), previous?.items);
   await publishSnapshot(env, next);
@@ -329,13 +458,18 @@ async function advanceRefreshJob(env, job, options) {
       try { await refreshKosxPoolCache(env, {fetchImpl:options?.fetchImpl, now:options?.now}); }
       catch { console.warn(JSON.stringify({event:'kosx-pool-refresh-failed'})); }
     }
-    const previous=await loadPreviousSnapshot(env);
+    // Source hops keep the previous snapshot out of this invocation. Failure
+    // health and retained articles are restored once, on the publish hop.
     const batch=job.sources.slice(job.cursor, job.cursor+PUBLIC_REFRESH_SOURCE_BATCH);
     const retryBudget={remaining:job.retry_remaining};
-    const results=await readPublicSourceResults(previous, batch, {...options,requestPlan:{hnMaxItems:job.hn_max_items},retryBudget,attemptedAt:job.attempted_at});
-    job.results.push(...results);
+    const results=await readPublicSourceResults({sources:[],items:[]}, batch, {...options,requestPlan:{hnMaxItems:job.hn_max_items},retryBudget,attemptedAt:job.attempted_at});
+    for (const result of results) await writePart(env.PUBLIC_FEED, job.token, result);
     job.retry_remaining=retryBudget.remaining;
     job.cursor+=batch.length;
+    return;
+  }
+  if (job.stage!=='commit') {
+    await writeRefreshDraft(env, job, options);
     return;
   }
   await publishJob(env, job, options);
@@ -354,7 +488,7 @@ async function dispatchRefresh(env, job, options) {
     // The callee may already have saved a later batch or published. Republish only
     // the job still stored here, and never overwrite a snapshot the callee finished.
     const latest=await readStoredJob(env.PUBLIC_FEED);
-    if (!latest || latest.token!==job.token) return null;
+    if (!latest || latest.abandoned || latest.token!==job.token) return null;
     await finishRefreshJob(env, latest, options);
     return latest.snapshot ?? null;
   }
@@ -365,10 +499,13 @@ async function dispatchRefresh(env, job, options) {
 // binding (tests and a misconfigured deploy) the inline path still publishes.
 async function runBoundedUpdate(env, options={}) {
   const kv=env.PUBLIC_FEED;
-  let job=await readStoredJob(kv);
+  let job=await discardAbandonedJob(kv, await readStoredJob(kv));
   const now=typeof options.now==='function' ? options.now() : new Date();
   const age=clockMs(now)-Date.parse(job?.created_at || '');
-  if (!job || !Number.isFinite(age) || age<0 || age>REFRESH_JOB_MAX_AGE_MS) job=createRefreshJob(options, now);
+  if (!job || !Number.isFinite(age) || age<0 || age>REFRESH_JOB_MAX_AGE_MS) {
+    if (job?.token) await deleteJobParts(kv, job);
+    job=createRefreshJob(options, now);
+  }
   job.hops+=1;
   if (job.hops>REFRESH_JOB_MAX_HOPS) {
     await finishRefreshJob(env, job, options);
@@ -395,7 +532,7 @@ export async function handlePublicRefreshRequest(request, env) {
   if (url.pathname!==PUBLIC_REFRESH_PATH) return null;
   const job=typeof env?.PUBLIC_FEED?.get==='function' ? await readStoredJob(env.PUBLIC_FEED) : null;
   const token=request.headers.get('x-woyun-refresh-token') || '';
-  if (!job || !sameToken(token, job.token)) return new Response('Not found',{status:404});
+  if (!job || job.abandoned || !sameToken(token, job.token)) return new Response('Not found',{status:404});
   if (request.method!=='POST') return new Response('Method not allowed',{status:405,headers:{Allow:'POST'}});
   await runBoundedUpdate(env);
   return new Response(null,{status:204});
