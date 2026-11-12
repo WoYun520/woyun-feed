@@ -225,6 +225,16 @@ function blogMethodHint(title,description,body) {
   if (guide.test(title) && /(?:流程|使用方法|操作|配置|設定)/.test(text) && /(?:阶段|階段|步骤|步驟|→|示例|案例)/.test(text)) return 'action-guide';
   return null;
 }
+// XXE declarations live in the prologue, before the root element. Article HTML
+// inside a description often quotes "<!DOCTYPE html>" or an entity name; that
+// text is not a DTD. 36氪's RSS descriptions are full article HTML, and a
+// document-wide search rejected the whole feed as an unusable format.
+function xmlDocumentIsUnsafe(raw) {
+  const start=raw.search(/<(?:rss|feed)\b/i);
+  const prologue=start<0 ? raw : raw.slice(0, start);
+  return /<!DOCTYPE|<!ENTITY/i.test(prologue);
+}
+
 export function parseSubscription(raw, source) {
   const blogScope=source.creator_scope==='blog-feed';
   if (source.enabled === false) throw new Error('此来源尚未接通自动读取。');
@@ -238,7 +248,7 @@ export function parseSubscription(raw, source) {
     return {status:'success',id:source.channel,items:feed.items.slice(0,30).map(item=>({title:item?.title,url:item?.url,published_at:item?.date_published,extra:{date:item?.date_modified}}))};
   }
   if (source.format==='atom') {
-    if (/<!DOCTYPE|<!ENTITY/i.test(raw) || !/<feed[\s>]/i.test(raw) || !/<\/feed\s*>/i.test(raw)) throw new Error('来源订阅格式不正确。');
+    if (xmlDocumentIsUnsafe(raw) || !/<feed[\s>]/i.test(raw) || !/<\/feed\s*>/i.test(raw)) throw new Error('来源订阅格式不正确。');
     if (source.youtube_channel_id) {
       const expected=source.youtube_channel_id, observed=xmlText(raw,'yt:channelId');
       // YouTube's own Atom response can omit the leading UC. Accept exactly
@@ -271,7 +281,7 @@ export function parseSubscription(raw, source) {
     });
     return {status:'success',id:source.channel,items:blogScope ? recentBlogItems(items) : items};
   }
-  if (/<!DOCTYPE|<!ENTITY/i.test(raw) || !/<rss[\s>]/i.test(raw) || !/<\/rss\s*>/i.test(raw) || !/<channel[\s>]/i.test(raw)) throw new Error('来源订阅格式不正确。');
+  if (xmlDocumentIsUnsafe(raw) || !/<rss[\s>]/i.test(raw) || !/<\/rss\s*>/i.test(raw) || !/<channel[\s>]/i.test(raw)) throw new Error('来源订阅格式不正确。');
   if (blogScope) {
     const channelHeader=raw.split(/<item(?:\s|>)/i)[0];
     const channelLink=xmlText(channelHeader,'link');

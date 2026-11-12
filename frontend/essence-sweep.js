@@ -144,11 +144,13 @@ async function intakeFromPublicSnapshot(env, options) {
   return {created:saved.created.length, held:saved.held.length, full:saved.full === true, roster_gets, x_api:0};
 }
 
-export async function backfillEssenceHeat(env, {publish = true, extraItems = []} = {}) {
+export async function backfillEssenceHeat(env, {publish = true, extraItems = [], feed: supplied = null} = {}) {
   const empty = {updated:0, republished:false};
-  let feed = null;
-  try { feed = await readPublicFeedSnapshot(env); }
-  catch { return empty; }
+  let feed = supplied && Array.isArray(supplied.items) ? supplied : null;
+  if (!feed) {
+    try { feed = await readPublicFeedSnapshot(env); }
+    catch { return empty; }
+  }
   if (!feed || !Array.isArray(feed.items)) return empty;
   const donors = donorMap([...(Array.isArray(extraItems) ? extraItems : []), ...feed.items]);
   let records;

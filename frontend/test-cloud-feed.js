@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { FEED_CHANNELS, mergeSourceItems, normalizeSubscription, parseSubscription } from './feed-sources.js';
 import { normalizeRepositories } from './repository-normalize.js';
 import { makePublicFeed } from './public-feed-data.js';
-import { PUBLIC_FEED_KEY, PUBLIC_REFRESH_JOB_KEY, PUBLIC_REFRESH_PATH, PUBLIC_REFRESH_SOURCE_BATCH, mergePublicSourceResults, readBoundedText, refreshPublicFeed, runScheduledUpdate } from './cloud-feed-service.js';
+import { PUBLIC_FEED_KEY, PUBLIC_REFRESH_JOB_KEY, PUBLIC_REFRESH_JOB_MAX_BYTES, PUBLIC_REFRESH_PATH, PUBLIC_REFRESH_SOURCE_BATCH, mergePublicSourceResults, publicRefreshPartKey, readBoundedText, refreshPublicFeed, runScheduledUpdate } from './cloud-feed-service.js';
 import worker from '../worker.js';
 
 const oldTime = '2026-10-01T01:00:00.000Z';
@@ -404,10 +404,19 @@ test('scheduled refresh reads a bounded source batch, then still publishes witho
     await runScheduledUpdate(env, options);
     assert.equal(calls.length, PUBLIC_REFRESH_SOURCE_BATCH);
     assert.equal(store.get(PUBLIC_FEED_KEY), original, 'a source batch does not replace the snapshot');
-    assert.equal(JSON.parse(store.get(PUBLIC_REFRESH_JOB_KEY)).cursor, PUBLIC_REFRESH_SOURCE_BATCH);
+    const saved=JSON.parse(store.get(PUBLIC_REFRESH_JOB_KEY));
+    assert.equal(saved.cursor, PUBLIC_REFRESH_SOURCE_BATCH);
+    assert.equal(Object.hasOwn(saved, 'results'), false);
+    assert.equal(saved.sources.length, definitions.length+1);
+    assert.equal(JSON.stringify(saved).includes(`https://example.com/${others[0].id}/item`), false, 'source articles stay out of the job document');
+    const part=JSON.parse(store.get(publicRefreshPartKey(saved.token, others[0].id)));
+    assert.equal(part.success, true);
+    assert.equal(part.items.some(item=>item.original_url===`https://example.com/${others[0].id}/item`), true);
+    assert.ok(Buffer.byteLength(store.get(PUBLIC_REFRESH_JOB_KEY))<PUBLIC_REFRESH_JOB_MAX_BYTES);
     let published=null;
     for(let hop=0; hop<12 && store.has(PUBLIC_REFRESH_JOB_KEY); hop+=1) published=await runScheduledUpdate(env, options);
     assert.equal(store.has(PUBLIC_REFRESH_JOB_KEY), false);
+    assert.equal([...store.keys()].some(key=>String(key).startsWith('public-feed:refresh-')), false);
     assert.equal(calls.length, 1+definitions.length);
     assert.equal(published.items.some(item=>item.original_url==='https://sspai.com/post/10001'), true);
     assert.equal(published.sources.find(source=>source.id==='sspai').status, 'failed');
@@ -448,5 +457,100 @@ test('a broken refresh chain publishes completed sources and keeps sources it ha
     assert.equal(published.items.some(item=>item.original_url===`https://example.com/${others[0].id}/item`), true);
     assert.equal(published.items.some(item=>item.original_url===`https://example.com/${sspai.id}/item`), false);
     assert.equal(store.get(PUBLIC_FEED_KEY), JSON.stringify(published));
+  } finally {console.warn=originalWarn; console.log=originalLog;}
+});
+
+function memoryKv(initial) {
+  const store=new Map(initial);
+  return {store, kv:{
+    async get(key, type){
+      const raw=store.get(key);
+      if (raw==null) return null;
+      if (type==='json' && key===PUBLIC_REFRESH_JOB_KEY && typeof raw==='string' && raw.length>PUBLIC_REFRESH_JOB_MAX_BYTES) throw Error('must not parse oversized job');
+      return type==='json' && typeof raw==='string' ? JSON.parse(raw) : raw;
+    },
+    async put(key, value){store.set(key, value);},
+    async delete(key){store.delete(key);},
+  }};
+}
+
+test('a stale active refresh job does not block the next scheduled run', async () => {
+  const previous=seed();
+  const sspai=FEED_CHANNELS.find(source=>source.id==='sspai');
+  const others=FEED_CHANNELS.filter(source=>source.format==='rss' && !source.creator_scope && !source.youtube_channel_id && source.id!=='sspai').slice(0,3);
+  const definitions=[...others, sspai];
+  const {store, kv}=memoryKv([
+    [PUBLIC_FEED_KEY, JSON.stringify(previous)],
+    [PUBLIC_REFRESH_JOB_KEY, JSON.stringify({token:'stale-token', created_at:'2026-10-01T00:00:00.000Z', attempted_at:'2026-10-01T00:00:00.000Z',
+      cursor:35, phase:'active', hops:9, hn_max_items:1, retry_remaining:1, sources:[{id:'github'}],
+      results:[{source:{id:'github'}, items:[{title:'should-not-be-reread'}]}]})],
+  ]);
+  const env={PUBLIC_FEED:kv, SELF:{fetch:async()=>new Response(null,{status:204})}};
+  const originalWarn=console.warn, originalLog=console.log;
+  console.warn=()=>{}; console.log=()=>{};
+  try {
+    await runScheduledUpdate(env, {definitions, fetchImpl:async url=>{
+      if (new URL(url).hostname==='api.github.com') return repositoryResponse();
+      const source=definitions.find(entry=>entry.feed_url===String(url));
+      if (!source) throw Error('unexpected source');
+      return new Response(rss(`https://example.com/${source.id}/item`));
+    }, now});
+    const job=JSON.parse(store.get(PUBLIC_REFRESH_JOB_KEY));
+    assert.notEqual(job.token, 'stale-token');
+    assert.equal(job.cursor, PUBLIC_REFRESH_SOURCE_BATCH);
+    assert.equal(job.phase, 'active');
+    assert.equal(JSON.stringify(job).includes('should-not-be-reread'), false);
+  } finally {console.warn=originalWarn; console.log=originalLog;}
+});
+
+test('an oversized active job is discarded without parsing its results', async () => {
+  const previous=seed();
+  const source=FEED_CHANNELS.find(entry=>entry.id==='sspai');
+  const definitions=[source];
+  const raw=JSON.stringify({token:'big-token', created_at:newTime, attempted_at:newTime, cursor:35, phase:'active', hops:9,
+    hn_max_items:1, retry_remaining:1, sources:[{id:'github'}], results:[{note:'x'.repeat(PUBLIC_REFRESH_JOB_MAX_BYTES)}]});
+  assert.ok(raw.length>PUBLIC_REFRESH_JOB_MAX_BYTES);
+  const {store, kv}=memoryKv([[PUBLIC_FEED_KEY, JSON.stringify(previous)], [PUBLIC_REFRESH_JOB_KEY, raw]]);
+  const env={PUBLIC_FEED:kv, SELF:{fetch:async()=>new Response(null,{status:204})}};
+  const originalWarn=console.warn, originalLog=console.log;
+  console.warn=()=>{}; console.log=()=>{};
+  try {
+    await runScheduledUpdate(env, {definitions, fetchImpl:async url=>{
+      if (new URL(url).hostname==='api.github.com') return repositoryResponse();
+      if (String(url)===source.feed_url) return new Response(rss('https://sspai.com/post/10002'));
+      throw Error('unexpected source');
+    }, now});
+    const job=JSON.parse(store.get(PUBLIC_REFRESH_JOB_KEY));
+    assert.notEqual(job.token, 'big-token');
+    assert.equal(job.cursor, 2);
+    assert.equal(job.phase, 'active');
+    assert.ok(store.get(PUBLIC_REFRESH_JOB_KEY).length<PUBLIC_REFRESH_JOB_MAX_BYTES);
+  } finally {console.warn=originalWarn; console.log=originalLog;}
+});
+
+test('a 36kr format failure keeps the previous articles and the failure count', async () => {
+  const source=FEED_CHANNELS.find(entry=>entry.id==='36kr');
+  const kept=normalizeSubscription(parseSubscription(rss('https://36kr.com/p/123','旧闻','旧摘要'), source), source, oldTime, 'old-36kr').items[0];
+  const previous=makePublicFeed({schema_version:'0.3', mode:'live',
+    sources:[{id:'github', status:'ok', last_success_at:oldTime}, {id:'36kr', status:'failed', last_success_at:oldTime, last_attempt_at:oldTime, consecutive_failures:6, read_error:'source_format'}],
+    items:mergeSourceItems({github:normalizeRepositories([repo()], oldTime, 'old-repository-evidence'), '36kr':[kept]}),
+  }, {publishedAt:oldTime});
+  const {store, kv}=memoryKv([[PUBLIC_FEED_KEY, JSON.stringify(previous)]]);
+  const env={PUBLIC_FEED:kv, SELF:{fetch:async()=>new Response(null,{status:204})}};
+  const fetchImpl=async url=>{
+    if (new URL(url).hostname==='api.github.com') return repositoryResponse();
+    if (String(url)===source.feed_url) return new Response('<!DOCTYPE html><html><script id="__waf_verification_challenge"></script><p>正在进行安全检测</p></html>');
+    throw Error('unexpected source');
+  };
+  const originalWarn=console.warn, originalLog=console.log;
+  console.warn=()=>{}; console.log=()=>{};
+  try {
+    let published=null;
+    for (let hop=0; hop<4 && (hop===0 || store.has(PUBLIC_REFRESH_JOB_KEY)); hop+=1) published=await runScheduledUpdate(env, {definitions:[source], fetchImpl, now});
+    assert.equal(store.has(PUBLIC_REFRESH_JOB_KEY), false);
+    assert.equal(published.sources.find(entry=>entry.id==='36kr').read_error, 'source_format');
+    assert.equal(published.sources.find(entry=>entry.id==='36kr').consecutive_failures, 7);
+    assert.equal(published.sources.find(entry=>entry.id==='36kr').last_success_at, oldTime);
+    assert.equal(published.items.some(item=>item.original_url==='https://36kr.com/p/123'), true);
   } finally {console.warn=originalWarn; console.log=originalLog;}
 });
